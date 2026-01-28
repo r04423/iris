@@ -1,6 +1,6 @@
 # iris-ecs
 
-High-performance, TypeScript-idiomatic Entity Component System.
+Entity Component System implementation for TypeScript.
 
 ## What is ECS?
 
@@ -61,14 +61,14 @@ addComponent(world, player, Player);
 
 // Define a system
 function movementSystem(world) {
-  for (const entity of fetchEntities(world, Position, Velocity)) {
-    const vx = getComponentValue(world, entity, Velocity, "x");
-    const vy = getComponentValue(world, entity, Velocity, "y");
-    const px = getComponentValue(world, entity, Position, "x");
-    const py = getComponentValue(world, entity, Position, "y");
+  for (const e of fetchEntities(world, Position, Velocity)) {
+    const px = getComponentValue(world, e, Position, "x");
+    const py = getComponentValue(world, e, Position, "y");
+    const vx = getComponentValue(world, e, Velocity, "x");
+    const vy = getComponentValue(world, e, Velocity, "y");
 
-    setComponentValue(world, entity, Position, "x", px + vx);
-    setComponentValue(world, entity, Position, "y", py + vy);
+    setComponentValue(world, e, Position, "x", px + vx);
+    setComponentValue(world, e, Position, "y", py + vy);
   }
 }
 
@@ -87,7 +87,13 @@ executeSchedule(world);
 An **Entity** is a unique identifier representing a thing in your world. Entities have no data of their own -- they're containers for components.
 
 ```typescript
-import { createWorld, createEntity, destroyEntity, isEntityAlive, resetWorld } from "iris-ecs";
+import {
+  createWorld,
+  createEntity,
+  destroyEntity,
+  isEntityAlive,
+  resetWorld,
+} from "iris-ecs";
 
 const world = createWorld();
 
@@ -104,7 +110,7 @@ resetWorld(world);
 
 Create entities with `createEntity()`, destroy them with `destroyEntity()`. Use `isEntityAlive()` to check if an entity reference is still valid. Call `resetWorld()` to clear all entities and state while preserving definitions -- useful for level reloads or testing.
 
-⚠ **Entity IDs are recycled.** After destroying an entity, its ID may be reused for a new entity. Never store entity IDs long-term without checking `isEntityAlive()` first -- your old reference might now point to a different entity.
+⚠️ **Entity IDs are recycled.** After destroying an entity, its ID may be reused for a new entity. Never store entity IDs long-term without checking `isEntityAlive()` first -- your old reference might now point to a different entity.
 
 #### Everything is an Entity
 
@@ -123,14 +129,16 @@ setName(world, player, "player-1");
 getName(world, player);              // "player-1"
 lookupByName(world, "player-1");     // player entity
 
-// Validate components during lookup
-lookupByName(world, "player-1", Position, Health);  // returns entity only if it has both
+// Validate components during lookup -- returns entity only if it has both
+lookupByName(world, "player-1", Position, Health);
 
 removeName(world, player);
 lookupByName(world, "player-1");     // undefined
 ```
 
-Names are automatically cleaned up when entities are destroyed. Use names for integrations, save / load systems, or any scenario where you need to reference entities by string identifier.
+Names are automatically cleaned up when entities are destroyed. Use names for integrations, save/load systems, or any scenario where you need to reference entities by string identifier.
+
+💡 **Tip:** Names are great for debugging -- use `setName()` on important entities to make logs more readable.
 
 ### Tags
 
@@ -157,7 +165,13 @@ Tags are lightweight -- they only affect which archetype an entity belongs to. U
 A **Component** holds typed data attached to an entity. Define components with a schema specifying field names and types.
 
 ```typescript
-import { defineComponent, Type, addComponent, getComponentValue, setComponentValue } from "iris-ecs";
+import {
+  defineComponent,
+  Type,
+  addComponent,
+  getComponentValue,
+  setComponentValue,
+} from "iris-ecs";
 
 const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
 const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
@@ -198,14 +212,22 @@ addComponent(world, entity, Position, { x: 99, y: 99 });  // ignored
 getComponentValue(world, entity, Position, "x");  // still 0
 ```
 
-Use `hasComponent()` to check first if you need conditional addition, or `setComponentValue()` to update existing data.
+💡 **Tip:** Use `hasComponent()` to check first if you need conditional addition, or `setComponentValue()` to update existing data.
 
 ### Resources
 
 A **Resource** is a global singleton -- world-level data that isn't attached to any specific entity. Define resources using regular components and store them with `addResource()`.
 
 ```typescript
-import { defineComponent, addResource, getResourceValue, setResourceValue, hasResource, removeResource, Type } from "iris-ecs";
+import {
+  defineComponent,
+  addResource,
+  getResourceValue,
+  setResourceValue,
+  hasResource,
+  removeResource,
+  Type,
+} from "iris-ecs";
 
 const Time = defineComponent("Time", { delta: Type.f32(), elapsed: Type.f32() });
 
@@ -236,7 +258,14 @@ Use resources for frame timing, configuration, asset registry, input state, phys
 A **Relation** describes a directed connection between two entities. Combine a relation with a target using `pair()` to create a pair -- pairs are added to entities like components.
 
 ```typescript
-import { defineRelation, pair, addComponent, fetchEntities, getRelationTargets, Wildcard } from "iris-ecs";
+import {
+  defineRelation,
+  pair,
+  addComponent,
+  fetchEntities,
+  getRelationTargets,
+  Wildcard,
+} from "iris-ecs";
 
 const ChildOf = defineRelation("ChildOf");
 
@@ -303,10 +332,14 @@ isEntityAlive(world, child); // false -- cascaded
 Relations can carry data, just like components:
 
 ```typescript
-const Targets = defineRelation("Targets", { schema: { priority: Type.i8() } });
+const Targets = defineRelation("Targets", {
+  schema: { priority: Type.i8() },
+});
 
 addComponent(world, turret, pair(Targets, enemy), { priority: 10 });
-const priority = getComponentValue(world, turret, pair(Targets, enemy), "priority");
+
+const p = pair(Targets, enemy);
+const priority = getComponentValue(world, turret, p, "priority");
 ```
 
 ### Archetypes (Under the Hood)
@@ -314,20 +347,28 @@ const priority = getComponentValue(world, turret, pair(Targets, enemy), "priorit
 An **Archetype** groups entities that share the same component set. All entities with `Position` and `Velocity` live in one archetype; entities with `Position`, `Velocity`, and `Health` live in another.
 
 ```
-Archetype [Position, Velocity]          Archetype [Position, Velocity, Health]
-┌─────────┬─────────┬─────────┐         ┌─────────┬─────────┬─────────┬─────────┐
-│ Entity  │ Pos.x/y │ Vel.x/y │         │ Entity  │ Pos.x/y │ Vel.x/y │ Health  │
-├─────────┼─────────┼─────────┤         ├─────────┼─────────┼─────────┼─────────┤
-│ bullet1 │  10, 5  │  1, 0   │         │ player  │  0, 0   │  1, 0   │  100    │
-│ bullet2 │  15, 8  │  1, 0   │         │ enemy   │  50, 20 │ -1, 0   │   50    │
-└─────────┴─────────┴─────────┘         └─────────┴─────────┴─────────┴─────────┘
+Archetype [Position, Velocity]
+┌─────────┬─────────┬─────────┐
+│ Entity  │ Pos.x/y │ Vel.x/y │
+├─────────┼─────────┼─────────┤
+│ bullet1 │  10, 5  │  1, 0   │
+│ bullet2 │  15, 8  │  1, 0   │
+└─────────┴─────────┴─────────┘
+
+Archetype [Position, Velocity, Health]
+┌─────────┬─────────┬─────────┬─────────┐
+│ Entity  │ Pos.x/y │ Vel.x/y │ Health  │
+├─────────┼─────────┼─────────┼─────────┤
+│ player  │   0, 0  │   1, 0  │   100   │
+│ enemy   │  50, 20 │  -1, 0  │    50   │
+└─────────┴─────────┴─────────┴─────────┘
 ```
 
-Within an archetype, component data is stored in **columns** (TypedArrays for numeric types). When a query iterates entities with `Position` and `Velocity`, it walks through archetypes that contain both components. This columnar layout keeps component values in contiguous TypedArrays rather than scattered across individual objects, reducing memory overhead and enabling efficient iteration.
+Within an archetype, component data is stored in **columns** (TypedArrays for numeric types). When a query iterates entities with `Position` and `Velocity`, it walks through archetypes that contain both components. This columnar layout keeps data contiguous rather than scattered across objects, reducing memory overhead and enabling efficient iteration.
 
 Adding or removing a component moves an entity to a different archetype. This is more expensive than reading or writing component values, so prefer stable component sets for entities that update frequently.
 
-You don't interact with archetypes directly -- the ECS handles them automatically. Understanding the model helps you design components that group well and avoid unnecessary archetype transitions.
+💡 **Tip:** You don't interact with archetypes directly -- the ECS handles them automatically. Understanding the model helps you design components that group well and avoid unnecessary archetype transitions.
 
 ### Queries
 
@@ -346,7 +387,7 @@ for (const entity of fetchEntities(world, Position, Velocity)) {
 const player = fetchFirstEntity(world, Player, not(Dead));
 ```
 
-Queries are cached internally -- the same component set returns the same cached query.
+💡 **Tip:** Queries are cached internally -- the same component set returns the same cached query.
 
 #### Exclusion Filters
 
@@ -373,17 +414,24 @@ Queries match archetypes where all required components are present and no exclud
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
 ```typescript
-import { addSystem, buildSchedule, executeSchedule, fetchEntities, getComponentValue, setComponentValue } from "iris-ecs";
+import {
+  addSystem,
+  buildSchedule,
+  executeSchedule,
+  fetchEntities,
+  getComponentValue,
+  setComponentValue,
+} from "iris-ecs";
 
 function movementSystem(world) {
-  for (const entity of fetchEntities(world, Position, Velocity)) {
-    const px = getComponentValue(world, entity, Position, "x");
-    const py = getComponentValue(world, entity, Position, "y");
-    const vx = getComponentValue(world, entity, Velocity, "x");
-    const vy = getComponentValue(world, entity, Velocity, "y");
+  for (const e of fetchEntities(world, Position, Velocity)) {
+    const px = getComponentValue(world, e, Position, "x");
+    const py = getComponentValue(world, e, Position, "y");
+    const vx = getComponentValue(world, e, Velocity, "x");
+    const vy = getComponentValue(world, e, Velocity, "y");
 
-    setComponentValue(world, entity, Position, "x", px + vx);
-    setComponentValue(world, entity, Position, "y", py + vy);
+    setComponentValue(world, e, Position, "x", px + vx);
+    setComponentValue(world, e, Position, "y", py + vy);
   }
 }
 
@@ -416,6 +464,8 @@ buildSchedule(world);
 ```
 
 Without constraints, systems run in registration order. Use arrays for multiple constraints: `{ after: ["inputSystem", "audioSystem"] }`.
+
+💡 **Tip:** The system function's name becomes its identifier. Use named functions, not arrow functions, for systems you need to reference in ordering constraints.
 
 #### Schedules
 
@@ -453,7 +503,7 @@ buildSchedule(world, "startup");
 await executeScheduleAsync(world, "startup");
 ```
 
-⚠ `executeSchedule()` throws if any system returns a Promise. Use `executeScheduleAsync()` for schedules with async systems.
+⚠️ `executeSchedule()` throws if any system returns a Promise. Use `executeScheduleAsync()` for schedules with async systems.
 
 ### Actions
 
@@ -485,7 +535,7 @@ const enemy = spawn.enemy(100, 50);
 
 Actions are initialized lazily and cached per world -- calling `spawnActions(world)` multiple times returns the same object.
 
-Use actions to organize spawn helpers, update functions, or any reusable world operations.
+💡 **Tip:** Use actions to organize spawn helpers, update functions, or any reusable world operations.
 
 ### Events
 
@@ -540,7 +590,12 @@ function audioSystem(world) {
 #### Event Utilities
 
 ```typescript
-import { hasEvents, countEvents, fetchLastEvent, clearEvents } from "iris-ecs";
+import {
+  hasEvents,
+  countEvents,
+  fetchLastEvent,
+  clearEvents,
+} from "iris-ecs";
 
 // Check without consuming
 if (hasEvents(world, DamageDealt)) {
@@ -561,14 +616,20 @@ if (isPaused) {
 
 Events persist for a short window (2 ticks) to ensure all systems can read them regardless of execution order, then expire automatically. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
 
-⚠ **Events are not entities.** Unlike components and tags, events exist outside the entity-component model. You cannot query for events or attach them to entities.
+⚠️ **Events are not entities.** Unlike components and tags, events exist outside the entity-component model. You cannot query for events or attach them to entities.
 
 ### Change Detection
 
 **Change detection** tracks when components are added, modified, or removed, letting systems process only what changed since their last run.
 
 ```typescript
-import { fetchEntities, added, changed, removed, fetchEvents } from "iris-ecs";
+import {
+  fetchEntities,
+  added,
+  changed,
+  removed,
+  fetchEvents,
+} from "iris-ecs";
 
 // Entities where Position was added this tick
 for (const entity of fetchEntities(world, added(Position))) {
@@ -581,8 +642,8 @@ for (const entity of fetchEntities(world, changed(Health))) {
 }
 
 // Combine with regular filters
-for (const entity of fetchEntities(world, Player, changed(Position), not(Dead))) {
-  updatePlayerOnMinimap(entity);
+for (const e of fetchEntities(world, Player, changed(Position), not(Dead))) {
+  updatePlayerOnMinimap(e);
 }
 ```
 
@@ -601,14 +662,17 @@ for (const event of fetchEvents(world, removed(Health))) {
 
 #### Under the Hood
 
-Removal detection works differently because when an entity loses a component, it moves to a new archetype -- the old archetype's data becomes inaccessible. Rather than maintain slow global storage for deleted components, `removed()` emits events before the transition occurs. This keeps the fast archetype-local design while still enabling removal detection.
+Removal detection works differently because when an entity loses a component, it moves to a new archetype -- the old archetype's data becomes inaccessible. Rather than maintain slow global storage for deleted components, `removed()` emits events before the transition occurs. This keeps the fast archetype-local design while enabling removal detection.
 
 ### Observers
 
 An **Observer** is a callback that fires in response to ECS lifecycle events. Unlike the event system (for inter-system communication), observers hook directly into internal ECS operations.
 
 ```typescript
-import { registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
+import {
+  registerObserverCallback,
+  unregisterObserverCallback,
+} from "iris-ecs";
 
 // React to entity creation
 registerObserverCallback(world, "entityCreated", (entity) => {
@@ -616,8 +680,8 @@ registerObserverCallback(world, "entityCreated", (entity) => {
 });
 
 // React to component changes
-registerObserverCallback(world, "componentAdded", (componentId, entityId) => {
-  console.log(`Component ${componentId} added to entity ${entityId}`);
+registerObserverCallback(world, "componentAdded", (compId, entityId) => {
+  console.log(`Component ${compId} added to entity ${entityId}`);
 });
 
 // Unregister when done
@@ -639,7 +703,9 @@ unregisterObserverCallback(world, "entityDestroyed", handler);
 | `archetypeDestroyed` | `(archetype)` | Before archetype cleanup |
 | `worldReset` | `(world)` | After `resetWorld()` |
 
-Use observers for debugging, logging, editor integration, or triggering side effects that must happen immediately when the ECS state changes. For game logic that reacts to changes, prefer change detection queries or the event system.
+Use observers for debugging, logging, editor integration, or triggering side effects that must happen immediately when the ECS state changes.
+
+💡 **Tip:** For game logic that reacts to changes, prefer change detection queries or the event system. Observers are best for low-level integrations.
 
 ## Acknowledgments
 
