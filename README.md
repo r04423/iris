@@ -1,1 +1,24 @@
-# iris
+# Iris
+
+[![CI](https://github.com/r04423/iris/actions/workflows/ci.yml/badge.svg)](https://github.com/r04423/iris/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+A library for building realtime applications in TypeScript.
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`iris-ecs`](./packages/ecs) | Core ECS library |
+
+## Development
+
+```bash
+pnpm install
+pnpm run validate
+pnpm test
+```
+
+## License
+
+MIT
