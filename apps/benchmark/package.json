@@ -1,0 +1,20 @@
+{
+  "name": "iris-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node --import tsx/esm src/main.ts",
+    "bench:iris": "node --import tsx/esm src/main.ts --lib iris",
+    "bench:compare": "node --import tsx/esm src/main.ts --lib all",
+    "bench:memory": "node --expose-gc --import tsx/esm src/main.ts --memory",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "iris-ecs": "workspace:*",
+    "tinybench": "^6"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.0-beta"
+  }
+}

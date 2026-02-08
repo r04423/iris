@@ -21,6 +21,22 @@ importers:
         specifier: ^5.9.0-beta
         version: 5.9.3
 
+  apps/benchmark:
+    dependencies:
+      iris-ecs:
+        specifier: workspace:*
+        version: link:../../packages/ecs
+      tinybench:
+        specifier: ^6
+        version: 6.0.0
+    devDependencies:
+      tsx:
+        specifier: ^4.19.4
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.0-beta
+        version: 5.9.3
+
   packages/ecs:
     devDependencies:
       '@types/node':
@@ -490,6 +506,10 @@ packages:
     resolution: {integrity: sha512-pFYqmTw68LXVjeWJMST4+borgQP2AyMNbg1BpZh9LbyhUeNkeaPF9gzfPGUAnSMV3qPYdWUwDIjjCLiSDOl7vg==}
     engines: {node: '>=18'}
 
+  tinybench@6.0.0:
+    resolution: {integrity: sha512-BWlWpVbbZXaYjRV0twGLNQO00Zj4HA/sjLOQP2IvzQqGwRGp+2kh7UU3ijyJ3ywFRogYDRbiHDMrUOfaMnN56g==}
+    engines: {node: '>=20.0.0'}
+
   tsx@4.21.0:
     resolution: {integrity: sha512-5C1sg4USs1lfG0GFb2RLXsdpXqBSEhAaA/0kPL01wxzpMqLILNxIxIOKiILz+cdg/pLnOUxFYOR5yhHU666wbw==}
     engines: {node: '>=18.0.0'}
@@ -902,6 +922,8 @@ snapshots:
       '@istanbuljs/schema': 0.1.3
       glob: 10.5.0
       minimatch: 9.0.5
+
+  tinybench@6.0.0: {}
 
   tsx@4.21.0:
     dependencies:

@@ -9,7 +9,8 @@
     "format": "biome format .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "validate": "pnpm run typecheck && pnpm run check"
+    "validate": "pnpm run typecheck && pnpm run check",
+    "bench": "pnpm --filter iris-benchmark bench"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
