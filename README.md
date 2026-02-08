@@ -11,6 +11,12 @@ Libraries for building realtime applications in TypeScript.
 |---------|-------------|
 | [`iris-ecs`](./packages/ecs) | Core ECS library |
 
+## Apps
+
+| App | Description |
+|-----|-------------|
+| [`benchmark`](./apps/benchmark) | Performance benchmarks and results |
+
 ## Development
 
 ```bash
