@@ -10,7 +10,18 @@ import {
   type World,
 } from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
-import { generateComponents, generateTags } from "./fixtures.js";
+import {
+  Active,
+  Damage,
+  Enemy,
+  generateComponents,
+  generateTags,
+  Health,
+  Player,
+  Position,
+  Velocity,
+  Visible,
+} from "./fixtures.js";
 
 // ---------------------------------------------------------------------------
 // Deterministic PRNG — splitmix32
@@ -31,6 +42,19 @@ function splitmix32(seed: number): () => number {
 }
 
 // ---------------------------------------------------------------------------
+// Data factories for named fixture components
+// ---------------------------------------------------------------------------
+
+type DataFactory = (rng: () => number) => Record<string, number>;
+
+const fixtureDataFactories = new Map<EntityId, DataFactory>([
+  [Position, (rng) => ({ x: rng(), y: rng() })],
+  [Velocity, (rng) => ({ vx: rng(), vy: rng() })],
+  [Health, (rng) => ({ hp: Math.floor(rng() * 100) })],
+  [Damage, (rng) => ({ amount: Math.floor(rng() * 50) })],
+]);
+
+// ---------------------------------------------------------------------------
 // Population helpers
 // ---------------------------------------------------------------------------
 
@@ -39,7 +63,14 @@ function splitmix32(seed: number): () => number {
  * contains multiple archetypes — realistic fragmentation rather than one
  * monolithic archetype with every entity sharing the same component set.
  */
-function populateEntities(world: World, count: number, components: Component[], tags: Tag[], seed: number): void {
+function populateEntities(
+  world: World,
+  count: number,
+  components: Component[],
+  tags: Tag[],
+  seed: number,
+  dataFactories?: Map<EntityId, DataFactory>
+): void {
   const rng = splitmix32(seed);
   const allTypes: EntityId[] = [...components, ...tags];
   const componentSet = new Set<EntityId>(components);
@@ -51,8 +82,10 @@ function populateEntities(world: World, count: number, components: Component[], 
       const typeIdx = Math.floor(rng() * allTypes.length);
       const type = allTypes[typeIdx]!;
       if (componentSet.has(type)) {
-        // biome-ignore lint/suspicious/noExplicitAny: generated components have { v: f32 } schema
-        addComponent(world, entity, type as any, { v: rng() });
+        const factory = dataFactories?.get(type);
+        const data = factory ? factory(rng) : { v: rng() };
+        // biome-ignore lint/suspicious/noExplicitAny: mixed component schemas
+        addComponent(world, entity, type as any, data);
       } else {
         addComponent(world, entity, type as Tag);
       }
@@ -103,10 +136,13 @@ function activateQueries(world: World, count: number, components: Component[], t
  * them inside each factory call would exhaust the ID space after a few worlds.
  * We register them once at module load and reuse across all presets.
  */
-const xsmallComponents = generateComponents(20);
-const xsmallTags = generateTags(20);
-const smallComponents = generateComponents(100);
-const smallTags = generateTags(100);
+const fixtureComponents: Component[] = [Position, Velocity, Health, Damage];
+const fixtureTags: Tag[] = [Player, Enemy, Active, Visible];
+
+const xsmallComponents = [...generateComponents(20), ...fixtureComponents];
+const xsmallTags = [...generateTags(20), ...fixtureTags];
+const smallComponents = [...generateComponents(100), ...fixtureComponents];
+const smallTags = [...generateTags(100), ...fixtureTags];
 
 // ---------------------------------------------------------------------------
 // Preset factories
@@ -116,8 +152,8 @@ const smallTags = generateTags(100);
  * | Preset | Entities | Component types | Tag types | Queries |
  * |--------|----------|-----------------|-----------|---------|
  * | empty  | 0        | 0               | 0         | 0       |
- * | xsmall | 100      | 20              | 20        | 20      |
- * | small  | 1,000    | 100             | 100       | 100     |
+ * | xsmall | 100      | 24              | 24        | 20      |
+ * | small  | 1,000    | 104             | 104       | 100     |
  */
 
 function createEmptyPreset(): World {
@@ -126,14 +162,14 @@ function createEmptyPreset(): World {
 
 function createXSmallPreset(): World {
   const world = createWorld();
-  populateEntities(world, 100, xsmallComponents, xsmallTags, 42);
+  populateEntities(world, 100, xsmallComponents, xsmallTags, 42, fixtureDataFactories);
   activateQueries(world, 20, xsmallComponents, xsmallTags, 123);
   return world;
 }
 
 function createSmallPreset(): World {
   const world = createWorld();
-  populateEntities(world, 1_000, smallComponents, smallTags, 42);
+  populateEntities(world, 1_000, smallComponents, smallTags, 42, fixtureDataFactories);
   activateQueries(world, 100, smallComponents, smallTags, 123);
   return world;
 }
