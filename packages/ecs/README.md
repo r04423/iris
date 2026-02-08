@@ -2,6 +2,8 @@
 
 Entity Component System implementation for TypeScript.
 
+> **Early stage implementation.** APIs are unstable and breaking changes can happen between versions.
+
 ## What is ECS?
 
 **Entity Component System** is a design pattern that separates *identity*, *data*, and *behavior*:
