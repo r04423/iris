@@ -29,7 +29,7 @@ export function measureMemory(label: string, iterations: number, fn: () => void)
       didWarnAboutMissingGc = true;
       console.warn("GC not exposed — run with --expose-gc for memory measurements");
     }
-    return { label, deltaPerOp: 0, totalDelta: 0, iterations };
+    return { label, deltaPerOp: 0, totalDelta: 0, totalMemory: 0, iterations };
   }
 
   fn();
@@ -48,5 +48,5 @@ export function measureMemory(label: string, iterations: number, fn: () => void)
   const totalDelta = after - before;
   const deltaPerOp = totalDelta / iterations;
 
-  return { label, deltaPerOp, totalDelta, iterations };
+  return { label, deltaPerOp, totalDelta, totalMemory: after, iterations };
 }

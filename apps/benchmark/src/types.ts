@@ -21,5 +21,6 @@ export type MemoryResult = {
   label: string;
   deltaPerOp: number;
   totalDelta: number;
+  totalMemory: number;
   iterations: number;
 };

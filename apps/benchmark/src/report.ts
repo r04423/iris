@@ -26,6 +26,13 @@ function formatDelta(n: number): string {
   return `${sign}${(abs / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Formats an absolute byte count with auto-scaled units. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${formatNumber(Math.round(n))} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function formatTime(ns: number): string {
   if (ns < 1_000) return `${formatNumber(Math.round(ns))} ns`;
   if (ns < 1_000_000) return `${(ns / 1_000).toFixed(2)} µs`;
@@ -67,23 +74,27 @@ function drawTable(headers: string[], rows: string[][], colWidths: number[]): st
 // ---------------------------------------------------------------------------
 
 export function printThroughputReport(suiteName: string, presetName: string, tasks: Task[], libName: string): void {
-  const headers = ["Benchmark", "ops/sec", "avg", "P75", "P99"];
+  const headers = ["Benchmark", "ops/sec", "ops/frame", "avg", "P75", "P99"];
   const rows: string[][] = [];
+
+  // Nanoseconds in one frame at 60 fps
+  const nsPerFrame = 1_000_000_000 / 60;
 
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i]!;
     const result = task.result;
     if (result.state !== "completed") {
-      rows.push([task.name, "—", "—", "—", "—"]);
+      rows.push([task.name, "—", "—", "—", "—", "—"]);
       continue;
     }
     const { latency } = result;
     const meanNs = nsFromMs(latency.mean);
     const opsPerSec = meanNs > 0 ? formatNumber(Math.round(1_000_000_000 / meanNs)) : "—";
+    const opsPerFrame = meanNs > 0 ? formatNumber(Math.round(nsPerFrame / meanNs)) : "—";
     const avg = meanNs > 0 ? formatTime(meanNs) : "—";
     const p75 = formatTime(nsFromMs(latency.p75));
     const p99 = formatTime(nsFromMs(latency.p99));
-    rows.push([task.name, opsPerSec, avg, p75, p99]);
+    rows.push([task.name, opsPerSec, opsPerFrame, avg, p75, p99]);
   }
 
   const colWidths = headers.map((h, i) => {
@@ -108,12 +119,12 @@ export function printMemoryReport(
   results: MemoryResult[],
   libName: string
 ): void {
-  const headers = ["Benchmark", "delta/op", "total"];
+  const headers = ["Benchmark", "delta/op", "total delta", "total mem"];
   const rows: string[][] = [];
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i]!;
-    rows.push([r.label, formatDelta(r.deltaPerOp), formatDelta(r.totalDelta)]);
+    rows.push([r.label, formatDelta(r.deltaPerOp), formatDelta(r.totalDelta), formatBytes(r.totalMemory)]);
   }
 
   const colWidths = headers.map((h, i) => {
