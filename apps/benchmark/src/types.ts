@@ -1,4 +1,4 @@
-export type PresetName = "empty" | "xsmall" | "small";
+export type PresetName = "empty" | "xsmall" | "small" | "medium";
 
 // biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
 export type PresetFactory = () => any;

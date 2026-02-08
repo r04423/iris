@@ -143,6 +143,8 @@ const xsmallComponents = [...generateComponents(20), ...fixtureComponents];
 const xsmallTags = [...generateTags(20), ...fixtureTags];
 const smallComponents = [...generateComponents(100), ...fixtureComponents];
 const smallTags = [...generateTags(100), ...fixtureTags];
+const mediumComponents = [...generateComponents(400), ...fixtureComponents];
+const mediumTags = [...generateTags(400), ...fixtureTags];
 
 // ---------------------------------------------------------------------------
 // Preset factories
@@ -154,6 +156,7 @@ const smallTags = [...generateTags(100), ...fixtureTags];
  * | empty  | 0        | 0               | 0         | 0       |
  * | xsmall | 100      | 24              | 24        | 20      |
  * | small  | 1,000    | 104             | 104       | 100     |
+ * | medium | 10,000   | 404             | 404       | 400     |
  */
 
 function createEmptyPreset(): World {
@@ -174,8 +177,16 @@ function createSmallPreset(): World {
   return world;
 }
 
+function createMediumPreset(): World {
+  const world = createWorld();
+  populateEntities(world, 10_000, mediumComponents, mediumTags, 42, fixtureDataFactories);
+  activateQueries(world, 400, mediumComponents, mediumTags, 123);
+  return world;
+}
+
 export const presets: Record<PresetName, PresetFactory> = {
   empty: createEmptyPreset,
   xsmall: createXSmallPreset,
   small: createSmallPreset,
+  medium: createMediumPreset,
 };

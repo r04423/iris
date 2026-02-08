@@ -27,8 +27,8 @@ type CompSet = {
 // Presets
 // ---------------------------------------------------------------------------
 
-const allPresets: PresetName[] = ["empty", "xsmall", "small"];
-const destroyPresets: PresetName[] = ["xsmall", "small"];
+const allPresets: PresetName[] = ["empty", "xsmall", "small", "medium"];
+const destroyPresets: PresetName[] = ["xsmall", "small", "medium"];
 
 // ---------------------------------------------------------------------------
 // Helper — populate entity with a component set
