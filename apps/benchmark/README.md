@@ -122,23 +122,14 @@ Latency — avg (P99):
 | create entity + 4 comps | 825 ns (917 ns) | 853 ns (1.75 us) | 806 ns (963 ns) |
 | create entity + 8 comps | 1.64 us (4.33 us) | 1.72 us (2.33 us) | 1.56 us (1.92 us) |
 
-ops/sec:
+ops/sec (ops/frame):
 
 | Benchmark | empty | xsmall | small |
 |-----------|------:|-------:|------:|
-| create empty entity | 6,567,571 | 7,235,605 | 7,842,634 |
-| create entity + 2 comps | 1,867,678 | 1,790,090 | 2,595,912 |
-| create entity + 4 comps | 1,211,895 | 1,172,278 | 1,241,302 |
-| create entity + 8 comps | 609,442 | 581,359 | 639,663 |
-
-ops/frame (60 fps, 16.67 ms budget):
-
-| Benchmark | empty | xsmall | small |
-|-----------|------:|-------:|------:|
-| create empty entity | 109,460 | 120,593 | 130,711 |
-| create entity + 2 comps | 31,128 | 29,835 | 43,265 |
-| create entity + 4 comps | 20,198 | 19,538 | 20,688 |
-| create entity + 8 comps | 10,157 | 9,689 | 10,661 |
+| create empty entity | 6,567,571 (109,460) | 7,235,605 (120,593) | 7,842,634 (130,711) |
+| create entity + 2 comps | 1,867,678 (31,128) | 1,790,090 (29,835) | 2,595,912 (43,265) |
+| create entity + 4 comps | 1,211,895 (20,198) | 1,172,278 (19,538) | 1,241,302 (20,688) |
+| create entity + 8 comps | 609,442 (10,157) | 581,359 (9,689) | 639,663 (10,661) |
 
 ### Entity — Destroy Throughput
 
