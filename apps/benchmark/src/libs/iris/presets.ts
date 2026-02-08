@@ -77,7 +77,7 @@ function populateEntities(
 
   for (let i = 0; i < count; i++) {
     const entity = createEntity(world);
-    const typeCount = 2 + Math.floor(rng() * 5);
+    const typeCount = 2 + Math.floor(rng() * 9);
     for (let j = 0; j < typeCount; j++) {
       const typeIdx = Math.floor(rng() * allTypes.length);
       const type = allTypes[typeIdx]!;
