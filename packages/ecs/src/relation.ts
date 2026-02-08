@@ -167,7 +167,7 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
     return;
   }
 
-  const wildcardMeta = ensureEntity(world, wildcardTargetPair);
+  const wildcardMeta = world.entities.byId.get(wildcardTargetPair)!;
 
   // Separate pairs by their OnDeleteTarget policy:
   // - pairsToRemove: Just destroy the pair entity (default behavior)
@@ -196,7 +196,7 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
   const subjectsToDelete = new Set<EntityId>();
 
   for (const pairId of pairsToDelete) {
-    const pairMeta = ensureEntity(world, pairId);
+    const pairMeta = world.entities.byId.get(pairId)!;
 
     for (const archetype of pairMeta.records) {
       for (const entityId of archetype.entities) {

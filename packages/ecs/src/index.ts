@@ -74,9 +74,19 @@ export {
 
 export {
   addSystem,
-  buildSchedule,
-  executeSchedule,
-  executeScheduleAsync,
+  defineSchedule,
+  First,
+  insertScheduleAfter,
+  insertScheduleBefore,
+  Last,
+  PostUpdate,
+  PreUpdate,
+  run,
+  runOnce,
+  Shutdown,
+  Startup,
+  stop,
+  Update,
 } from "./scheduler.js";
 
 // ============================================================================
@@ -87,8 +97,9 @@ export type { ActionGetter, ActionInitializer, Actions } from "./actions.js";
 export type { Component, Entity, EntityId, Pair, Relation, RelationTargetId, Tag } from "./encoding.js";
 export type { Event, EventSchema } from "./event.js";
 export type { FilterTerms } from "./filters.js";
+export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observer.js";
 export type { AddedModifier, ChangedModifier, ModifierType, NotModifier, QueryMeta, QueryModifier } from "./query.js";
-export type { ScheduleId, SystemMeta, SystemOptions, SystemRunner } from "./scheduler.js";
+export type { ScheduleLabel, SystemMeta, SystemOptions, SystemRunner } from "./scheduler.js";
 export type { InferSchemaRecord, Schema, SchemaRecord } from "./schema.js";
 export type { World } from "./world.js";
 
@@ -103,7 +114,6 @@ export {
   emitEvent,
   fetchEvents,
   fetchLastEvent,
-  flushEvents,
   hasEvents,
 } from "./event.js";
 
@@ -117,7 +127,6 @@ export { removed } from "./removal.js";
 // Observers
 // ============================================================================
 
-export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observer.js";
 export { registerObserverCallback, unregisterObserverCallback } from "./observer.js";
 
 // ============================================================================

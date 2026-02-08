@@ -8,7 +8,16 @@ import { lookupByName, setName } from "./name.js";
 import { registerObserverCallback } from "./observer.js";
 import { fetchEntities } from "./query.js";
 import { defineTag } from "./registry.js";
-import { addSystem, buildSchedule } from "./scheduler.js";
+import {
+  addSystem,
+  defineSchedule,
+  First,
+  insertScheduleBefore,
+  Last,
+  PostUpdate,
+  PreUpdate,
+  Update,
+} from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
 
@@ -107,7 +116,7 @@ describe("World", () => {
       assert.strictEqual(world.entities.byId.size, 1);
     });
 
-    it("preserves systems and schedules", () => {
+    it("preserves systems after reset", () => {
       const world = createWorld();
 
       function testSystem() {
@@ -115,14 +124,11 @@ describe("World", () => {
       }
 
       addSystem(world, testSystem);
-      buildSchedule(world);
 
       resetWorld(world);
 
       // System still registered
       assert.ok(world.systems.byId.has("testSystem"));
-      // Schedule still built
-      assert.ok(world.schedules.byId.has("runtime"));
     });
 
     it("clears queries and filters", () => {
@@ -269,6 +275,21 @@ describe("World", () => {
         initialEntityDestroyed,
         "entityDestroyed callbacks should not accumulate"
       );
+    });
+
+    it("preserves custom pipeline insertions", () => {
+      const world = createWorld();
+      const Physics = defineSchedule("Physics");
+
+      insertScheduleBefore(world, Physics, Update);
+
+      // Verify custom pipeline
+      assert.deepStrictEqual(world.schedules.pipeline, [First, PreUpdate, Physics, Update, PostUpdate, Last]);
+
+      resetWorld(world);
+
+      // Pipeline should be preserved (it's configuration, not state)
+      assert.deepStrictEqual(world.schedules.pipeline, [First, PreUpdate, Physics, Update, PostUpdate, Last]);
     });
   });
 });

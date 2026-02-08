@@ -205,7 +205,7 @@ export function destroyEntity(world: World, entityId: EntityId): void {
     return;
   }
 
-  const meta = ensureEntity(world, entityId);
+  const meta = world.entities.byId.get(entityId)!;
 
   // Cycle protection - prevent infinite loops from cascade deletes
   if (meta.destroying) {
@@ -223,7 +223,7 @@ export function destroyEntity(world: World, entityId: EntityId): void {
 
   // Swap-remove updates: entity swapped into our slot needs row update
   if (swappedEntityId !== undefined) {
-    const swappedMeta = ensureEntity(world, swappedEntityId);
+    const swappedMeta = world.entities.byId.get(swappedEntityId)!;
     swappedMeta.row = meta.row;
   }
 
@@ -265,17 +265,16 @@ export function isEntityAlive(world: World, entity: EntityId): boolean {
  * Moves entity to a different archetype, transferring component data.
  *
  * @param world - World instance
- * @param entityId - Entity to move
+ * @param meta - Entity metadata
  * @param toArchetype - Target archetype
  *
  * @example
  * ```typescript
  * const archetype = getOrCreateArchetype(world, [Position, Velocity]);
- * moveEntityToArchetype(world, entity, archetype);
+ * moveEntityToArchetype(world, meta, archetype);
  * ```
  */
-export function moveEntityToArchetype(world: World, entityId: EntityId, toArchetype: Archetype): void {
-  const meta = ensureEntity(world, entityId);
+export function moveEntityToArchetype(world: World, meta: EntityMeta, toArchetype: Archetype): void {
   const fromRow = meta.row;
 
   const { toRow, swappedEntityId } = transferEntityToArchetypeByRow(
@@ -290,7 +289,7 @@ export function moveEntityToArchetype(world: World, entityId: EntityId, toArchet
 
   // Swap-remove updates: entity swapped into our old slot needs row update
   if (swappedEntityId !== undefined) {
-    const swappedMeta = ensureEntity(world, swappedEntityId);
+    const swappedMeta = world.entities.byId.get(swappedEntityId)!;
     swappedMeta.row = fromRow;
   }
 }
@@ -331,7 +330,7 @@ export function addEntityRecord(world: World, archetype: Archetype): void {
 export function removeEntityRecord(world: World, archetype: Archetype): void {
   for (let i = 0; i < archetype.types.length; i++) {
     const typeId = archetype.types[i]!;
-    const meta = ensureEntity(world, typeId);
+    const meta = world.entities.byId.get(typeId)!;
     const idx = meta.records.indexOf(archetype);
 
     if (idx !== -1) {

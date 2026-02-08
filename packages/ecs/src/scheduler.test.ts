@@ -1,6 +1,20 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { addSystem, buildSchedule, executeSchedule, executeScheduleAsync } from "./scheduler.js";
+import {
+  addSystem,
+  defineSchedule,
+  First,
+  insertScheduleAfter,
+  insertScheduleBefore,
+  Last,
+  PostUpdate,
+  PreUpdate,
+  runOnce,
+  Shutdown,
+  Startup,
+  stop,
+  Update,
+} from "./scheduler.js";
 import { createWorld } from "./world.js";
 
 describe("Scheduler", () => {
@@ -34,13 +48,13 @@ describe("Scheduler", () => {
       assert.strictEqual(world.systems.byId.size, 2);
     });
 
-    it("defaults schedule to 'runtime'", () => {
+    it("defaults schedule to Update", () => {
       const world = createWorld();
 
       function physicsSystem() {}
       addSystem(world, physicsSystem);
 
-      assert.strictEqual(world.systems.byId.get("physicsSystem")?.schedule, "runtime");
+      assert.strictEqual(world.systems.byId.get("physicsSystem")?.schedule, Update);
     });
 
     it("normalizes single constraint string to array", () => {
@@ -63,22 +77,6 @@ describe("Scheduler", () => {
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["a", "b"]);
       assert.deepStrictEqual(meta?.after, ["c", "d"]);
-    });
-
-    it("assigns sequential registration indices", () => {
-      const world = createWorld();
-
-      function first() {}
-      function second() {}
-      function third() {}
-
-      addSystem(world, first);
-      addSystem(world, second);
-      addSystem(world, third);
-
-      assert.strictEqual(world.systems.byId.get("first")?.index, 0);
-      assert.strictEqual(world.systems.byId.get("second")?.index, 1);
-      assert.strictEqual(world.systems.byId.get("third")?.index, 2);
     });
   });
 
@@ -109,82 +107,100 @@ describe("Scheduler", () => {
   });
 
   describe("Schedule Ordering", () => {
-    it("respects before constraint", () => {
+    it("respects before constraint", async () => {
       const world = createWorld();
+      const calls: string[] = [];
 
-      function render() {}
-      function physics() {}
+      addSystem(world, function render() {
+        calls.push("render");
+      });
+      addSystem(
+        world,
+        function physics() {
+          calls.push("physics");
+        },
+        { before: "render" }
+      );
 
-      addSystem(world, render);
-      addSystem(world, physics, { before: "render" });
+      await runOnce(world);
 
-      buildSchedule(world);
-
-      const order = world.schedules.byId.get("runtime");
-      assert.deepStrictEqual(order, ["physics", "render"]);
+      assert.deepStrictEqual(calls, ["physics", "render"]);
     });
 
-    it("respects after constraint", () => {
+    it("respects after constraint", async () => {
       const world = createWorld();
+      const calls: string[] = [];
 
-      function physics() {}
-      function input() {}
+      addSystem(world, function physics() {
+        calls.push("physics");
+      });
+      addSystem(world, function input() {
+        calls.push("input");
+      });
+      addSystem(
+        world,
+        function render() {
+          calls.push("render");
+        },
+        { after: "physics" }
+      );
 
-      addSystem(world, physics);
-      addSystem(world, input);
-      addSystem(world, physics, { name: "render", after: "physics" });
+      await runOnce(world);
 
-      buildSchedule(world);
-
-      const order = world.schedules.byId.get("runtime");
-      assert.strictEqual(order?.indexOf("physics"), 0);
-      assert.strictEqual(order?.indexOf("render"), 2);
+      assert.strictEqual(calls.indexOf("physics") < calls.indexOf("render"), true);
     });
 
-    it("uses registration order as tiebreaker", () => {
+    it("uses registration order as tiebreaker", async () => {
       const world = createWorld();
-
-      function a() {}
-      function b() {}
-      function c() {}
+      const calls: string[] = [];
 
       // No constraints - should preserve registration order
-      addSystem(world, a);
-      addSystem(world, b);
-      addSystem(world, c);
+      addSystem(world, function a() {
+        calls.push("a");
+      });
+      addSystem(world, function b() {
+        calls.push("b");
+      });
+      addSystem(world, function c() {
+        calls.push("c");
+      });
 
-      buildSchedule(world);
+      await runOnce(world);
 
-      assert.deepStrictEqual(world.schedules.byId.get("runtime"), ["a", "b", "c"]);
+      assert.deepStrictEqual(calls, ["a", "b", "c"]);
     });
 
-    it("builds empty schedule when no systems registered", () => {
+    it("runs with no systems registered", async () => {
       const world = createWorld();
 
-      buildSchedule(world);
-
-      assert.deepStrictEqual(world.schedules.byId.get("runtime"), []);
+      // Should not throw
+      await runOnce(world);
     });
 
-    it("isolates systems by schedule", () => {
+    it("isolates systems by schedule", async () => {
       const world = createWorld();
+      const calls: string[] = [];
 
-      function startup() {}
-      function runtime() {}
+      addSystem(
+        world,
+        function startupSys() {
+          calls.push("startup");
+        },
+        { schedule: Startup }
+      );
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
 
-      addSystem(world, startup, { schedule: "startup" });
-      addSystem(world, runtime, { schedule: "runtime" });
+      await runOnce(world);
 
-      buildSchedule(world, "startup");
-      buildSchedule(world, "runtime");
-
-      assert.deepStrictEqual(world.schedules.byId.get("startup"), ["startup"]);
-      assert.deepStrictEqual(world.schedules.byId.get("runtime"), ["runtime"]);
+      // Startup runs first, then Update schedule
+      assert.deepStrictEqual(calls, ["startup", "update"]);
     });
   });
 
   describe("Schedule Validation", () => {
-    it("throws on circular dependency", () => {
+    it("throws on circular dependency", async () => {
       const world = createWorld();
 
       function a() {}
@@ -193,30 +209,24 @@ describe("Scheduler", () => {
       addSystem(world, a, { before: "b" });
       addSystem(world, b, { before: "a" });
 
-      assert.throws(() => buildSchedule(world), /circular/i);
+      await assert.rejects(runOnce(world), /circular/i);
     });
 
-    it("throws on unknown system reference", () => {
-      const world = createWorld();
+    it("throws on unknown system reference in before or after", async () => {
+      const world1 = createWorld();
+      function system1() {}
+      addSystem(world1, system1, { after: "nonexistent" });
+      await assert.rejects(runOnce(world1), /unknown.*nonexistent/i);
 
-      function system() {}
-      addSystem(world, system, { after: "nonexistent" });
-
-      assert.throws(() => buildSchedule(world), /unknown.*nonexistent/i);
-    });
-
-    it("throws for before constraint referencing unknown system", () => {
-      const world = createWorld();
-
-      function system() {}
-      addSystem(world, system, { before: "nonexistent" });
-
-      assert.throws(() => buildSchedule(world), /unknown.*nonexistent/i);
+      const world2 = createWorld();
+      function system2() {}
+      addSystem(world2, system2, { before: "nonexistent" });
+      await assert.rejects(runOnce(world2), /unknown.*nonexistent/i);
     });
   });
 
   describe("Schedule Execution", () => {
-    it("executes systems in constraint order", () => {
+    it("executes systems in constraint order", async () => {
       const world = createWorld();
       const calls: string[] = [];
 
@@ -239,30 +249,28 @@ describe("Scheduler", () => {
         { before: "second" }
       );
 
-      buildSchedule(world);
-      executeSchedule(world);
+      await runOnce(world);
 
       assert.deepStrictEqual(calls, ["first", "second", "third"]);
     });
 
-    it("increments tick each execution", () => {
+    it("increments tick per system", async () => {
       const world = createWorld();
 
       function noop() {}
       addSystem(world, noop);
-      buildSchedule(world);
 
       assert.strictEqual(world.execution.tick, 1);
 
-      // 1 system: tick advances by 2 (per-system + post-bump)
-      executeSchedule(world);
-      assert.strictEqual(world.execution.tick, 3);
+      await runOnce(world);
 
-      executeSchedule(world);
-      assert.strictEqual(world.execution.tick, 5);
+      // 1 system in Update: tick advances by 2 (per-system + post-bump)
+      // But Startup also ran (empty, no tick change)
+      // Tick: start=1, Update system tick+1=2, post-bump tick+1=3
+      assert.strictEqual(world.execution.tick, 3);
     });
 
-    it("tick advances per system within a schedule", () => {
+    it("tick advances per system within a schedule", async () => {
       const world = createWorld();
       const ticks: number[] = [];
 
@@ -276,70 +284,39 @@ describe("Scheduler", () => {
         ticks.push(world.execution.tick);
       });
 
-      buildSchedule(world);
-      executeSchedule(world);
+      await runOnce(world);
 
       // 3 systems see ticks 2, 3, 4; final tick is 5 (post-bump)
       assert.deepStrictEqual(ticks, [2, 3, 4]);
       assert.strictEqual(world.execution.tick, 5);
     });
 
-    it("empty schedule advances tick by post-bump only", () => {
-      const world = createWorld();
-
-      buildSchedule(world); // empty schedule
-
-      assert.strictEqual(world.execution.tick, 1);
-
-      executeSchedule(world);
-      assert.strictEqual(world.execution.tick, 2);
-    });
-
-    it("sets execution context during system run", () => {
+    it("sets execution context during system run", async () => {
       const world = createWorld();
       let capturedSchedule: string | null = null;
       let capturedSystem: string | null = null;
 
       addSystem(world, function capture() {
-        capturedSchedule = world.execution.scheduleId;
+        capturedSchedule = world.execution.scheduleLabel;
         capturedSystem = world.execution.systemId;
       });
 
-      buildSchedule(world);
-      executeSchedule(world);
+      await runOnce(world);
 
-      assert.strictEqual(capturedSchedule, "runtime");
+      assert.strictEqual(capturedSchedule, Update);
       assert.strictEqual(capturedSystem, "capture");
     });
 
-    it("clears execution context after completion", () => {
+    it("clears execution context after completion", async () => {
       const world = createWorld();
 
       function noop() {}
       addSystem(world, noop);
-      buildSchedule(world);
-      executeSchedule(world);
 
-      assert.strictEqual(world.execution.scheduleId, null);
+      await runOnce(world);
+
+      assert.strictEqual(world.execution.scheduleLabel, null);
       assert.strictEqual(world.execution.systemId, null);
-    });
-
-    it("throws if schedule not built", () => {
-      const world = createWorld();
-
-      assert.throws(() => executeSchedule(world), /not built/i);
-    });
-
-    it("throws if sync execution encounters Promise", () => {
-      const world = createWorld();
-
-      addSystem(world, async function asyncSystem() {
-        await Promise.resolve();
-      });
-
-      buildSchedule(world);
-
-      assert.throws(() => executeSchedule(world), /Promise.*runScheduleAsync/i);
     });
   });
 
@@ -356,8 +333,7 @@ describe("Scheduler", () => {
         calls.push("sync");
       });
 
-      buildSchedule(world);
-      await executeScheduleAsync(world);
+      await runOnce(world);
 
       assert.deepStrictEqual(calls, ["async", "sync"]);
     });
@@ -369,22 +345,15 @@ describe("Scheduler", () => {
         await Promise.resolve();
       });
 
-      buildSchedule(world);
-      await executeScheduleAsync(world);
+      await runOnce(world);
 
-      assert.strictEqual(world.execution.scheduleId, null);
+      assert.strictEqual(world.execution.scheduleLabel, null);
       assert.strictEqual(world.execution.systemId, null);
-    });
-
-    it("throws for unbuilt schedule", async () => {
-      const world = createWorld();
-
-      await assert.rejects(executeScheduleAsync(world, "unbuilt"), /not built/i);
     });
   });
 
   describe("Binary Search Coverage", () => {
-    it("binary search inserts system with lower index into queue", () => {
+    it("binary search inserts system with lower index into queue", async () => {
       const world = createWorld();
       const calls: string[] = [];
 
@@ -412,18 +381,289 @@ describe("Scheduler", () => {
         calls.push("A");
       });
 
-      buildSchedule(world);
-      executeSchedule(world);
+      await runOnce(world);
 
       // Initial queue (zero in-degree): C (1), B (2), A (3)
       // Process C: D's in-degree 2->1. Queue = [B, A]
       // Process B: D's in-degree 1->0. Insert D (index 0) into queue [A (index 3)]
-      //   - mid = 0, A.index (3) >= D.index (0) => high = mid (line 230-231 executed!)
+      //   - mid = 0, A.index (3) >= D.index (0) => high = mid
       //   - Queue becomes [D, A]
       // Process D: Queue = [A]
       // Process A: Queue = []
 
       assert.deepStrictEqual(calls, ["C", "B", "D", "A"]);
+    });
+  });
+
+  describe("Schedule Labels", () => {
+    it("built-in labels are distinct strings", () => {
+      const labels = [First, PreUpdate, Update, PostUpdate, Last, Startup, Shutdown];
+      const unique = new Set(labels);
+
+      assert.strictEqual(unique.size, labels.length);
+    });
+
+    it("defineSchedule creates custom label", () => {
+      const Physics = defineSchedule("Physics");
+
+      assert.strictEqual(Physics as string, "Physics");
+    });
+  });
+
+  describe("Pipeline Management", () => {
+    it("default pipeline is First, PreUpdate, Update, PostUpdate, Last", () => {
+      const world = createWorld();
+
+      assert.deepStrictEqual(world.schedules.pipeline, [First, PreUpdate, Update, PostUpdate, Last]);
+    });
+
+    it("insertScheduleBefore inserts at correct position", () => {
+      const world = createWorld();
+      const Physics = defineSchedule("Physics");
+
+      insertScheduleBefore(world, Physics, Update);
+
+      assert.deepStrictEqual(world.schedules.pipeline, [First, PreUpdate, Physics, Update, PostUpdate, Last]);
+    });
+
+    it("insertScheduleAfter inserts at correct position", () => {
+      const world = createWorld();
+      const Render = defineSchedule("Render");
+
+      insertScheduleAfter(world, Render, PostUpdate);
+
+      assert.deepStrictEqual(world.schedules.pipeline, [First, PreUpdate, Update, PostUpdate, Render, Last]);
+    });
+
+    it("throws for unknown anchor or duplicate schedule", () => {
+      const world = createWorld();
+      const Physics = defineSchedule("Physics");
+      const Unknown = defineSchedule("Unknown");
+
+      // Unknown anchor
+      assert.throws(() => insertScheduleBefore(world, Physics, Unknown), /not found/i);
+      assert.throws(() => insertScheduleAfter(world, Physics, Unknown), /not found/i);
+
+      // Duplicate schedule
+      assert.throws(() => insertScheduleBefore(world, First, Update), /already in pipeline/i);
+      assert.throws(() => insertScheduleAfter(world, First, Update), /already in pipeline/i);
+    });
+
+    it("marks pipeline dirty on insert", async () => {
+      const world = createWorld();
+      await runOnce(world); // clears dirty flag
+
+      const Physics = defineSchedule("Physics");
+      insertScheduleBefore(world, Physics, Update);
+
+      assert.strictEqual(world.schedules.dirty, true);
+    });
+  });
+
+  describe("Pipeline Execution Order", () => {
+    it("executes schedules in pipeline order", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(
+        world,
+        function firstSys() {
+          calls.push("first");
+        },
+        { schedule: First }
+      );
+      addSystem(
+        world,
+        function preUpdateSys() {
+          calls.push("preUpdate");
+        },
+        { schedule: PreUpdate }
+      );
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
+      addSystem(
+        world,
+        function postUpdateSys() {
+          calls.push("postUpdate");
+        },
+        { schedule: PostUpdate }
+      );
+      addSystem(
+        world,
+        function lastSys() {
+          calls.push("last");
+        },
+        { schedule: Last }
+      );
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["first", "preUpdate", "update", "postUpdate", "last"]);
+    });
+
+    it("runs custom schedule in correct pipeline position", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+      const Physics = defineSchedule("Physics");
+
+      insertScheduleBefore(world, Physics, Update);
+
+      addSystem(
+        world,
+        function physicsSys() {
+          calls.push("physics");
+        },
+        { schedule: Physics }
+      );
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.indexOf("physics") < calls.indexOf("update"), true);
+    });
+  });
+
+  describe("Startup and Shutdown", () => {
+    it("startup runs once before first frame", async () => {
+      const world = createWorld();
+      let startupCount = 0;
+      let updateCount = 0;
+
+      addSystem(
+        world,
+        function startupSys() {
+          startupCount++;
+        },
+        { schedule: Startup }
+      );
+      addSystem(world, function updateSys() {
+        updateCount++;
+      });
+
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.strictEqual(startupCount, 1);
+      assert.strictEqual(updateCount, 3);
+    });
+
+    it("shutdown runs once on stop", async () => {
+      const world = createWorld();
+      let shutdownCount = 0;
+
+      addSystem(
+        world,
+        function shutdownSys() {
+          shutdownCount++;
+        },
+        { schedule: Shutdown }
+      );
+
+      await runOnce(world);
+      await stop(world);
+
+      assert.strictEqual(shutdownCount, 1);
+    });
+
+    it("shutdown does not run again on second stop", async () => {
+      const world = createWorld();
+      let shutdownCount = 0;
+
+      addSystem(
+        world,
+        function shutdownSys() {
+          shutdownCount++;
+        },
+        { schedule: Shutdown }
+      );
+
+      await runOnce(world);
+      await stop(world);
+      await stop(world);
+
+      assert.strictEqual(shutdownCount, 1);
+    });
+
+    it("startup runs before pipeline schedules", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(
+        world,
+        function startupSys() {
+          calls.push("startup");
+        },
+        { schedule: Startup }
+      );
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls[0], "startup");
+      assert.strictEqual(calls[1], "update");
+    });
+
+    it("stop then runOnce re-triggers startup and shutdown", async () => {
+      const world = createWorld();
+      let startupCount = 0;
+      let shutdownCount = 0;
+
+      addSystem(
+        world,
+        function startupSys() {
+          startupCount++;
+        },
+        { schedule: Startup }
+      );
+      addSystem(
+        world,
+        function shutdownSys() {
+          shutdownCount++;
+        },
+        { schedule: Shutdown }
+      );
+
+      // First cycle
+      await runOnce(world);
+      assert.strictEqual(startupCount, 1);
+      await stop(world);
+      assert.strictEqual(shutdownCount, 1);
+
+      // Second cycle: startup and shutdown should re-trigger
+      await runOnce(world);
+      assert.strictEqual(startupCount, 2);
+      await stop(world);
+      assert.strictEqual(shutdownCount, 2);
+    });
+  });
+
+  describe("Auto-rebuild", () => {
+    it("rebuilds pipeline when dirty", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(world, function first() {
+        calls.push("first");
+      });
+
+      await runOnce(world);
+      assert.deepStrictEqual(calls, ["first"]);
+
+      // Add new system after first run
+      addSystem(world, function second() {
+        calls.push("second");
+      });
+
+      calls.length = 0;
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["first", "second"]);
     });
   });
 });

@@ -131,10 +131,14 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
   }
 
   // Find the rarest type (appears in fewest archetypes) for optimal iteration
-  let rarestId = terms.include[0]!;
-  let minCount = Number.POSITIVE_INFINITY;
+  let rarestMeta = ensureEntity(world, terms.include[0]!);
+  let minCount = rarestMeta.records.length;
 
-  for (let i = 0; i < terms.include.length; i++) {
+  if (minCount === 0) {
+    return [];
+  }
+
+  for (let i = 1; i < terms.include.length; i++) {
     const typeId = terms.include[i]!;
     const meta = ensureEntity(world, typeId);
 
@@ -145,13 +149,10 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
     }
 
     if (count < minCount) {
-      rarestId = typeId;
+      rarestMeta = meta;
       minCount = count;
     }
   }
-
-  // Only iterate archetypes containing the rarest type, then filter further
-  const rarestMeta = ensureEntity(world, rarestId);
 
   const archetypes = rarestMeta.records;
   const matches: Archetype[] = [];

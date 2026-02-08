@@ -1,16 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import {
-  clearEvents,
-  countEvents,
-  defineEvent,
-  emitEvent,
-  fetchEvents,
-  fetchLastEvent,
-  flushEvents,
-  hasEvents,
-} from "./event.js";
-import { addSystem, buildSchedule, executeSchedule } from "./scheduler.js";
+import { clearEvents, countEvents, defineEvent, emitEvent, fetchEvents, fetchLastEvent, hasEvents } from "./event.js";
+import { addSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -62,49 +53,57 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Event Emission", () => {
-    it("emits tag event without data argument", () => {
+    it("emits tag event without data argument", async () => {
       const world = createWorld();
       const GameStarted = defineEvent("EmitTagEvent");
+      let seen = false;
+
+      addSystem(world, function checker() {
+        if (hasEvents(world, GameStarted)) seen = true;
+      });
 
       emitEvent(world, GameStarted);
+      await runOnce(world);
 
-      assert.strictEqual(hasEvents(world, GameStarted), true);
+      assert.strictEqual(seen, true);
     });
 
-    it("emits data event with data argument", () => {
+    it("emits data event with data argument", async () => {
       const world = createWorld();
       const DamageDealt = defineEvent("EmitDamageEvent", {
         target: Type.u32(),
         amount: Type.f32(),
       });
+      let seen = false;
+
+      addSystem(world, function checker() {
+        if (hasEvents(world, DamageDealt)) seen = true;
+      });
 
       emitEvent(world, DamageDealt, { target: 1, amount: 25.5 });
+      await runOnce(world);
 
-      assert.strictEqual(hasEvents(world, DamageDealt), true);
+      assert.strictEqual(seen, true);
     });
 
-    it("emits multiple events of same type", () => {
+    it("emits multiple events of same type", async () => {
       const world = createWorld();
       const Hit = defineEvent("MultiHit", {
         damage: Type.f32(),
+      });
+      let count = 0;
+
+      addSystem(world, function counter() {
+        count = countEvents(world, Hit);
       });
 
       emitEvent(world, Hit, { damage: 10 });
       emitEvent(world, Hit, { damage: 20 });
       emitEvent(world, Hit, { damage: 30 });
 
-      assert.strictEqual(countEvents(world, Hit), 3);
-    });
+      await runOnce(world);
 
-    it("creates queue lazily on first emit", () => {
-      const world = createWorld();
-      const Event = defineEvent("LazyQueue");
-
-      assert.strictEqual(world.events.byId.has(Event.id), false);
-
-      emitEvent(world, Event);
-
-      assert.strictEqual(world.events.byId.has(Event.id), true);
+      assert.strictEqual(count, 3);
     });
   });
 
@@ -113,77 +112,88 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Event Fetching", () => {
-    it("fetches emitted events", () => {
+    it("fetches emitted events in system context", async () => {
       const world = createWorld();
       const Event = defineEvent("FetchBasic", {
         value: Type.i32(),
       });
+      const results: number[] = [];
+
+      addSystem(world, function reader() {
+        for (const e of fetchEvents(world, Event)) {
+          results.push(e.value);
+        }
+      });
 
       emitEvent(world, Event, { value: 42 });
-
-      const results = [...fetchEvents(world, Event)];
+      await runOnce(world);
 
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]?.value, 42);
+      assert.strictEqual(results[0], 42);
     });
 
-    it("fetches multiple events in order", () => {
+    it("fetches multiple events in order", async () => {
       const world = createWorld();
       const Event = defineEvent("FetchMultiple", {
         value: Type.i32(),
+      });
+      const results: number[] = [];
+
+      addSystem(world, function reader() {
+        for (const e of fetchEvents(world, Event)) {
+          results.push(e.value);
+        }
       });
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
       emitEvent(world, Event, { value: 3 });
-
-      const results = [...fetchEvents(world, Event)];
+      await runOnce(world);
 
       assert.strictEqual(results.length, 3);
-      assert.strictEqual(results[0]?.value, 1);
-      assert.strictEqual(results[1]?.value, 2);
-      assert.strictEqual(results[2]?.value, 3);
+      assert.deepStrictEqual(results, [1, 2, 3]);
     });
 
-    it("marks events as read after fetch", () => {
+    it("marks events as read after fetch and second fetch sees nothing", async () => {
       const world = createWorld();
       const Event = defineEvent("FetchMarksRead");
+      let firstCount = 0;
+      let secondCount = 0;
+
+      addSystem(world, function reader() {
+        // First fetch sees events
+        for (const _ of fetchEvents(world, Event)) {
+          firstCount++;
+        }
+        // Second fetch (same tick) sees nothing - already read
+        for (const _ of fetchEvents(world, Event)) {
+          secondCount++;
+        }
+      });
 
       emitEvent(world, Event);
+      await runOnce(world);
 
-      // First fetch sees events
-      const first = [...fetchEvents(world, Event)];
-      assert.strictEqual(first.length, 1);
-
-      // Second fetch (same tick) sees nothing - already read
-      const second = [...fetchEvents(world, Event)];
-      assert.strictEqual(second.length, 0);
+      assert.strictEqual(firstCount, 1);
+      assert.strictEqual(secondCount, 0);
     });
 
-    it("fetches tag events with undefined data", () => {
+    it("fetches tag events with undefined data", async () => {
       const world = createWorld();
       const TagEvent = defineEvent("FetchTag");
+      const results: unknown[] = [];
+
+      addSystem(world, function reader() {
+        for (const e of fetchEvents(world, TagEvent)) {
+          results.push(e);
+        }
+      });
 
       emitEvent(world, TagEvent);
-
-      const results = [...fetchEvents(world, TagEvent)];
+      await runOnce(world);
 
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], undefined);
-    });
-
-    it("creates queue lazily on fetch", () => {
-      const world = createWorld();
-      const Event = defineEvent("LazyFetch");
-
-      // Queue doesn't exist yet
-      assert.strictEqual(world.events.byId.has(Event.id), false);
-
-      // Fetching creates empty queue
-      const results = [...fetchEvents(world, Event)];
-
-      assert.strictEqual(results.length, 0);
-      assert.strictEqual(world.events.byId.has(Event.id), true);
     });
   });
 
@@ -192,42 +202,56 @@ describe("Event", () => {
   // ============================================================================
 
   describe("fetchLastEvent", () => {
-    it("returns undefined for empty queue", () => {
+    it("returns undefined when no events in system context", async () => {
       const world = createWorld();
       const Event = defineEvent("LastEmpty");
+      let result: unknown = "sentinel";
 
-      const result = fetchLastEvent(world, Event);
+      addSystem(world, function reader() {
+        result = fetchLastEvent(world, Event);
+      });
+
+      await runOnce(world);
 
       assert.strictEqual(result, undefined);
     });
 
-    it("returns most recent event only", () => {
+    it("returns most recent event only", async () => {
       const world = createWorld();
       const Event = defineEvent("LastRecent", {
         value: Type.i32(),
+      });
+      let result: { value: number } | undefined;
+
+      addSystem(world, function reader() {
+        result = fetchLastEvent(world, Event);
       });
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
       emitEvent(world, Event, { value: 3 });
-
-      const result = fetchLastEvent(world, Event);
+      await runOnce(world);
 
       assert.strictEqual(result?.value, 3);
     });
 
-    it("marks all events as read", () => {
+    it("marks all events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("LastMarksRead", {
         value: Type.i32(),
       });
+      let count = 0;
+
+      addSystem(world, function reader() {
+        fetchLastEvent(world, Event);
+        count = countEvents(world, Event);
+      });
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
+      await runOnce(world);
 
-      fetchLastEvent(world, Event);
-
-      assert.strictEqual(countEvents(world, Event), 0);
+      assert.strictEqual(count, 0);
     });
   });
 
@@ -236,66 +260,101 @@ describe("Event", () => {
   // ============================================================================
 
   describe("hasEvents and countEvents", () => {
-    it("hasEvents returns false for empty queue", () => {
+    it("hasEvents returns false when no events in system", async () => {
       const world = createWorld();
       const Event = defineEvent("HasEmpty");
+      let result = true;
 
-      assert.strictEqual(hasEvents(world, Event), false);
+      addSystem(world, function checker() {
+        result = hasEvents(world, Event);
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(result, false);
     });
 
-    it("hasEvents returns true when events exist", () => {
+    it("hasEvents returns true when events exist in system", async () => {
       const world = createWorld();
       const Event = defineEvent("HasEvents");
+      let result = false;
+
+      addSystem(world, function checker() {
+        result = hasEvents(world, Event);
+      });
 
       emitEvent(world, Event);
+      await runOnce(world);
 
-      assert.strictEqual(hasEvents(world, Event), true);
+      assert.strictEqual(result, true);
     });
 
-    it("countEvents returns 0 for empty queue", () => {
+    it("countEvents returns 0 when no events in system", async () => {
       const world = createWorld();
       const Event = defineEvent("CountEmpty");
+      let result = -1;
 
-      assert.strictEqual(countEvents(world, Event), 0);
+      addSystem(world, function counter() {
+        result = countEvents(world, Event);
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(result, 0);
     });
 
-    it("countEvents returns correct count", () => {
+    it("countEvents returns correct count in system", async () => {
       const world = createWorld();
       const Event = defineEvent("CountEvents");
+      let result = 0;
+
+      addSystem(world, function counter() {
+        result = countEvents(world, Event);
+      });
 
       emitEvent(world, Event);
       emitEvent(world, Event);
       emitEvent(world, Event);
+      await runOnce(world);
 
-      assert.strictEqual(countEvents(world, Event), 3);
+      assert.strictEqual(result, 3);
     });
 
-    it("hasEvents does not mark events as read", () => {
+    it("hasEvents does not mark events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("HasNoMark");
+      let count = 0;
+
+      addSystem(world, function checker() {
+        hasEvents(world, Event);
+        hasEvents(world, Event);
+        count = countEvents(world, Event);
+      });
 
       emitEvent(world, Event);
+      await runOnce(world);
 
-      hasEvents(world, Event);
-      hasEvents(world, Event);
-
-      // Events should still be available
-      assert.strictEqual(countEvents(world, Event), 1);
+      assert.strictEqual(count, 1);
     });
 
-    it("countEvents does not mark events as read", () => {
+    it("countEvents does not mark events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("CountNoMark");
+      let fetchCount = 0;
+
+      addSystem(world, function checker() {
+        countEvents(world, Event);
+        countEvents(world, Event);
+        for (const _ of fetchEvents(world, Event)) {
+          fetchCount++;
+        }
+      });
 
       emitEvent(world, Event);
       emitEvent(world, Event);
+      await runOnce(world);
 
-      countEvents(world, Event);
-      countEvents(world, Event);
-
-      // Events should still be available
-      const results = [...fetchEvents(world, Event)];
-      assert.strictEqual(results.length, 2);
+      assert.strictEqual(fetchCount, 2);
     });
   });
 
@@ -304,20 +363,26 @@ describe("Event", () => {
   // ============================================================================
 
   describe("clearEvents", () => {
-    it("marks events as read without processing", () => {
+    it("marks events as read without processing", async () => {
       const world = createWorld();
       const Event = defineEvent("ClearEvents", {
         value: Type.i32(),
       });
+      let count = 0;
+      let has = true;
+
+      addSystem(world, function clearer() {
+        clearEvents(world, Event);
+        count = countEvents(world, Event);
+        has = hasEvents(world, Event);
+      });
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
+      await runOnce(world);
 
-      clearEvents(world, Event);
-
-      // Events should now be marked as read
-      assert.strictEqual(countEvents(world, Event), 0);
-      assert.strictEqual(hasEvents(world, Event), false);
+      assert.strictEqual(count, 0);
+      assert.strictEqual(has, false);
     });
   });
 
@@ -326,7 +391,7 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Per-System Isolation", () => {
-    it("multiple systems see same events independently", () => {
+    it("multiple systems see same events independently", async () => {
       const world = createWorld();
       const Event = defineEvent("IsolationTest", {
         value: Type.i32(),
@@ -347,43 +412,14 @@ describe("Event", () => {
         }
       });
 
-      buildSchedule(world);
-
       // Emit event before execution
       emitEvent(world, Event, { value: 42 });
 
-      executeSchedule(world);
+      await runOnce(world);
 
       // Both systems should see the same event
       assert.deepStrictEqual(system1Results, [42]);
       assert.deepStrictEqual(system2Results, [42]);
-    });
-
-    it("per-system lastTick stored in bySystemId map", () => {
-      const world = createWorld();
-      const Event = defineEvent("SystemIdMap");
-
-      addSystem(world, function systemA() {
-        for (const _ of fetchEvents(world, Event)) {
-          // consume
-        }
-      });
-
-      addSystem(world, function systemB() {
-        // don't consume
-      });
-
-      buildSchedule(world);
-
-      emitEvent(world, Event);
-      executeSchedule(world); // systemA runs at tick 2, systemB at tick 3, post-bump to 4
-
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-      // systemA fetched at tick 2, so lastTick is 2
-      assert.strictEqual(queue.lastTick.bySystemId.get("systemA"), 2);
-      // systemB never called fetchEvents
-      assert.strictEqual(queue.lastTick.bySystemId.has("systemB"), false);
     });
   });
 
@@ -392,36 +428,7 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Same-System Multiple Calls", () => {
-    it("second fetch in same system sees no events", () => {
-      const world = createWorld();
-      const Event = defineEvent("SameSystemMulti");
-
-      let firstCallCount = 0;
-      let secondCallCount = 0;
-
-      addSystem(world, function multiCall() {
-        // First iteration
-        for (const _ of fetchEvents(world, Event)) {
-          firstCallCount++;
-        }
-
-        // Second iteration in same system run
-        for (const _ of fetchEvents(world, Event)) {
-          secondCallCount++;
-        }
-      });
-
-      buildSchedule(world);
-
-      emitEvent(world, Event);
-      emitEvent(world, Event);
-      executeSchedule(world);
-
-      assert.strictEqual(firstCallCount, 2);
-      assert.strictEqual(secondCallCount, 0);
-    });
-
-    it("lastTick updates after first fetch", () => {
+    it("lastTick updates after first fetch", async () => {
       const world = createWorld();
       const Event = defineEvent("LastTickUpdate");
 
@@ -430,25 +437,23 @@ describe("Event", () => {
         assert.ok(queue);
 
         // Before fetch, lastTick for this system should be 0 (unset)
-        const beforeTick = queue.lastTick.bySystemId.get("checker") ?? 0;
+        const beforeTick = queue.lastTick.get("checker") ?? 0;
 
         for (const _ of fetchEvents(world, Event)) {
           // consume
         }
 
         // After fetch, lastTick should be current tick
-        const afterTick = queue.lastTick.bySystemId.get("checker");
+        const afterTick = queue.lastTick.get("checker");
         assert.strictEqual(afterTick, world.execution.tick);
         assert.notStrictEqual(beforeTick, afterTick);
       });
 
-      buildSchedule(world);
-
       emitEvent(world, Event);
-      executeSchedule(world);
+      await runOnce(world);
     });
 
-    it("events emitted during iteration are not visible in the same pass", () => {
+    it("events emitted during iteration are not visible in the same pass", async () => {
       const world = createWorld();
       const Event = defineEvent("EmitDuringIter", {
         value: Type.i32(),
@@ -476,10 +481,8 @@ describe("Event", () => {
         { after: "emitter" }
       );
 
-      buildSchedule(world);
-
       emitEvent(world, Event, { value: 1 });
-      executeSchedule(world);
+      await runOnce(world);
 
       assert.deepStrictEqual(emitterSeen, [1]);
       assert.deepStrictEqual(readerSeen, [1, 11]);
@@ -487,203 +490,135 @@ describe("Event", () => {
   });
 
   // ============================================================================
-  // Edge Cases and Outside System Context
+  // Outside System Context Tests
   // ============================================================================
 
-  describe("Edge Cases", () => {
-    it("works outside system context using lastTick.self", () => {
+  describe("Outside System Context", () => {
+    it("all read functions return empty outside system context", () => {
       const world = createWorld();
-      const Event = defineEvent("OutsideSystem", {
-        value: Type.i32(),
-      });
+      const Event = defineEvent("OutsideAll", { value: Type.i32() });
 
       emitEvent(world, Event, { value: 42 });
 
-      // Fetch outside of any system
-      const results = [...fetchEvents(world, Event)];
-
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]?.value, 42);
-
-      // Second fetch sees nothing
-      const secondResults = [...fetchEvents(world, Event)];
-      assert.strictEqual(secondResults.length, 0);
+      // fetchEvents yields nothing
+      assert.strictEqual([...fetchEvents(world, Event)].length, 0);
+      // hasEvents returns false
+      assert.strictEqual(hasEvents(world, Event), false);
+      // countEvents returns 0
+      assert.strictEqual(countEvents(world, Event), 0);
+      // fetchLastEvent returns undefined
+      assert.strictEqual(fetchLastEvent(world, Event), undefined);
+      // clearEvents is a no-op (should not throw)
+      clearEvents(world, Event);
     });
 
-    it("outside context uses lastTick.self", () => {
+    it("emitEvent works outside system context", async () => {
       const world = createWorld();
-      const Event = defineEvent("SelfTick");
-
-      emitEvent(world, Event);
-
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-
-      // Before fetch, self should be 0
-      assert.strictEqual(queue.lastTick.self, 0);
-
-      for (const _ of fetchEvents(world, Event)) {
-        // consume
-      }
-
-      // After fetch, self should be updated
-      assert.strictEqual(queue.lastTick.self, world.execution.tick);
-    });
-
-    it("system context and outside context track independently", () => {
-      const world = createWorld();
-      const Event = defineEvent("IndependentContext", {
-        value: Type.i32(),
-      });
-
-      const systemResults: number[] = [];
+      const Event = defineEvent("OutsideEmit", { value: Type.i32() });
+      let result: number | undefined;
 
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, Event)) {
-          systemResults.push(e.value);
-        }
+        const e = fetchLastEvent(world, Event);
+        if (e) result = e.value;
       });
 
-      buildSchedule(world);
+      // Emit outside system, then read inside
+      emitEvent(world, Event, { value: 99 });
+      await runOnce(world);
 
-      emitEvent(world, Event, { value: 1 });
-
-      // Read outside system
-      const outsideResults = [...fetchEvents(world, Event)];
-      assert.strictEqual(outsideResults.length, 1);
-      assert.strictEqual(outsideResults[0]?.value, 1);
-
-      // System should still see the event (independent tracking)
-      executeSchedule(world);
-      assert.deepStrictEqual(systemResults, [1]);
+      assert.strictEqual(result, 99);
     });
+  });
 
-    it("handles empty event queue gracefully", () => {
+  // ============================================================================
+  // Edge Cases
+  // ============================================================================
+
+  describe("Edge Cases", () => {
+    it("handles empty event queue gracefully in system", async () => {
       const world = createWorld();
       const Event = defineEvent("EmptyQueue");
+      let fetchCount = 0;
+      let has = true;
+      let count = -1;
+      let last: unknown = "sentinel";
 
-      // Fetch from non-existent queue
-      const results = [...fetchEvents(world, Event)];
-      assert.strictEqual(results.length, 0);
+      addSystem(world, function checker() {
+        for (const _ of fetchEvents(world, Event)) {
+          fetchCount++;
+        }
+        has = hasEvents(world, Event);
+        count = countEvents(world, Event);
+        last = fetchLastEvent(world, Event);
+      });
 
-      assert.strictEqual(hasEvents(world, Event), false);
-      assert.strictEqual(countEvents(world, Event), 0);
-      assert.strictEqual(fetchLastEvent(world, Event), undefined);
+      await runOnce(world);
+
+      assert.strictEqual(fetchCount, 0);
+      assert.strictEqual(has, false);
+      assert.strictEqual(count, 0);
+      assert.strictEqual(last, undefined);
     });
 
-    it("generator cleanup runs on early break", () => {
+    it("generator cleanup runs on early break", async () => {
       const world = createWorld();
       const Event = defineEvent("EarlyBreak", {
         value: Type.i32(),
+      });
+      let secondFetchCount = 0;
+
+      addSystem(world, function reader() {
+        // Break early after first event
+        for (const e of fetchEvents(world, Event)) {
+          if (e.value === 1) break;
+        }
+
+        // lastTick should still be updated (finally block runs)
+        for (const _ of fetchEvents(world, Event)) {
+          secondFetchCount++;
+        }
       });
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
       emitEvent(world, Event, { value: 3 });
+      await runOnce(world);
 
-      // Break early after first event
-      for (const e of fetchEvents(world, Event)) {
-        if (e.value === 1) break;
-      }
-
-      // lastTick should still be updated (finally block runs)
-      // Second fetch should see nothing
-      const results = [...fetchEvents(world, Event)];
-      assert.strictEqual(results.length, 0);
+      assert.strictEqual(secondFetchCount, 0);
     });
 
-    it("handles events emitted at tick 0", () => {
-      // Edge case: events emitted before any schedule execution
-      const world = createWorld();
-      const Event = defineEvent("TickZero");
-
-      // World starts at tick 1, so this shouldn't happen normally
-      // But let's verify the system handles the initial state correctly
-      emitEvent(world, Event);
-
-      // Event emitted at tick 1 (initial tick)
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-      assert.strictEqual(queue.current[0]?.tick, 1);
-
-      // Should be fetchable since lastTick starts at 0
-      const results = [...fetchEvents(world, Event)];
-      assert.strictEqual(results.length, 1);
-    });
-
-    it("different event types are independent", () => {
+    it("different event types are independent", async () => {
       const world = createWorld();
       const Event1 = defineEvent("Independent1");
       const Event2 = defineEvent("Independent2");
+      let count1 = 0;
+      let count2 = 0;
+      let count1After = 0;
+      let count2After = 0;
+
+      addSystem(world, function checker() {
+        count1 = countEvents(world, Event1);
+        count2 = countEvents(world, Event2);
+
+        // Fetch Event1 only
+        for (const _ of fetchEvents(world, Event1)) {
+          // consume
+        }
+
+        // Event2 should still be available
+        count1After = countEvents(world, Event1);
+        count2After = countEvents(world, Event2);
+      });
 
       emitEvent(world, Event1);
       emitEvent(world, Event2);
       emitEvent(world, Event2);
+      await runOnce(world);
 
-      assert.strictEqual(countEvents(world, Event1), 1);
-      assert.strictEqual(countEvents(world, Event2), 2);
-
-      // Fetch Event1 only
-      for (const _ of fetchEvents(world, Event1)) {
-        // consume
-      }
-
-      // Event2 should still be available
-      assert.strictEqual(countEvents(world, Event1), 0);
-      assert.strictEqual(countEvents(world, Event2), 2);
-    });
-
-    it("hasEvents works outside system context", () => {
-      const world = createWorld();
-      const Event = defineEvent("HasEventsOutside", { value: Type.i32() });
-
-      emitEvent(world, Event, { value: 1 });
-
-      // hasEvents outside system context uses lastTick.self branch
-      assert.strictEqual(hasEvents(world, Event), true);
-    });
-
-    it("fetchLastEvent works outside system context", () => {
-      const world = createWorld();
-      const Event = defineEvent("FetchLastOutside", { value: Type.i32() });
-
-      emitEvent(world, Event, { value: 42 });
-
-      // fetchLastEvent outside system context uses lastTick.self branch
-      const event = fetchLastEvent(world, Event);
-      assert.strictEqual(event?.value, 42);
-    });
-
-    it("hasEvents works inside system context", () => {
-      const world = createWorld();
-      const Event = defineEvent("HasEventsInsideSystem", { value: Type.i32() });
-      let result = false;
-
-      addSystem(world, function testSystem() {
-        result = hasEvents(world, Event);
-      });
-
-      buildSchedule(world);
-      emitEvent(world, Event, { value: 1 });
-      executeSchedule(world);
-
-      assert.strictEqual(result, true);
-    });
-
-    it("fetchLastEvent works inside system context", () => {
-      const world = createWorld();
-      const Event = defineEvent("FetchLastInsideSystem", { value: Type.i32() });
-      let result: { value: number } | undefined;
-
-      addSystem(world, function testSystem() {
-        result = fetchLastEvent(world, Event);
-      });
-
-      buildSchedule(world);
-      emitEvent(world, Event, { value: 42 });
-      executeSchedule(world);
-
-      assert.strictEqual(result?.value, 42);
+      assert.strictEqual(count1, 1);
+      assert.strictEqual(count2, 2);
+      assert.strictEqual(count1After, 0);
+      assert.strictEqual(count2After, 2);
     });
   });
 
@@ -692,7 +627,7 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Integration", () => {
-    it("full game loop pattern", () => {
+    it("full game loop pattern", async () => {
       const world = createWorld();
       const PlayerSpawned = defineEvent("PlayerSpawned", {
         entity: Type.u32(),
@@ -761,12 +696,10 @@ describe("Event", () => {
         { after: "combatSystem" }
       );
 
-      buildSchedule(world);
-
       // Run several ticks
-      executeSchedule(world);
-      executeSchedule(world);
-      executeSchedule(world);
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
 
       // Verify both systems received the same events
       assert.deepStrictEqual(spawnedPlayers, [1, 2]);
@@ -780,44 +713,13 @@ describe("Event", () => {
   });
 
   // ============================================================================
-  // Double-Buffered Event Lifecycle Tests
-  // ============================================================================
-
-  describe("Double-Buffered Event Lifecycle", () => {
-    it("events discarded after second flush", () => {
-      const world = createWorld();
-      const Event = defineEvent("FlushDiscard");
-
-      emitEvent(world, Event);
-      flushEvents(world); // event moves to previous buffer
-      flushEvents(world); // previous buffer cleared
-
-      assert.strictEqual(hasEvents(world, Event), false);
-      assert.strictEqual(countEvents(world, Event), 0);
-    });
-
-    it("events from before and after flush are both readable", () => {
-      const world = createWorld();
-      const Event = defineEvent("FlushNewEvents", { value: Type.i32() });
-
-      emitEvent(world, Event, { value: 1 });
-      flushEvents(world);
-      emitEvent(world, Event, { value: 2 });
-
-      // Both events readable: value=1 survived the flush, value=2 is in current
-      const results = [...fetchEvents(world, Event)].map((e) => e.value);
-      assert.deepStrictEqual(results, [1, 2]);
-    });
-  });
-
-  // ============================================================================
   // Cross-Schedule Event Visibility Tests
   // ============================================================================
 
   describe("Cross-Schedule Event Visibility", () => {
-    it("between-tick events visible to systems on next schedule", () => {
+    it("between-frame events visible to systems on next frame", async () => {
       const world = createWorld();
-      const Event = defineEvent("BetweenTick", { value: Type.i32() });
+      const Event = defineEvent("BetweenFrame", { value: Type.i32() });
 
       const seen: number[] = [];
 
@@ -827,21 +729,19 @@ describe("Event", () => {
         }
       });
 
-      buildSchedule(world);
-
-      // First schedule: no events
-      executeSchedule(world);
+      // First frame: no events
+      await runOnce(world);
       assert.deepStrictEqual(seen, []);
 
-      // Emit between schedules (at post-bump tick)
+      // Emit between frames (outside system context)
       emitEvent(world, Event, { value: 42 });
 
-      // Second schedule: reader should see the between-tick event
-      executeSchedule(world);
+      // Second frame: reader should see the between-frame event
+      await runOnce(world);
       assert.deepStrictEqual(seen, [42]);
     });
 
-    it("later system's events visible to earlier system on next schedule", () => {
+    it("later system's events visible to earlier system on next frame", async () => {
       const world = createWorld();
       const Event = defineEvent("LaterToEarlier", { value: Type.i32() });
 
@@ -867,14 +767,12 @@ describe("Event", () => {
         { after: "reader" }
       );
 
-      buildSchedule(world);
-
-      // First schedule: reader sees nothing, writer emits
-      executeSchedule(world);
+      // First frame: reader sees nothing, writer emits
+      await runOnce(world);
       assert.deepStrictEqual(readerSeen, []);
 
-      // Second schedule: reader should now see the event from the previous schedule's writer
-      executeSchedule(world);
+      // Second frame: reader should now see the event from the previous frame's writer
+      await runOnce(world);
       assert.deepStrictEqual(readerSeen, [99]);
     });
   });

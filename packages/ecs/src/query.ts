@@ -46,18 +46,9 @@ export type QueryMeta = {
   changed: EntityId[];
 
   /**
-   * Execution tick tracking for change detection.
+   * Per-system execution ticks for change detection: systemId -> tick.
    */
-  lastTick: {
-    /**
-     * Tick when query last executed outside any system.
-     */
-    self: number;
-    /**
-     * Per-system execution ticks: systemId -> tick
-     */
-    bySystemId: Map<string, number>;
-  };
+  lastTick: Map<string, number>;
 };
 
 // ============================================================================
@@ -209,10 +200,7 @@ export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]
 
       filter: filterMeta,
 
-      lastTick: {
-        self: 0,
-        bySystemId: new Map(),
-      },
+      lastTick: new Map(),
 
       // Callback to clean up query when its underlying filter is destroyed
       onFilterDestroy: (destroyedFilter) => {
@@ -262,12 +250,15 @@ export function* fetchEntitiesWithQuery(world: World, queryMeta: QueryMeta): Ite
     return;
   }
 
+  // Outside system context: change detection returns empty (no meaningful tick tracking)
+  const { systemId, tick } = world.execution;
+  if (systemId === null) {
+    return;
+  }
+
   // Slow path: filter by change detection using archetype-local tick arrays.
   // Each component tracks when it was added/changed per-entity via tick timestamps.
-  const { systemId, tick } = world.execution;
-
-  // Get lastTick for this execution context (global or per-system)
-  const lastTick = systemId === null ? queryMeta.lastTick.self : (queryMeta.lastTick.bySystemId.get(systemId) ?? 0);
+  const lastTick = queryMeta.lastTick.get(systemId) ?? 0;
 
   const archetypes = queryMeta.filter.archetypes;
 
@@ -320,11 +311,7 @@ export function* fetchEntitiesWithQuery(world: World, queryMeta: QueryMeta): Ite
   } finally {
     // Update lastTick after iteration completes (or on break/return/throw).
     // This ensures subsequent iterations only see changes since this execution.
-    if (systemId === null) {
-      queryMeta.lastTick.self = tick;
-    } else {
-      queryMeta.lastTick.bySystemId.set(systemId, tick);
-    }
+    queryMeta.lastTick.set(systemId!, tick);
   }
 }
 

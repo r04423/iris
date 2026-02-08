@@ -1,15 +1,96 @@
+import { flushEvents } from "./event.js";
 import type { World } from "./world.js";
+
+// ============================================================================
+// Schedule Label Types
+// ============================================================================
+
+/**
+ * Schedule label brand for nominal typing.
+ */
+declare const SCHEDULE_LABEL_BRAND: unique symbol;
+
+/**
+ * Schedule label (branded string).
+ *
+ * Identifies a schedule within the pipeline. Built-in labels are provided
+ * for common lifecycle stages, custom labels created via defineSchedule().
+ */
+export type ScheduleLabel = string & { [SCHEDULE_LABEL_BRAND]: true };
+
+// ============================================================================
+// Schedule Definition
+// ============================================================================
+
+/**
+ * Define a custom schedule label.
+ *
+ * @param name - Schedule name (must be unique when inserted into pipeline)
+ * @returns Schedule label
+ *
+ * @example
+ * ```typescript
+ * const Physics = defineSchedule("Physics");
+ * insertScheduleAfter(world, Physics, PreUpdate);
+ * addSystem(world, gravitySystem, { schedule: Physics });
+ * ```
+ */
+export function defineSchedule(name: string): ScheduleLabel {
+  return name as ScheduleLabel;
+}
+
+// ============================================================================
+// Built-in Schedule Labels
+// ============================================================================
+
+/**
+ * Startup schedule. Runs once before the first frame.
+ */
+export const Startup = defineSchedule("Startup");
+
+/**
+ * Shutdown schedule. Runs once when stop() is called.
+ */
+export const Shutdown = defineSchedule("Shutdown");
+
+/**
+ * First schedule in the main loop. Runs every frame before PreUpdate.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, inputSystem, { schedule: First });
+ * ```
+ */
+export const First = defineSchedule("First");
+
+/**
+ * Pre-update schedule. Runs every frame before Update.
+ */
+export const PreUpdate = defineSchedule("PreUpdate");
+
+/**
+ * Update schedule. Default schedule for systems. Runs every frame.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, physicsSystem); // defaults to Update
+ * ```
+ */
+export const Update = defineSchedule("Update");
+
+/**
+ * Post-update schedule. Runs every frame after Update.
+ */
+export const PostUpdate = defineSchedule("PostUpdate");
+
+/**
+ * Last schedule in the main loop. Runs every frame after PostUpdate.
+ */
+export const Last = defineSchedule("Last");
 
 // ============================================================================
 // Scheduler Types
 // ============================================================================
-
-/**
- * Schedule identifier.
- *
- * Provides autocomplete for common schedules while allowing custom names.
- */
-export type ScheduleId = "runtime" | "startup" | "shutdown" | (string & {});
 
 /**
  * System function signature.
@@ -28,9 +109,9 @@ export type SystemOptions = {
   name?: string;
 
   /**
-   * Schedule this system belongs to. Defaults to 'runtime'.
+   * Schedule this system belongs to. Defaults to Update.
    */
-  schedule?: ScheduleId;
+  schedule?: ScheduleLabel;
 
   /**
    * Run before these systems (within same schedule).
@@ -55,7 +136,7 @@ export type SystemMeta = {
   /**
    * Schedule this system belongs to.
    */
-  schedule: ScheduleId;
+  schedule: ScheduleLabel;
 
   /**
    * Registration order (for stable sort).
@@ -73,16 +154,22 @@ export type SystemMeta = {
   after: string[];
 };
 
+// ============================================================================
+// System Registration
+// ============================================================================
+
 /**
  * Registers a system in the world for later scheduling.
  *
  * @param world - World instance
  * @param runner - System function (must be named unless name option provided)
  * @param options - Registration options (name, schedule, before, after)
- * @returns void
+ *
  * @example
+ * ```typescript
  * addSystem(world, physicsSystem);
- * addSystem(world, renderSystem, { after: "physicsSystem" });
+ * addSystem(world, renderSystem, { schedule: PostUpdate, after: "physicsSystem" });
+ * ```
  */
 export function addSystem(world: World, runner: SystemRunner, options?: SystemOptions): void {
   // Derive system name from function name or explicit option
@@ -102,36 +189,95 @@ export function addSystem(world: World, runner: SystemRunner, options?: SystemOp
 
   world.systems.byId.set(name, {
     runner,
-    schedule: options?.schedule ?? "runtime",
+    schedule: options?.schedule ?? Update,
     index: world.systems.nextIndex++,
     before: !before ? [] : Array.isArray(before) ? before : [before],
     after: !after ? [] : Array.isArray(after) ? after : [after],
   });
+
+  world.schedules.dirty = true;
 }
+
+// ============================================================================
+// Pipeline Management
+// ============================================================================
+
+/**
+ * Insert a schedule before an existing schedule in the pipeline.
+ *
+ * @param world - World instance
+ * @param schedule - New schedule label to insert
+ * @param anchor - Existing schedule label to insert before
+ *
+ * @example
+ * ```typescript
+ * const Physics = defineSchedule("Physics");
+ * insertScheduleBefore(world, Physics, Update);
+ * ```
+ */
+export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
+  const idx = world.schedules.pipeline.indexOf(anchor);
+
+  if (idx === -1) {
+    throw new Error(`Schedule "${anchor}" not found in pipeline`);
+  }
+
+  if (world.schedules.pipeline.includes(schedule)) {
+    throw new Error(`Schedule "${schedule}" already in pipeline`);
+  }
+
+  world.schedules.pipeline.splice(idx, 0, schedule);
+  world.schedules.dirty = true;
+}
+
+/**
+ * Insert a schedule after an existing schedule in the pipeline.
+ *
+ * @param world - World instance
+ * @param schedule - New schedule label to insert
+ * @param anchor - Existing schedule label to insert after
+ *
+ * @example
+ * ```typescript
+ * const Render = defineSchedule("Render");
+ * insertScheduleAfter(world, Render, PostUpdate);
+ * ```
+ */
+export function insertScheduleAfter(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
+  const idx = world.schedules.pipeline.indexOf(anchor);
+
+  if (idx === -1) {
+    throw new Error(`Schedule "${anchor}" not found in pipeline`);
+  }
+
+  if (world.schedules.pipeline.includes(schedule)) {
+    throw new Error(`Schedule "${schedule}" already in pipeline`);
+  }
+
+  world.schedules.pipeline.splice(idx + 1, 0, schedule);
+  world.schedules.dirty = true;
+}
+
+// ============================================================================
+// Schedule Building (Internal)
+// ============================================================================
 
 /**
  * Builds an execution order from registered systems using topological sort.
  * Systems are ordered by before/after constraints, with registration order as tiebreaker.
- *
- * @param world - World instance
- * @param scheduleId - Schedule identifier (defaults to "runtime")
- * @returns void
- * @example
- * buildSchedule(world);
- * buildSchedule(world, "startup");
  */
-export function buildSchedule(world: World, scheduleId: ScheduleId = "runtime"): void {
+function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
   // Filter systems belonging to this schedule
   const scheduleSystems = new Map<string, SystemMeta>();
 
   for (const [name, meta] of world.systems.byId) {
-    if (meta.schedule === scheduleId) {
+    if (meta.schedule === scheduleLabel) {
       scheduleSystems.set(name, meta);
     }
   }
 
   if (scheduleSystems.size === 0) {
-    world.schedules.byId.set(scheduleId, []);
+    world.schedules.byId.set(scheduleLabel, []);
 
     return;
   }
@@ -149,7 +295,7 @@ export function buildSchedule(world: World, scheduleId: ScheduleId = "runtime"):
   for (const [name, meta] of scheduleSystems) {
     for (const beforeName of meta.before) {
       if (!scheduleSystems.has(beforeName)) {
-        throw new Error(`System "${name}" references unknown system "${beforeName}" in schedule "${scheduleId}"`);
+        throw new Error(`System "${name}" references unknown system "${beforeName}" in schedule "${scheduleLabel}"`);
       }
 
       // "A before B" means edge A -> B (A must run first)
@@ -159,7 +305,7 @@ export function buildSchedule(world: World, scheduleId: ScheduleId = "runtime"):
 
     for (const afterName of meta.after) {
       if (!scheduleSystems.has(afterName)) {
-        throw new Error(`System "${name}" references unknown system "${afterName}" in schedule "${scheduleId}"`);
+        throw new Error(`System "${name}" references unknown system "${afterName}" in schedule "${scheduleLabel}"`);
       }
 
       // "A after B" means edge B -> A (B must run first)
@@ -204,10 +350,10 @@ export function buildSchedule(world: World, scheduleId: ScheduleId = "runtime"):
       }
     }
 
-    throw new Error(`Circular dependency in schedule "${scheduleId}": ${remaining.join(", ")}`);
+    throw new Error(`Circular dependency in schedule "${scheduleLabel}": ${remaining.join(", ")}`);
   }
 
-  world.schedules.byId.set(scheduleId, result);
+  world.schedules.byId.set(scheduleLabel, result);
 }
 
 /**
@@ -235,63 +381,37 @@ function insertSorted(queue: string[], name: string, systems: Map<string, System
 }
 
 /**
- * Executes a schedule synchronously. Throws if any system returns a Promise.
- *
- * @param world - World instance
- * @param scheduleId - Schedule identifier (defaults to "runtime")
- * @returns void
- * @example
- * executeSchedule(world);
- * executeSchedule(world, "startup");
+ * Rebuilds all schedules in the pipeline plus Startup and Shutdown.
  */
-export function executeSchedule(world: World, scheduleId: ScheduleId = "runtime"): void {
-  const order = world.schedules.byId.get(scheduleId);
+function rebuildPipeline(world: World): void {
+  // Build Startup and Shutdown schedules
+  buildSchedule(world, Startup);
+  buildSchedule(world, Shutdown);
 
-  if (!order) {
-    throw new Error(`Schedule "${scheduleId}" not built`);
+  // Build all pipeline schedules
+  for (let i = 0; i < world.schedules.pipeline.length; i++) {
+    buildSchedule(world, world.schedules.pipeline[i]!);
   }
 
-  // Track execution context for systems that need to know their environment
-  world.execution.scheduleId = scheduleId;
-
-  try {
-    for (const systemId of order) {
-      world.execution.tick++;
-      world.execution.systemId = systemId;
-      const meta = world.systems.byId.get(systemId)!;
-      const result = meta.runner(world);
-
-      // Fail fast if async system detected in sync execution
-      if (result instanceof Promise) {
-        throw new Error(`System "${systemId}" returned Promise - use runScheduleAsync`);
-      }
-    }
-  } finally {
-    world.execution.tick++;
-    world.execution.scheduleId = null;
-    world.execution.systemId = null;
-  }
+  world.schedules.dirty = false;
 }
 
-/**
- * Executes a schedule with async support. Awaits systems that return Promises.
- *
- * @param world - World instance
- * @param scheduleId - Schedule identifier (defaults to "runtime")
- * @returns Promise that resolves when all systems complete
- * @example
- * await executeScheduleAsync(world);
- * await executeScheduleAsync(world, "startup");
- */
-export async function executeScheduleAsync(world: World, scheduleId: ScheduleId = "runtime"): Promise<void> {
-  const order = world.schedules.byId.get(scheduleId);
+// ============================================================================
+// Schedule Execution (Internal)
+// ============================================================================
 
-  if (!order) {
-    throw new Error(`Schedule "${scheduleId}" not built`);
+/**
+ * Executes a single schedule. Awaits async systems.
+ */
+async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Promise<void> {
+  const order = world.schedules.byId.get(scheduleLabel);
+
+  if (!order || order.length === 0) {
+    return;
   }
 
   // Track execution context for systems that need to know their environment
-  world.execution.scheduleId = scheduleId;
+  world.execution.scheduleLabel = scheduleLabel;
 
   try {
     for (const systemId of order) {
@@ -307,7 +427,128 @@ export async function executeScheduleAsync(world: World, scheduleId: ScheduleId 
     }
   } finally {
     world.execution.tick++;
-    world.execution.scheduleId = null;
+    world.execution.scheduleLabel = null;
     world.execution.systemId = null;
+  }
+}
+
+// ============================================================================
+// Public Execution API
+// ============================================================================
+
+/**
+ * Execute one frame. Runs startup on first call, then all pipeline schedules,
+ * then flushes events.
+ *
+ * @param world - World instance
+ * @returns Promise that resolves when the frame completes
+ *
+ * @example
+ * ```typescript
+ * // Game loop
+ * await runOnce(world);
+ * ```
+ */
+export async function runOnce(world: World): Promise<void> {
+  // Rebuild all schedules if pipeline is dirty
+  if (world.schedules.dirty) {
+    rebuildPipeline(world);
+  }
+
+  // Run startup schedule on first call
+  if (!world.execution.startupRan) {
+    await executeSchedule(world, Startup);
+    world.execution.startupRan = true;
+    world.execution.shutdownRan = false;
+  }
+
+  // Run all pipeline schedules in order
+  for (let i = 0; i < world.schedules.pipeline.length; i++) {
+    await executeSchedule(world, world.schedules.pipeline[i]!);
+  }
+
+  // Flush events at end of frame
+  flushEvents(world);
+}
+
+/**
+ * Start the main loop using requestAnimationFrame.
+ *
+ * Startup schedule runs automatically on first frame. Each frame executes
+ * all pipeline schedules in order. Call stop() to end the loop.
+ *
+ * @param world - World instance
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, physicsSystem);
+ * addSystem(world, renderSystem, { schedule: PostUpdate });
+ * run(world);
+ * // ... later
+ * await stop(world);
+ * ```
+ */
+export function run(world: World): void {
+  if (world.execution.running) {
+    return;
+  }
+
+  world.execution.running = true;
+  scheduleFrame(world);
+}
+
+/**
+ * Schedules the next animation frame for the game loop.
+ */
+function scheduleFrame(world: World): void {
+  world.execution.rafHandle = requestAnimationFrame(async () => {
+    if (!world.execution.running) {
+      return;
+    }
+
+    try {
+      await runOnce(world);
+    } catch (error) {
+      world.execution.running = false;
+      world.execution.rafHandle = null;
+      throw error;
+    }
+
+    if (world.execution.running) {
+      scheduleFrame(world);
+    }
+  });
+}
+
+/**
+ * Stop the main loop and run the shutdown schedule.
+ *
+ * @param world - World instance
+ * @returns Promise that resolves when shutdown completes
+ *
+ * @example
+ * ```typescript
+ * run(world);
+ * // ... later
+ * await stop(world);
+ * ```
+ */
+export async function stop(world: World): Promise<void> {
+  world.execution.running = false;
+
+  if (world.execution.rafHandle !== null) {
+    cancelAnimationFrame(world.execution.rafHandle);
+    world.execution.rafHandle = null;
+  }
+
+  // Rebuild if needed before shutdown
+  if (world.schedules.dirty) {
+    rebuildPipeline(world);
+  }
+
+  if (!world.execution.shutdownRan) {
+    await executeSchedule(world, Shutdown);
+    world.execution.shutdownRan = true;
+    world.execution.startupRan = false;
   }
 }

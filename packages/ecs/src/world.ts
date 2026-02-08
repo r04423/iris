@@ -12,7 +12,8 @@ import type { QueryMeta } from "./query.js";
 import type { ComponentMeta } from "./registry.js";
 import { COMPONENT_REGISTRY } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
-import type { ScheduleId, SystemMeta } from "./scheduler.js";
+import type { ScheduleLabel, SystemMeta } from "./scheduler.js";
+import { First, Last, PostUpdate, PreUpdate, Update } from "./scheduler.js";
 
 // ============================================================================
 // World Type
@@ -118,13 +119,23 @@ export type World = {
   };
 
   /**
-   * Schedule registry.
+   * Schedule registry and pipeline configuration.
    */
   schedules: {
     /**
-     * Built schedules (schedule ID -> sorted system IDs).
+     * Built schedules (schedule label -> sorted system IDs).
      */
-    byId: Map<ScheduleId, string[]>;
+    byId: Map<ScheduleLabel, string[]>;
+
+    /**
+     * Pipeline: ordered list of schedule labels for the main loop.
+     */
+    pipeline: ScheduleLabel[];
+
+    /**
+     * Whether pipeline needs rebuilding.
+     */
+    dirty: boolean;
   };
 
   /**
@@ -132,12 +143,12 @@ export type World = {
    */
   execution: {
     /**
-     * Active schedule ID (null if not executing).
+     * Active schedule label (null if not executing).
      */
-    scheduleId: ScheduleId | null;
+    scheduleLabel: ScheduleLabel | null;
 
     /**
-     * Currently executing system ID.
+     * Currently executing system ID (null if not executing).
      */
     systemId: string | null;
 
@@ -145,6 +156,26 @@ export type World = {
      * Execution tick counter.
      */
     tick: number;
+
+    /**
+     * Whether the RAF loop is currently active.
+     */
+    running: boolean;
+
+    /**
+     * requestAnimationFrame handle for cancellation.
+     */
+    rafHandle: number | null;
+
+    /**
+     * Whether startup schedule has been executed.
+     */
+    startupRan: boolean;
+
+    /**
+     * Whether shutdown schedule has been executed.
+     */
+    shutdownRan: boolean;
   };
 
   /**
@@ -208,11 +239,17 @@ export function createWorld(): World {
     },
     schedules: {
       byId: new Map(),
+      pipeline: [First, PreUpdate, Update, PostUpdate, Last],
+      dirty: true,
     },
     execution: {
-      scheduleId: null,
+      scheduleLabel: null,
       systemId: null,
       tick: 1,
+      running: false,
+      rafHandle: null,
+      startupRan: false,
+      shutdownRan: false,
     },
     events: {
       byId: new Map(),
@@ -253,8 +290,8 @@ export function createWorld(): World {
  *
  * @example
  * ```typescript
- * // Run cleanup systems first, then reset
- * executeSchedule(world, "shutdown");
+ * // Stop the world (runs shutdown systems), then reset
+ * await stop(world);
  * resetWorld(world);
  * ```
  */
@@ -291,13 +328,21 @@ export function resetWorld(world: World): void {
 
   // 6. Reset execution state
   world.execution.tick = 1;
-  world.execution.scheduleId = null;
+  world.execution.scheduleLabel = null;
   world.execution.systemId = null;
+  world.execution.running = false;
+  world.execution.rafHandle = null;
+  world.execution.startupRan = false;
+  world.execution.shutdownRan = false;
 
-  // 7. Clear caches
+  // 7. Reset schedule state (preserve pipeline configuration)
+  world.schedules.byId.clear();
+  world.schedules.dirty = true;
+
+  // 8. Clear caches
   world.events.byId.clear();
   world.actions.byInitializer.clear();
 
-  // 8. Fire worldReset event (subsystems handle their own reset via this observer)
+  // 9. Fire worldReset event (subsystems handle their own reset via this observer)
   fireObserverEvent(world, "worldReset", world);
 }

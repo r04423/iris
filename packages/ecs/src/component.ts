@@ -47,8 +47,10 @@ export function addComponent<S extends SchemaRecord>(
   componentId: EntityId,
   data?: InferSchemaRecord<S>
 ): void {
+  const entityMeta = ensureEntity(world, entityId);
+
   // Idempotent: already has component
-  if (hasComponent(world, entityId, componentId)) {
+  if (entityMeta.archetype.typesSet.has(componentId)) {
     return;
   }
 
@@ -66,7 +68,6 @@ export function addComponent<S extends SchemaRecord>(
     }
   }
 
-  const entityMeta = ensureEntity(world, entityId);
   const componentMeta = ensureEntity(world, componentId);
   const schema = componentMeta.schema;
 
@@ -82,7 +83,7 @@ export function addComponent<S extends SchemaRecord>(
     toArchetype = archetypeTraverseAdd(world, toArchetype, encodePair(relation, Wildcard));
   }
 
-  moveEntityToArchetype(world, entityId, toArchetype);
+  moveEntityToArchetype(world, entityMeta, toArchetype);
 
   if (data) {
     for (const fieldName in data) {
@@ -163,7 +164,7 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
   // Fire before move so observers can access component data
   fireObserverEvent(world, "componentRemoved", componentId, entityId);
 
-  moveEntityToArchetype(world, entityId, toArchetype);
+  moveEntityToArchetype(world, meta, toArchetype);
 }
 
 /**
@@ -300,7 +301,7 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
  * @param componentId - Component to remove from all entities
  */
 export function cascadeRemoveComponent(world: World, componentId: EntityId): void {
-  const meta = ensureEntity(world, componentId);
+  const meta = world.entities.byId.get(componentId)!;
 
   // Copy records - will be modified during iteration as entities move
   const archetypes = [...meta.records];

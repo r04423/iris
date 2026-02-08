@@ -100,18 +100,9 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
    */
   previous: EventEntry<T>[];
   /**
-   * Execution tick tracking for event consumption.
+   * Per-system consumption ticks: systemId -> tick.
    */
-  lastTick: {
-    /**
-     * Tick when events last consumed outside any system.
-     */
-    self: number;
-    /**
-     * Per-system consumption ticks: systemId -> tick
-     */
-    bySystemId: Map<string, number>;
-  };
+  lastTick: Map<string, number>;
 };
 
 // ============================================================================
@@ -206,10 +197,7 @@ export function ensureEventQueue<S extends EventSchema>(world: World, event: Eve
       event: event as Event,
       current: [],
       previous: [],
-      lastTick: {
-        self: 0,
-        bySystemId: new Map(),
-      },
+      lastTick: new Map(),
     };
 
     world.events.byId.set(event.id, queue);
@@ -249,7 +237,7 @@ export function emitEvent<S extends EventSchema>(
 // ============================================================================
 
 /**
- * Update lastTick for current execution context.
+ * Update lastTick for current system.
  *
  * Internal helper shared by fetchEvents, fetchLastEvent, and clearEvents.
  *
@@ -258,12 +246,7 @@ export function emitEvent<S extends EventSchema>(
  */
 function markEventsRead(world: World, queue: EventQueueMeta): void {
   const { systemId, tick } = world.execution;
-
-  if (systemId === null) {
-    queue.lastTick.self = tick;
-  } else {
-    queue.lastTick.bySystemId.set(systemId, tick);
-  }
+  queue.lastTick.set(systemId!, tick);
 }
 
 /**
@@ -284,11 +267,15 @@ function markEventsRead(world: World, queue: EventQueueMeta): void {
  * ```
  */
 export function* fetchEvents<S extends EventSchema>(world: World, event: Event<S>): Generator<EventData<S>> {
-  const queue = ensureEventQueue(world, event);
   const { systemId, tick } = world.execution;
 
-  // Get lastTick for this execution context
-  const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
+  // Outside system context: yield nothing
+  if (systemId === null) {
+    return;
+  }
+
+  const queue = ensureEventQueue(world, event);
+  const lastTick = queue.lastTick.get(systemId) ?? 0;
 
   try {
     // Snapshot lengths so events emitted during iteration are not visible in this pass
@@ -334,9 +321,15 @@ export function* fetchEvents<S extends EventSchema>(world: World, event: Event<S
  * ```
  */
 export function hasEvents<S extends EventSchema>(world: World, event: Event<S>): boolean {
-  const queue = ensureEventQueue(world, event);
   const { systemId, tick } = world.execution;
-  const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
+
+  // Outside system context: always false
+  if (systemId === null) {
+    return false;
+  }
+
+  const queue = ensureEventQueue(world, event);
+  const lastTick = queue.lastTick.get(systemId) ?? 0;
 
   for (let i = 0; i < queue.previous.length; i++) {
     const entry = queue.previous[i]!;
@@ -371,9 +364,15 @@ export function hasEvents<S extends EventSchema>(world: World, event: Event<S>):
  * ```
  */
 export function countEvents<S extends EventSchema>(world: World, event: Event<S>): number {
-  const queue = ensureEventQueue(world, event);
   const { systemId, tick } = world.execution;
-  const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
+
+  // Outside system context: always 0
+  if (systemId === null) {
+    return 0;
+  }
+
+  const queue = ensureEventQueue(world, event);
+  const lastTick = queue.lastTick.get(systemId) ?? 0;
 
   let count = 0;
 
@@ -413,9 +412,15 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  * ```
  */
 export function fetchLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined {
-  const queue = ensureEventQueue(world, event);
   const { systemId, tick } = world.execution;
-  const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
+
+  // Outside system context: always undefined
+  if (systemId === null) {
+    return undefined;
+  }
+
+  const queue = ensureEventQueue(world, event);
+  const lastTick = queue.lastTick.get(systemId) ?? 0;
 
   let result: EventData<S> | undefined;
 
@@ -461,6 +466,13 @@ export function fetchLastEvent<S extends EventSchema>(world: World, event: Event
  * ```
  */
 export function clearEvents<S extends EventSchema>(world: World, event: Event<S>): void {
+  const { systemId } = world.execution;
+
+  // Outside system context: no-op
+  if (systemId === null) {
+    return;
+  }
+
   const queue = ensureEventQueue(world, event);
   markEventsRead(world, queue);
 }
@@ -469,15 +481,10 @@ export function clearEvents<S extends EventSchema>(world: World, event: Event<S>
  * Flush all event queues in the world.
  *
  * Swaps the active buffer for each queue and clears the new active buffer.
- * Call once per frame, typically after executeSchedule.
+ * Called internally at the end of each frame by runOnce().
  *
  * @param world - World instance
- *
- * @example
- * ```typescript
- * executeSchedule(world);
- * flushEvents(world);
- * ```
+ * @internal
  */
 export function flushEvents(world: World): void {
   for (const queue of world.events.byId.values()) {

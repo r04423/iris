@@ -15,7 +15,7 @@ import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./enti
 import { changed, fetchEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
-import { buildSchedule, executeSchedule } from "./scheduler.js";
+import { addSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -1127,26 +1127,34 @@ describe("Component", () => {
   // ============================================================================
 
   describe("emitComponentChanged", () => {
-    it("triggers change detection without modifying value", () => {
+    it("triggers change detection without modifying value", async () => {
       const world = createWorld();
       const Position = defineComponent("PositionEmit", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0, y: 0 });
 
-      // Consume initial add
-      [...fetchEntities(world, changed(Position))];
+      const results: EntityId[][] = [];
 
-      // Advance tick
-      buildSchedule(world);
-      executeSchedule(world);
+      addSystem(world, function tracker() {
+        const batch: EntityId[] = [];
+        for (const e of fetchEntities(world, changed(Position))) {
+          batch.push(e);
+        }
+        results.push(batch);
+      });
+
+      // First frame: consume initial add
+      await runOnce(world);
 
       // Emit change without using setComponentValue
       emitComponentChanged(world, entity, Position);
 
-      const results = [...fetchEntities(world, changed(Position))];
-      assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0], entity);
+      // Second frame: should see the change
+      await runOnce(world);
+
+      assert.strictEqual(results[1]!.length, 1);
+      assert.strictEqual(results[1]![0], entity);
     });
 
     it("updates changed tick in archetype", () => {

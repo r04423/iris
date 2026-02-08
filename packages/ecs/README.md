@@ -41,8 +41,7 @@ import {
   setComponentValue,
   fetchEntities,
   addSystem,
-  buildSchedule,
-  executeSchedule,
+  runOnce,
   Type,
 } from "iris-ecs";
 
@@ -72,10 +71,9 @@ function movementSystem(world) {
   }
 }
 
-// Register and run systems
+// Register and run
 addSystem(world, movementSystem);
-buildSchedule(world);
-executeSchedule(world);
+await runOnce(world);
 
 // Position is now { x: 1, y: 0 }
 ```
@@ -416,9 +414,8 @@ A **System** is a function that operates on the world. Systems query entities, r
 ```typescript
 import {
   addSystem,
-  buildSchedule,
-  executeSchedule,
-  flushEvents,
+  run,
+  stop,
   fetchEntities,
   getComponentValue,
   setComponentValue,
@@ -437,16 +434,13 @@ function movementSystem(world) {
 }
 
 addSystem(world, movementSystem);
-buildSchedule(world);
+run(world);
 
-// Game loop
-while (running) {
-  executeSchedule(world);
-  flushEvents(world);
-}
+// ... later
+await stop(world);
 ```
 
-Systems are registered with `addSystem()`, ordered by `buildSchedule()`, and run with `executeSchedule()`. The system function's name becomes its identifier.
+Systems are registered with `addSystem()` and executed automatically when the world runs. The system function's name becomes its identifier.
 
 #### Ordering Constraints
 
@@ -460,8 +454,6 @@ function renderSystem(world) { /* draw frame */ }
 addSystem(world, inputSystem);
 addSystem(world, physicsSystem, { after: "inputSystem" });
 addSystem(world, renderSystem, { after: "physicsSystem" });
-
-buildSchedule(world);
 // Executes: inputSystem -> physicsSystem -> renderSystem
 ```
 
@@ -471,28 +463,70 @@ Without constraints, systems run in registration order. Use arrays for multiple 
 
 #### Schedules
 
-Systems are grouped into **schedules**. The default schedule is `"runtime"`, but you can create others for initialization, cleanup, or custom phases:
+Systems are grouped into **schedules** -- named execution phases. The default pipeline runs these schedules every frame:
+
+```
+First → PreUpdate → Update → PostUpdate → Last
+```
+
+`Update` is the default schedule. Assign systems to other phases based on when they should run:
 
 ```typescript
-addSystem(world, loadAssetsSystem, { schedule: "startup" });
-addSystem(world, saveGameSystem, { schedule: "shutdown" });
-addSystem(world, physicsSystem); // defaults to "runtime"
+import { addSystem, First, PreUpdate, PostUpdate, Last, run, stop } from "iris-ecs";
 
-buildSchedule(world, "startup");
-buildSchedule(world, "runtime");
-buildSchedule(world, "shutdown");
+addSystem(world, inputSystem, { schedule: First });
+addSystem(world, physicsSystem, { schedule: PreUpdate });
+addSystem(world, movementSystem); // defaults to Update
+addSystem(world, collisionSystem, { schedule: PostUpdate });
+addSystem(world, renderSystem, { schedule: Last });
 
-executeSchedule(world, "startup"); // Run once at start
-while (running) {
-  executeSchedule(world);          // "runtime" is default
-  flushEvents(world);
-}
-executeSchedule(world, "shutdown"); // Run once at end
+run(world);
+
+// ... later
+await stop(world);
+```
+
+Two additional schedules run outside the main loop:
+
+- **Startup** runs once before the first frame (asset loading, initialization)
+- **Shutdown** runs once when `stop()` is called (cleanup, save state)
+
+```typescript
+import { Startup, Shutdown } from "iris-ecs";
+
+addSystem(world, loadAssetsSystem, { schedule: Startup });
+addSystem(world, saveGameSystem, { schedule: Shutdown });
+```
+
+#### Custom Schedules
+
+Create custom pipeline phases with `defineSchedule()` and insert them relative to existing ones:
+
+```typescript
+import { defineSchedule, insertScheduleAfter, PreUpdate } from "iris-ecs";
+
+const Physics = defineSchedule("Physics");
+insertScheduleAfter(world, Physics, PreUpdate);
+addSystem(world, gravitySystem, { schedule: Physics });
+
+// Pipeline is now: First → PreUpdate → Physics → Update → PostUpdate → Last
+```
+
+#### Running the World
+
+`run(world)` starts a `requestAnimationFrame` loop. Each frame runs all pipeline schedules then flushes events. `stop(world)` stops the loop and runs Shutdown. Calling `stop()` then `run()` again re-triggers Startup and Shutdown for each cycle.
+
+For manual frame stepping (tests, server-side), use `runOnce()`:
+
+```typescript
+import { runOnce } from "iris-ecs";
+
+await runOnce(world); // one frame
 ```
 
 #### Async Systems
 
-For systems that need to `await` (loading assets, network calls), use `executeScheduleAsync()`:
+Systems can be async. Both `run()` and `runOnce()` handle sync and async systems transparently:
 
 ```typescript
 async function loadAssetsSystem(world) {
@@ -500,13 +534,8 @@ async function loadAssetsSystem(world) {
   // ...
 }
 
-addSystem(world, loadAssetsSystem, { schedule: "startup" });
-buildSchedule(world, "startup");
-
-await executeScheduleAsync(world, "startup");
+addSystem(world, loadAssetsSystem, { schedule: Startup });
 ```
-
-⚠️ `executeSchedule()` throws if any system returns a Promise. Use `executeScheduleAsync()` for schedules with async systems.
 
 ### Actions
 
@@ -617,16 +646,7 @@ if (isPaused) {
 
 #### Event Lifetime
 
-Events use double-buffered storage. Call `flushEvents()` once per frame to rotate buffers -- events survive one flush (so systems that run next frame can still read them), then are discarded on the second flush. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
-
-```typescript
-import { flushEvents } from "iris-ecs";
-
-while (running) {
-  executeSchedule(world);
-  flushEvents(world);
-}
-```
+Events use double-buffered storage. Buffers rotate automatically at the end of each frame -- events survive one frame (so systems that run next frame can still read them), then are discarded. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
 
 ⚠️ **Events are not entities.** Unlike components and tags, events exist outside the entity-component model. You cannot query for events or attach them to entities.
 
