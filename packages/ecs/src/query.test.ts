@@ -1737,11 +1737,11 @@ describe("Query", () => {
       });
 
       buildSchedule(world);
-      executeSchedule(world); // tick 2
+      executeSchedule(world); // sys1 at tick 2, sys2 at tick 3, post-bump to 4
 
-      // Each system should have its own entry
+      // Each system should have its own entry with its sub-tick
       assert.strictEqual(query.lastTick.bySystemId.get("sys1"), 2);
-      assert.strictEqual(query.lastTick.bySystemId.get("sys2"), 2);
+      assert.strictEqual(query.lastTick.bySystemId.get("sys2"), 3);
       // Self tick should remain unchanged from system runs
       assert.strictEqual(query.lastTick.self, 1);
     });
@@ -1775,20 +1775,20 @@ describe("Query", () => {
       );
 
       buildSchedule(world);
-      executeSchedule(world); // tick 2
+      executeSchedule(world); // systemA at tick 2, systemB at tick 3
 
-      // systemA sees initial add (tick 1 change)
-      // systemA then modifies Position (tick 2 change)
-      // systemB sees the tick 2 change from systemA
+      // systemA sees initial add (tick 1 change, lastTick was 0)
+      // systemA then modifies Position (stamps change at tick 2)
+      // systemB sees the tick 2 change from systemA (lastTick was 0)
       assert.strictEqual(systemAResults.length, 1);
       assert.strictEqual(systemBResults.length, 1);
 
       // Run again
-      executeSchedule(world); // tick 3
+      executeSchedule(world); // systemA at tick 5, systemB at tick 6
 
       // systemA should NOT see change (its lastTick is 2, change was at tick 2)
-      // But systemA modifies again at tick 3
-      // systemB should see the tick 3 change
+      // But systemA modifies again (stamps change at tick 5)
+      // systemB should see the tick 5 change (lastTick was 3)
       assert.strictEqual(systemAResults.length, 1); // no new additions
       assert.strictEqual(systemBResults.length, 2); // saw new change
     });
@@ -1869,6 +1869,36 @@ describe("Query", () => {
       const results = [...fetchEntities(world, added(Health))];
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], entity2);
+    });
+  });
+
+  describe("Between-Tick Change Detection", () => {
+    it("between-tick component addition visible to systems on next schedule", () => {
+      const world = createWorld();
+      const Health = defineComponent("HealthBetweenTick", { value: Type.f32() });
+
+      const seen: EntityId[] = [];
+
+      addSystem(world, function reader() {
+        for (const e of fetchEntities(world, added(Health))) {
+          seen.push(e);
+        }
+      });
+
+      buildSchedule(world);
+
+      // First schedule: no entities with Health
+      executeSchedule(world);
+      assert.strictEqual(seen.length, 0);
+
+      // Add component between schedules (at post-bump tick)
+      const entity = createEntity(world);
+      addComponent(world, entity, Health, { value: 100 });
+
+      // Second schedule: reader should see the between-tick addition
+      executeSchedule(world);
+      assert.strictEqual(seen.length, 1);
+      assert.strictEqual(seen[0], entity);
     });
   });
 });

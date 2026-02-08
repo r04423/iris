@@ -91,9 +91,14 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
    */
   event: Event<T>;
   /**
-   * Queue of event entries.
+   * Current buffer, new events are written here.
    */
-  events: EventEntry<T>[];
+  current: EventEntry<T>[];
+  /**
+   * Previous buffer, events from before the last flush. Readable but not writable.
+   * Cleared on the next flush.
+   */
+  previous: EventEntry<T>[];
   /**
    * Execution tick tracking for event consumption.
    */
@@ -108,18 +113,6 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
     bySystemId: Map<string, number>;
   };
 };
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Number of ticks before events expire.
- *
- * Events persist for this many ticks to ensure systems can read regardless
- * of execution order.
- */
-export const EVENT_EXPIRY_TICKS = 2;
 
 // ============================================================================
 // Global Event Registry
@@ -211,7 +204,8 @@ export function ensureEventQueue<S extends EventSchema>(world: World, event: Eve
   if (!queue) {
     queue = {
       event: event as Event,
-      events: [],
+      current: [],
+      previous: [],
       lastTick: {
         self: 0,
         bySystemId: new Map(),
@@ -247,7 +241,7 @@ export function emitEvent<S extends EventSchema>(
   const data = args[0] as EventData<S>;
   const tick = world.execution.tick;
 
-  queue.events.push({ data, tick });
+  queue.current.push({ data, tick });
 }
 
 // ============================================================================
@@ -269,29 +263,6 @@ function markEventsRead(world: World, queue: EventQueueMeta): void {
     queue.lastTick.self = tick;
   } else {
     queue.lastTick.bySystemId.set(systemId, tick);
-  }
-}
-
-/**
- * Remove expired events from queue.
- *
- * Events older than EVENT_EXPIRY_TICKS are removed to prevent unbounded growth.
- *
- * @param world - World instance
- * @param queue - Event queue metadata
- */
-function cleanupExpiredEvents(world: World, queue: EventQueueMeta): void {
-  const expiryTick = world.execution.tick - EVENT_EXPIRY_TICKS;
-
-  // Find first non-expired index
-  let firstValidIndex = 0;
-  while (firstValidIndex < queue.events.length && queue.events[firstValidIndex]!.tick <= expiryTick) {
-    firstValidIndex++;
-  }
-
-  // Remove expired events from front
-  if (firstValidIndex > 0) {
-    queue.events.splice(0, firstValidIndex);
   }
 }
 
@@ -320,16 +291,25 @@ export function* fetchEvents<S extends EventSchema>(world: World, event: Event<S
   const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
 
   try {
-    for (let i = 0; i < queue.events.length; i++) {
-      const entry = queue.events[i]!;
-      // Event must have been emitted AFTER lastTick but AT or BEFORE current tick
+    // Snapshot lengths so events emitted during iteration are not visible in this pass
+    const prevLen = queue.previous.length;
+    const currLen = queue.current.length;
+
+    for (let i = 0; i < prevLen; i++) {
+      const entry = queue.previous[i]!;
+      if (entry.tick > lastTick && entry.tick <= tick) {
+        yield entry.data;
+      }
+    }
+
+    for (let i = 0; i < currLen; i++) {
+      const entry = queue.current[i]!;
       if (entry.tick > lastTick && entry.tick <= tick) {
         yield entry.data;
       }
     }
   } finally {
     markEventsRead(world, queue);
-    cleanupExpiredEvents(world, queue);
   }
 }
 
@@ -358,8 +338,15 @@ export function hasEvents<S extends EventSchema>(world: World, event: Event<S>):
   const { systemId, tick } = world.execution;
   const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
 
-  for (let i = 0; i < queue.events.length; i++) {
-    const entry = queue.events[i]!;
+  for (let i = 0; i < queue.previous.length; i++) {
+    const entry = queue.previous[i]!;
+    if (entry.tick > lastTick && entry.tick <= tick) {
+      return true;
+    }
+  }
+
+  for (let i = 0; i < queue.current.length; i++) {
+    const entry = queue.current[i]!;
     if (entry.tick > lastTick && entry.tick <= tick) {
       return true;
     }
@@ -389,8 +376,16 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
   const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
 
   let count = 0;
-  for (let i = 0; i < queue.events.length; i++) {
-    const entry = queue.events[i]!;
+
+  for (let i = 0; i < queue.previous.length; i++) {
+    const entry = queue.previous[i]!;
+    if (entry.tick > lastTick && entry.tick <= tick) {
+      count++;
+    }
+  }
+
+  for (let i = 0; i < queue.current.length; i++) {
+    const entry = queue.current[i]!;
     if (entry.tick > lastTick && entry.tick <= tick) {
       count++;
     }
@@ -422,18 +417,28 @@ export function fetchLastEvent<S extends EventSchema>(world: World, event: Event
   const { systemId, tick } = world.execution;
   const lastTick = systemId === null ? queue.lastTick.self : (queue.lastTick.bySystemId.get(systemId) ?? 0);
 
-  // Find last matching event (iterate backwards, break early)
   let result: EventData<S> | undefined;
-  for (let i = queue.events.length - 1; i >= 0; i--) {
-    const entry = queue.events[i]!;
+
+  // Search current buffer backwards first, then previous
+  for (let i = queue.current.length - 1; i >= 0; i--) {
+    const entry = queue.current[i]!;
     if (entry.tick > lastTick && entry.tick <= tick) {
       result = entry.data;
       break;
     }
   }
 
+  if (result === undefined) {
+    for (let i = queue.previous.length - 1; i >= 0; i--) {
+      const entry = queue.previous[i]!;
+      if (entry.tick > lastTick && entry.tick <= tick) {
+        result = entry.data;
+        break;
+      }
+    }
+  }
+
   markEventsRead(world, queue);
-  cleanupExpiredEvents(world, queue);
 
   return result;
 }
@@ -458,5 +463,27 @@ export function fetchLastEvent<S extends EventSchema>(world: World, event: Event
 export function clearEvents<S extends EventSchema>(world: World, event: Event<S>): void {
   const queue = ensureEventQueue(world, event);
   markEventsRead(world, queue);
-  cleanupExpiredEvents(world, queue);
+}
+
+/**
+ * Flush all event queues in the world.
+ *
+ * Swaps the active buffer for each queue and clears the new active buffer.
+ * Call once per frame, typically after executeSchedule.
+ *
+ * @param world - World instance
+ *
+ * @example
+ * ```typescript
+ * executeSchedule(world);
+ * flushEvents(world);
+ * ```
+ */
+export function flushEvents(world: World): void {
+  for (const queue of world.events.byId.values()) {
+    const temp = queue.current;
+    queue.current = queue.previous;
+    queue.previous = temp;
+    queue.current.length = 0;
+  }
 }

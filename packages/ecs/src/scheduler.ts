@@ -253,10 +253,10 @@ export function executeSchedule(world: World, scheduleId: ScheduleId = "runtime"
 
   // Track execution context for systems that need to know their environment
   world.execution.scheduleId = scheduleId;
-  world.execution.tick++;
 
   try {
     for (const systemId of order) {
+      world.execution.tick++;
       world.execution.systemId = systemId;
       const meta = world.systems.byId.get(systemId)!;
       const result = meta.runner(world);
@@ -267,7 +267,7 @@ export function executeSchedule(world: World, scheduleId: ScheduleId = "runtime"
       }
     }
   } finally {
-    // Always clear execution context, even on error
+    world.execution.tick++;
     world.execution.scheduleId = null;
     world.execution.systemId = null;
   }
@@ -292,10 +292,10 @@ export async function executeScheduleAsync(world: World, scheduleId: ScheduleId 
 
   // Track execution context for systems that need to know their environment
   world.execution.scheduleId = scheduleId;
-  world.execution.tick++;
 
   try {
     for (const systemId of order) {
+      world.execution.tick++;
       world.execution.systemId = systemId;
       const meta = world.systems.byId.get(systemId)!;
       const result = meta.runner(world);
@@ -306,7 +306,7 @@ export async function executeScheduleAsync(world: World, scheduleId: ScheduleId 
       }
     }
   } finally {
-    // Always clear execution context, even on error
+    world.execution.tick++;
     world.execution.scheduleId = null;
     world.execution.systemId = null;
   }

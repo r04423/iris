@@ -418,6 +418,7 @@ import {
   addSystem,
   buildSchedule,
   executeSchedule,
+  flushEvents,
   fetchEntities,
   getComponentValue,
   setComponentValue,
@@ -441,6 +442,7 @@ buildSchedule(world);
 // Game loop
 while (running) {
   executeSchedule(world);
+  flushEvents(world);
 }
 ```
 
@@ -483,6 +485,7 @@ buildSchedule(world, "shutdown");
 executeSchedule(world, "startup"); // Run once at start
 while (running) {
   executeSchedule(world);          // "runtime" is default
+  flushEvents(world);
 }
 executeSchedule(world, "shutdown"); // Run once at end
 ```
@@ -614,7 +617,16 @@ if (isPaused) {
 
 #### Event Lifetime
 
-Events persist for a short window (2 ticks) to ensure all systems can read them regardless of execution order, then expire automatically. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
+Events use double-buffered storage. Call `flushEvents()` once per frame to rotate buffers -- events survive one flush (so systems that run next frame can still read them), then are discarded on the second flush. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
+
+```typescript
+import { flushEvents } from "iris-ecs";
+
+while (running) {
+  executeSchedule(world);
+  flushEvents(world);
+}
+```
 
 ⚠️ **Events are not entities.** Unlike components and tags, events exist outside the entity-component model. You cannot query for events or attach them to entities.
 

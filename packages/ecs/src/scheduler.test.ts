@@ -254,11 +254,45 @@ describe("Scheduler", () => {
 
       assert.strictEqual(world.execution.tick, 1);
 
-      executeSchedule(world);
-      assert.strictEqual(world.execution.tick, 2);
-
+      // 1 system: tick advances by 2 (per-system + post-bump)
       executeSchedule(world);
       assert.strictEqual(world.execution.tick, 3);
+
+      executeSchedule(world);
+      assert.strictEqual(world.execution.tick, 5);
+    });
+
+    it("tick advances per system within a schedule", () => {
+      const world = createWorld();
+      const ticks: number[] = [];
+
+      addSystem(world, function sys1() {
+        ticks.push(world.execution.tick);
+      });
+      addSystem(world, function sys2() {
+        ticks.push(world.execution.tick);
+      });
+      addSystem(world, function sys3() {
+        ticks.push(world.execution.tick);
+      });
+
+      buildSchedule(world);
+      executeSchedule(world);
+
+      // 3 systems see ticks 2, 3, 4; final tick is 5 (post-bump)
+      assert.deepStrictEqual(ticks, [2, 3, 4]);
+      assert.strictEqual(world.execution.tick, 5);
+    });
+
+    it("empty schedule advances tick by post-bump only", () => {
+      const world = createWorld();
+
+      buildSchedule(world); // empty schedule
+
+      assert.strictEqual(world.execution.tick, 1);
+
+      executeSchedule(world);
+      assert.strictEqual(world.execution.tick, 2);
     });
 
     it("sets execution context during system run", () => {

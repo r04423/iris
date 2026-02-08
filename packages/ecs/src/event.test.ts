@@ -4,10 +4,10 @@ import {
   clearEvents,
   countEvents,
   defineEvent,
-  EVENT_EXPIRY_TICKS,
   emitEvent,
   fetchEvents,
   fetchLastEvent,
+  flushEvents,
   hasEvents,
 } from "./event.js";
 import { addSystem, buildSchedule, executeSchedule } from "./scheduler.js";
@@ -376,7 +376,7 @@ describe("Event", () => {
       buildSchedule(world);
 
       emitEvent(world, Event);
-      executeSchedule(world); // tick increments to 2, then systems run
+      executeSchedule(world); // systemA runs at tick 2, systemB at tick 3, post-bump to 4
 
       const queue = world.events.byId.get(Event.id);
       assert.ok(queue);
@@ -384,105 +384,6 @@ describe("Event", () => {
       assert.strictEqual(queue.lastTick.bySystemId.get("systemA"), 2);
       // systemB never called fetchEvents
       assert.strictEqual(queue.lastTick.bySystemId.has("systemB"), false);
-    });
-  });
-
-  // ============================================================================
-  // Tick-Based Expiry Tests
-  // ============================================================================
-
-  describe("Tick-Based Expiry", () => {
-    it("expiry constant is 2 ticks", () => {
-      assert.strictEqual(EVENT_EXPIRY_TICKS, 2);
-    });
-
-    it("events persist for expiry window", () => {
-      const world = createWorld();
-      const Event = defineEvent("ExpiryPersist");
-
-      addSystem(world, function noop() {});
-      buildSchedule(world);
-
-      // Tick 1: emit event
-      emitEvent(world, Event);
-      executeSchedule(world); // tick becomes 2
-
-      // Tick 2: event should still exist
-      executeSchedule(world); // tick becomes 3
-
-      // Event emitted at tick 1, current tick 3
-      // Expiry threshold = 3 - 2 = 1, events with tick <= 1 expire
-      // Our event was at tick 1, so it should expire after this read
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-      // Events haven't been cleaned up yet (cleanup happens on fetch)
-      assert.strictEqual(queue.events.length, 1);
-    });
-
-    it("events expire after cleanup on fetch", () => {
-      const world = createWorld();
-      const Event = defineEvent("ExpiryCleanup");
-
-      let eventCount = 0;
-      addSystem(world, function counter() {
-        eventCount = countEvents(world, Event);
-        // Trigger cleanup by fetching
-        for (const _ of fetchEvents(world, Event)) {
-          // consume
-        }
-      });
-      buildSchedule(world);
-
-      // Tick 1: emit event
-      emitEvent(world, Event);
-      executeSchedule(world); // tick 2, counter sees 1 event
-
-      const countAfterTick1 = eventCount;
-
-      executeSchedule(world); // tick 3, counter sees 0 (already consumed at tick 2)
-      executeSchedule(world); // tick 4
-
-      // Event was emitted at tick 1, consumed at tick 2
-      // By tick 4, event should be cleaned up (expiry = tick - 2 = 2, event tick 1 <= 2)
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-      assert.strictEqual(queue.events.length, 0);
-      assert.strictEqual(countAfterTick1, 1);
-    });
-
-    it("only expired events are removed", () => {
-      const world = createWorld();
-      const Event = defineEvent("PartialExpiry", {
-        value: Type.i32(),
-      });
-
-      addSystem(world, function noop() {});
-      buildSchedule(world);
-
-      // World starts at tick 1
-      emitEvent(world, Event, { value: 1 }); // emitted at tick 1
-      executeSchedule(world); // tick becomes 2
-
-      emitEvent(world, Event, { value: 2 }); // emitted at tick 2
-      executeSchedule(world); // tick becomes 3
-
-      emitEvent(world, Event, { value: 3 }); // emitted at tick 3
-      executeSchedule(world); // tick becomes 4
-
-      // At tick 4, expiry threshold = 4-2 = 2
-      // - Event 1 (tick 1): 1 <= 2, EXPIRED
-      // - Event 2 (tick 2): 2 <= 2, EXPIRED
-      // - Event 3 (tick 3): 3 > 2, VALID
-
-      // Fetch triggers cleanup
-      const values = [...fetchEvents(world, Event)].map((e) => e.value);
-      assert.deepStrictEqual(values, [1, 2, 3]); // all visible before cleanup
-
-      const queue = world.events.byId.get(Event.id);
-      assert.ok(queue);
-      // After cleanup, only event 3 remains (not expired)
-      assert.strictEqual(queue.events.length, 1);
-      assert.strictEqual(queue.events[0]?.data.value, 3);
     });
   });
 
@@ -547,38 +448,41 @@ describe("Event", () => {
       executeSchedule(world);
     });
 
-    it("events emitted during iteration are visible on next tick", () => {
+    it("events emitted during iteration are not visible in the same pass", () => {
       const world = createWorld();
       const Event = defineEvent("EmitDuringIter", {
         value: Type.i32(),
       });
 
-      const seen: number[] = [];
+      const emitterSeen: number[] = [];
+      const readerSeen: number[] = [];
 
+      // Emitter sees the original event but not the one it emits mid-iteration
       addSystem(world, function emitter() {
         for (const e of fetchEvents(world, Event)) {
-          seen.push(e.value);
-          // Emit new event during iteration (will be at current tick)
-          if (e.value < 3) {
-            emitEvent(world, Event, { value: e.value + 1 });
-          }
+          emitterSeen.push(e.value);
+          emitEvent(world, Event, { value: e.value + 10 });
         }
       });
+
+      // Reader (later system) sees the mid-iteration event on the same schedule
+      addSystem(
+        world,
+        function reader() {
+          for (const e of fetchEvents(world, Event)) {
+            readerSeen.push(e.value);
+          }
+        },
+        { after: "emitter" }
+      );
 
       buildSchedule(world);
 
       emitEvent(world, Event, { value: 1 });
-      executeSchedule(world); // tick 2: sees value=1, emits value=2
+      executeSchedule(world);
 
-      // Event with value=2 was emitted at tick=2
-      // lastTick is now 2, so it won't see the new event in the same tick
-      // On next tick, it should see value=2
-
-      executeSchedule(world); // tick 3: sees value=2, emits value=3
-
-      executeSchedule(world); // tick 4: sees value=3, doesn't emit
-
-      assert.deepStrictEqual(seen, [1, 2, 3]);
+      assert.deepStrictEqual(emitterSeen, [1]);
+      assert.deepStrictEqual(readerSeen, [1, 11]);
     });
   });
 
@@ -700,7 +604,7 @@ describe("Event", () => {
       // Event emitted at tick 1 (initial tick)
       const queue = world.events.byId.get(Event.id);
       assert.ok(queue);
-      assert.strictEqual(queue.events[0]?.tick, 1);
+      assert.strictEqual(queue.current[0]?.tick, 1);
 
       // Should be fetchable since lastTick starts at 0
       const results = [...fetchEvents(world, Event)];
@@ -801,19 +705,25 @@ describe("Event", () => {
       const spawnedPlayers: number[] = [];
       const damageLog: Array<{ entity: number; amount: number }> = [];
 
-      // Spawn system emits events
+      // Use a run counter instead of tick values (decoupled from tick semantics)
+      let spawnRun = 0;
+      let combatRun = 0;
+
+      // Spawn system emits events on first run
       addSystem(world, function spawnSystem() {
-        if (world.execution.tick === 2) {
+        spawnRun++;
+        if (spawnRun === 1) {
           emitEvent(world, PlayerSpawned, { entity: 1 });
           emitEvent(world, PlayerSpawned, { entity: 2 });
         }
       });
 
-      // Combat system emits damage events
+      // Combat system emits damage events on second run
       addSystem(
         world,
         function combatSystem() {
-          if (world.execution.tick === 3) {
+          combatRun++;
+          if (combatRun === 2) {
             emitEvent(world, PlayerDamaged, { entity: 1, amount: 10 });
             emitEvent(world, PlayerDamaged, { entity: 2, amount: 15 });
           }
@@ -854,9 +764,9 @@ describe("Event", () => {
       buildSchedule(world);
 
       // Run several ticks
-      executeSchedule(world); // tick 2
-      executeSchedule(world); // tick 3
-      executeSchedule(world); // tick 4
+      executeSchedule(world);
+      executeSchedule(world);
+      executeSchedule(world);
 
       // Verify both systems received the same events
       assert.deepStrictEqual(spawnedPlayers, [1, 2]);
@@ -866,6 +776,106 @@ describe("Event", () => {
       ]);
       assert.strictEqual(audioSpawnCount, 2);
       assert.strictEqual(audioDamageCount, 2);
+    });
+  });
+
+  // ============================================================================
+  // Double-Buffered Event Lifecycle Tests
+  // ============================================================================
+
+  describe("Double-Buffered Event Lifecycle", () => {
+    it("events discarded after second flush", () => {
+      const world = createWorld();
+      const Event = defineEvent("FlushDiscard");
+
+      emitEvent(world, Event);
+      flushEvents(world); // event moves to previous buffer
+      flushEvents(world); // previous buffer cleared
+
+      assert.strictEqual(hasEvents(world, Event), false);
+      assert.strictEqual(countEvents(world, Event), 0);
+    });
+
+    it("events from before and after flush are both readable", () => {
+      const world = createWorld();
+      const Event = defineEvent("FlushNewEvents", { value: Type.i32() });
+
+      emitEvent(world, Event, { value: 1 });
+      flushEvents(world);
+      emitEvent(world, Event, { value: 2 });
+
+      // Both events readable: value=1 survived the flush, value=2 is in current
+      const results = [...fetchEvents(world, Event)].map((e) => e.value);
+      assert.deepStrictEqual(results, [1, 2]);
+    });
+  });
+
+  // ============================================================================
+  // Cross-Schedule Event Visibility Tests
+  // ============================================================================
+
+  describe("Cross-Schedule Event Visibility", () => {
+    it("between-tick events visible to systems on next schedule", () => {
+      const world = createWorld();
+      const Event = defineEvent("BetweenTick", { value: Type.i32() });
+
+      const seen: number[] = [];
+
+      addSystem(world, function reader() {
+        for (const e of fetchEvents(world, Event)) {
+          seen.push(e.value);
+        }
+      });
+
+      buildSchedule(world);
+
+      // First schedule: no events
+      executeSchedule(world);
+      assert.deepStrictEqual(seen, []);
+
+      // Emit between schedules (at post-bump tick)
+      emitEvent(world, Event, { value: 42 });
+
+      // Second schedule: reader should see the between-tick event
+      executeSchedule(world);
+      assert.deepStrictEqual(seen, [42]);
+    });
+
+    it("later system's events visible to earlier system on next schedule", () => {
+      const world = createWorld();
+      const Event = defineEvent("LaterToEarlier", { value: Type.i32() });
+
+      const readerSeen: number[] = [];
+
+      // Reader runs first
+      addSystem(world, function reader() {
+        for (const e of fetchEvents(world, Event)) {
+          readerSeen.push(e.value);
+        }
+      });
+
+      // Writer runs second
+      let writeRun = 0;
+      addSystem(
+        world,
+        function writer() {
+          writeRun++;
+          if (writeRun === 1) {
+            emitEvent(world, Event, { value: 99 });
+          }
+        },
+        { after: "reader" }
+      );
+
+      buildSchedule(world);
+
+      // First schedule: reader sees nothing, writer emits
+      executeSchedule(world);
+      assert.deepStrictEqual(readerSeen, []);
+
+      // Second schedule: reader should now see the event from the previous schedule's writer
+      executeSchedule(world);
+      assert.deepStrictEqual(readerSeen, [99]);
     });
   });
 });

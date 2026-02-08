@@ -100,10 +100,10 @@ export {
   clearEvents,
   countEvents,
   defineEvent,
-  EVENT_EXPIRY_TICKS,
   emitEvent,
   fetchEvents,
   fetchLastEvent,
+  flushEvents,
   hasEvents,
 } from "./event.js";
 
