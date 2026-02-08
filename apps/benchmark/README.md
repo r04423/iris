@@ -111,74 +111,80 @@ export const iris: LibraryAdapter = {
 >
 > Fixed 8,192 iterations per benchmark. `ops/frame` = operations per 16.67 ms frame at 60 fps.
 
-### Throughput — Entity (empty world)
+### Entity — Create Throughput
 
-| Benchmark | ops/sec | ops/frame | avg | P75 | P99 |
-|-----------|--------:|----------:|----:|----:|----:|
-| create empty entity | 6,121,706 | 102,028 | 163 ns | 125 ns | 291 ns |
-| create entity + 2 comps | 1,681,567 | 28,026 | 595 ns | 500 ns | 1.37 us |
-| create entity + 4 comps | 1,258,827 | 20,980 | 794 ns | 791 ns | 959 ns |
-| create entity + 8 comps | 626,593 | 10,443 | 1.60 us | 1.54 us | 1.79 us |
+Latency — avg (P99):
 
-### Throughput — Entity (xsmall world)
+| Benchmark | empty | xsmall | small |
+|-----------|------:|-------:|------:|
+| create empty entity | 152 ns (209 ns) | 138 ns (583 ns) | 128 ns (333 ns) |
+| create entity + 2 comps | 535 ns (1.33 us) | 559 ns (837 ns) | 385 ns (459 ns) |
+| create entity + 4 comps | 825 ns (917 ns) | 853 ns (1.75 us) | 806 ns (963 ns) |
+| create entity + 8 comps | 1.64 us (4.33 us) | 1.72 us (2.33 us) | 1.56 us (1.92 us) |
 
-| Benchmark | ops/sec | ops/frame | avg | P75 | P99 |
-|-----------|--------:|----------:|----:|----:|----:|
-| create empty entity | 6,672,020 | 111,200 | 150 ns | 125 ns | 666 ns |
-| create entity + 2 comps | 2,168,445 | 36,141 | 461 ns | 417 ns | 1.33 us |
-| create entity + 4 comps | 1,164,364 | 19,406 | 859 ns | 792 ns | 1.79 us |
-| create entity + 8 comps | 590,917 | 9,849 | 1.69 us | 1.50 us | 2.38 us |
-| destroy empty entity | 3,781,516 | 63,025 | 264 ns | 291 ns | 417 ns |
-| destroy entity + 2 comps | 1,721,735 | 28,696 | 581 ns | 416 ns | 1.21 us |
-| destroy entity + 4 comps | 1,878,456 | 31,308 | 532 ns | 458 ns | 1.29 us |
-| destroy entity + 8 comps | 2,074,065 | 34,568 | 482 ns | 500 ns | 1.00 us |
+ops/sec:
 
-### Throughput — Entity (small world)
+| Benchmark | empty | xsmall | small |
+|-----------|------:|-------:|------:|
+| create empty entity | 6,567,571 | 7,235,605 | 7,842,634 |
+| create entity + 2 comps | 1,867,678 | 1,790,090 | 2,595,912 |
+| create entity + 4 comps | 1,211,895 | 1,172,278 | 1,241,302 |
+| create entity + 8 comps | 609,442 | 581,359 | 639,663 |
 
-| Benchmark | ops/sec | ops/frame | avg | P75 | P99 |
-|-----------|--------:|----------:|----:|----:|----:|
-| create empty entity | 7,273,450 | 121,224 | 137 ns | 125 ns | 379 ns |
-| create entity + 2 comps | 2,552,116 | 42,535 | 392 ns | 375 ns | 500 ns |
-| create entity + 4 comps | 1,238,531 | 20,642 | 807 ns | 791 ns | 958 ns |
-| create entity + 8 comps | 655,413 | 10,924 | 1.53 us | 1.50 us | 1.71 us |
-| destroy empty entity | 4,568,950 | 76,149 | 219 ns | 250 ns | 333 ns |
-| destroy entity + 2 comps | 2,436,010 | 40,600 | 411 ns | 375 ns | 1.13 us |
-| destroy entity + 4 comps | 2,421,655 | 40,361 | 413 ns | 417 ns | 667 ns |
-| destroy entity + 8 comps | 1,951,845 | 32,531 | 512 ns | 500 ns | 1.25 us |
+ops/frame (60 fps, 16.67 ms budget):
 
-### Memory — Entity (empty world)
+| Benchmark | empty | xsmall | small |
+|-----------|------:|-------:|------:|
+| create empty entity | 109,460 | 120,593 | 130,711 |
+| create entity + 2 comps | 31,128 | 29,835 | 43,265 |
+| create entity + 4 comps | 20,198 | 19,538 | 20,688 |
+| create entity + 8 comps | 10,157 | 9,689 | 10,661 |
+
+### Entity — Destroy Throughput
+
+Latency — avg (P99):
+
+| Benchmark | xsmall | small |
+|-----------|-------:|------:|
+| destroy empty entity | 273 ns (417 ns) | 214 ns (333 ns) |
+| destroy entity + 2 comps | 384 ns (1.00 us) | 331 ns (917 ns) |
+| destroy entity + 4 comps | 472 ns (1.21 us) | 423 ns (666 ns) |
+| destroy entity + 8 comps | 454 ns (667 ns) | 496 ns (667 ns) |
+
+ops/sec (ops/frame):
+
+| Benchmark | xsmall | small |
+|-----------|-------:|------:|
+| destroy empty entity | 3,659,471 (60,991) | 4,675,012 (77,917) |
+| destroy entity + 2 comps | 2,603,021 (43,384) | 3,023,907 (50,398) |
+| destroy entity + 4 comps | 2,120,043 (35,334) | 2,362,724 (39,379) |
+| destroy entity + 8 comps | 2,201,790 (36,697) | 2,016,096 (33,602) |
+
+### Entity — Create Memory
 
 Per-operation retained memory delta (heap + external). 2,048 iterations, median of 8 samples.
 
-| Benchmark | delta/op | total delta | total mem |
-|-----------|:--------:|:----------:|----------:|
-| create empty entity | +212 B | +423.3 KB | 9.2 MB |
-| create entity + 2 comps | +227 B | +453.9 KB | 9.5 MB |
-| create entity + 4 comps | +243 B | +485.4 KB | 9.7 MB |
-| create entity + 8 comps | +261 B | +521.7 KB | 9.8 MB |
+| Benchmark | empty | xsmall | small |
+|-----------|------:|-------:|------:|
+| create empty entity | +211 B | +208 B | +169 B |
+| create entity + 2 comps | +227 B | +222 B | +185 B |
+| create entity + 4 comps | +243 B | +244 B | +201 B |
+| create entity + 8 comps | +261 B | +256 B | +219 B |
 
-### Memory — Entity (xsmall world)
+Total heap after 2,048 creates:
 
-| Benchmark | delta/op | total delta | total mem |
-|-----------|:--------:|:----------:|----------:|
-| create empty entity | +208 B | +416.3 KB | 10.8 MB |
-| create entity + 2 comps | +222 B | +443.8 KB | 10.9 MB |
-| create entity + 4 comps | +244 B | +487.3 KB | 11.1 MB |
-| create entity + 8 comps | +256 B | +511.8 KB | 11.3 MB |
-| destroy empty entity | -77 B | -153.1 KB | 12.3 MB |
-| destroy entity + 2 comps | -166 B | -331.3 KB | 13.0 MB |
-| destroy entity + 4 comps | -255 B | -509.4 KB | 13.7 MB |
-| destroy entity + 8 comps | -303 B | -606.0 KB | 14.7 MB |
+| Benchmark | empty | xsmall | small |
+|-----------|------:|-------:|------:|
+| create empty entity | 9.2 MB | 10.7 MB | 21.7 MB |
+| create entity + 2 comps | 9.5 MB | 10.9 MB | 21.8 MB |
+| create entity + 4 comps | 9.7 MB | 11.1 MB | 22.0 MB |
+| create entity + 8 comps | 9.8 MB | 11.3 MB | 22.1 MB |
 
-### Memory — Entity (small world)
+### Entity — Destroy Memory
 
-| Benchmark | delta/op | total delta | total mem |
-|-----------|:--------:|:----------:|----------:|
-| create empty entity | +169 B | +337.2 KB | 21.7 MB |
-| create entity + 2 comps | +185 B | +370.3 KB | 21.8 MB |
-| create entity + 4 comps | +201 B | +401.7 KB | 22.0 MB |
-| create entity + 8 comps | +219 B | +438.3 KB | 22.1 MB |
-| destroy empty entity | -77 B | -153.1 KB | 23.1 MB |
-| destroy entity + 2 comps | -166 B | -331.3 KB | 23.7 MB |
-| destroy entity + 4 comps | -254 B | -507.3 KB | 24.5 MB |
-| destroy entity + 8 comps | -303 B | -606.0 KB | 25.5 MB |
+| Benchmark | xsmall | small |
+|-----------|-------:|------:|
+| destroy empty entity | -77 B | -77 B |
+| destroy entity + 2 comps | -166 B | -166 B |
+| destroy entity + 4 comps | -255 B | -255 B |
+| destroy entity + 8 comps | -303 B | -303 B |
