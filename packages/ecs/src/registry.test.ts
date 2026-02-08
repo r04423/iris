@@ -10,6 +10,7 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
+import { LimitExceeded } from "./error.js";
 import { COMPONENT_REGISTRY, defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { Type } from "./schema.js";
 
@@ -53,7 +54,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineTag("OverLimit");
-      }, RangeError);
+      }, LimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextTagId = originalNextId;
@@ -109,7 +110,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineComponent("OverLimit", { value: Type.i32() });
-      }, RangeError);
+      }, LimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextComponentId = originalNextId;
@@ -165,7 +166,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineRelation("OverLimit");
-      }, RangeError);
+      }, LimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextRelationId = originalNextId;

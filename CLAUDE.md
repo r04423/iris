@@ -28,6 +28,7 @@ Monorepo structure:
 
 | Module | Responsibility |
 |--------|----------------|
+| `error.ts` | Structured error classes (LimitExceeded, NotFound, Duplicate, InvalidArgument, InvalidState) and assert() |
 | `encoding.ts` | Bit-packed ID encoding (Entity, Tag, Component, Relation, Pair types) |
 | `world.ts` | World creation and state container (entity registry, archetypes, queries) |
 | `entity.ts` | Entity lifecycle (create, destroy, aliveness check, ID recycling) |
@@ -84,6 +85,19 @@ for (const typeId of archetype.types) { ... }
 **Non-null assertions** (!) allowed where proven safe in performance-critical paths
 
 **Function overloads** for optional data parameters - see component.ts pattern
+
+**Structured errors** - Use typed error classes from `error.ts`, never inline `new Error()`:
+```typescript
+// Good: assert() for preconditions (lazy construction, type narrowing)
+assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Entity", max: ID_MASK_20, id: rawId });
+
+// Good: throw for unreachable/switch-default paths
+throw new InvalidState({ message: `Invalid entity type: ${type}` });
+
+// Avoid: inline Error with string messages
+throw new Error(`Entity limit exceeded: ${rawId}`);
+```
+Error classes: `LimitExceeded`, `NotFound`, `Duplicate`, `InvalidArgument`, `InvalidState` (all extend `IrisError`). Tests should verify error types via `instanceof`, not regex.
 
 ## Testing
 

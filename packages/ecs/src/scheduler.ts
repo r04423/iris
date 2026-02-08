@@ -1,3 +1,4 @@
+import { assert, Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
 import { flushEvents } from "./event.js";
 import type { World } from "./world.js";
 
@@ -175,13 +176,8 @@ export function addSystem(world: World, runner: SystemRunner, options?: SystemOp
   // Derive system name from function name or explicit option
   const name = options?.name ?? runner.name;
 
-  if (!name || name === "anonymous") {
-    throw new TypeError("System function must be named or provide name option");
-  }
-
-  if (world.systems.byId.has(name)) {
-    throw new Error(`System "${name}" already registered`);
-  }
+  assert(name && name !== "anonymous", InvalidArgument, { expected: "named system function or name option" });
+  assert(!world.systems.byId.has(name), Duplicate, { resource: "System", id: name });
 
   // Normalize before/after constraints to arrays for consistent handling
   const before = options?.before;
@@ -218,13 +214,9 @@ export function addSystem(world: World, runner: SystemRunner, options?: SystemOp
 export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
 
-  if (idx === -1) {
-    throw new Error(`Schedule "${anchor}" not found in pipeline`);
-  }
+  assert(idx !== -1, NotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
 
-  if (world.schedules.pipeline.includes(schedule)) {
-    throw new Error(`Schedule "${schedule}" already in pipeline`);
-  }
+  assert(!world.schedules.pipeline.includes(schedule), Duplicate, { resource: "Schedule", id: schedule });
 
   world.schedules.pipeline.splice(idx, 0, schedule);
   world.schedules.dirty = true;
@@ -246,13 +238,8 @@ export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anch
 export function insertScheduleAfter(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
 
-  if (idx === -1) {
-    throw new Error(`Schedule "${anchor}" not found in pipeline`);
-  }
-
-  if (world.schedules.pipeline.includes(schedule)) {
-    throw new Error(`Schedule "${schedule}" already in pipeline`);
-  }
+  assert(idx !== -1, NotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
+  assert(!world.schedules.pipeline.includes(schedule), Duplicate, { resource: "Schedule", id: schedule });
 
   world.schedules.pipeline.splice(idx + 1, 0, schedule);
   world.schedules.dirty = true;
@@ -295,7 +282,11 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
   for (const [name, meta] of scheduleSystems) {
     for (const beforeName of meta.before) {
       if (!scheduleSystems.has(beforeName)) {
-        throw new Error(`System "${name}" references unknown system "${beforeName}" in schedule "${scheduleLabel}"`);
+        throw new NotFound({
+          resource: "System",
+          id: beforeName,
+          context: `"${name}" before constraint in schedule "${scheduleLabel}"`,
+        });
       }
 
       // "A before B" means edge A -> B (A must run first)
@@ -305,7 +296,11 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
 
     for (const afterName of meta.after) {
       if (!scheduleSystems.has(afterName)) {
-        throw new Error(`System "${name}" references unknown system "${afterName}" in schedule "${scheduleLabel}"`);
+        throw new NotFound({
+          resource: "System",
+          id: afterName,
+          context: `"${name}" after constraint in schedule "${scheduleLabel}"`,
+        });
       }
 
       // "A after B" means edge B -> A (B must run first)
@@ -350,7 +345,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
       }
     }
 
-    throw new Error(`Circular dependency in schedule "${scheduleLabel}": ${remaining.join(", ")}`);
+    throw new InvalidState({ message: `Circular dependency in schedule "${scheduleLabel}": ${remaining.join(", ")}` });
   }
 
   world.schedules.byId.set(scheduleLabel, result);

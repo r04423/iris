@@ -4,6 +4,7 @@ import { addComponent, getComponentValue, hasComponent, removeComponent } from "
 import type { EntityId, Pair } from "./encoding.js";
 import { isPair, PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { InvalidState } from "./error.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets, pair } from "./relation.js";
 import { Type } from "./schema.js";
@@ -232,7 +233,7 @@ describe("Relation", () => {
       const invalidTypeBits = 0x0;
       const malformedPair = ((1 << PAIR_FLAG_SHIFT) | (invalidTypeBits << TYPE_SHIFT) | 0) as Pair;
 
-      assert.throws(() => getPairTarget(world, malformedPair), /Invalid target type/);
+      assert.throws(() => getPairTarget(world, malformedPair), InvalidState);
     });
   });
 

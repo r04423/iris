@@ -1,5 +1,6 @@
 import type { Component, Relation, Tag } from "./encoding.js";
 import { encodeComponent, encodeRelation, encodeTag, ID_MASK_8, ID_MASK_20 } from "./encoding.js";
+import { assert, LimitExceeded } from "./error.js";
 import type { SchemaRecord } from "./schema.js";
 
 // ============================================================================
@@ -103,7 +104,7 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
  * Defines a tag component. Tags are lightweight markers without data.
  * @param name - Human-readable tag name for debugging
  * @returns Encoded tag ID
- * @throws {RangeError} If tag limit (1,048,576) exceeded
+ * @throws {LimitExceeded} If tag limit (1,048,576) exceeded
  * @example
  * const Player = defineTag("Player");
  * addTag(world, entity, Player);
@@ -111,9 +112,7 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
 export function defineTag(name: string): Tag {
   const rawId = COMPONENT_REGISTRY.nextTagId;
 
-  if (rawId > ID_MASK_20) {
-    throw new RangeError(`Tag limit exceeded (max ${ID_MASK_20})`);
-  }
+  assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Tag", max: ID_MASK_20 });
 
   const tagId = encodeTag(rawId);
 
@@ -136,7 +135,7 @@ export function defineTag(name: string): Tag {
  * @param name - Human-readable component name for debugging
  * @param schema - Field schema record defining data layout
  * @returns Encoded component ID with schema type
- * @throws {RangeError} If component limit (1,048,576) exceeded
+ * @throws {LimitExceeded} If component limit (1,048,576) exceeded
  * @example
  * const Position = defineComponent("Position", { x: Type.f32, y: Type.f32 });
  * set(world, entity, Position, { x: 10, y: 20 });
@@ -144,9 +143,7 @@ export function defineTag(name: string): Tag {
 export function defineComponent<S extends SchemaRecord>(name: string, schema: S): Component<S> {
   const rawId = COMPONENT_REGISTRY.nextComponentId;
 
-  if (rawId > ID_MASK_20) {
-    throw new RangeError(`Component limit exceeded (max ${ID_MASK_20})`);
-  }
+  assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Component", max: ID_MASK_20 });
 
   const componentId = encodeComponent<S>(rawId);
 
@@ -169,7 +166,7 @@ export function defineComponent<S extends SchemaRecord>(name: string, schema: S)
  * @param name - Human-readable relation name for debugging
  * @param options - Configuration: schema for data, exclusive trait, delete behavior
  * @returns Encoded relation ID with schema type
- * @throws {RangeError} If relation limit (256) exceeded
+ * @throws {LimitExceeded} If relation limit (256) exceeded
  * @example
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
  * addPair(world, child, ChildOf, parent);
@@ -180,9 +177,7 @@ export function defineRelation<S extends SchemaRecord = Record<string, never>>(
 ): Relation<S> {
   const rawId = COMPONENT_REGISTRY.nextRelationId;
 
-  if (rawId > ID_MASK_8) {
-    throw new RangeError(`Relation limit exceeded (max ${ID_MASK_8})`);
-  }
+  assert(rawId <= ID_MASK_8, LimitExceeded, { resource: "Relation", max: ID_MASK_8 });
 
   const relationId = encodeRelation<S>(rawId);
 

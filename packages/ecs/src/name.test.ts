@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, hasComponent, setComponentValue } from "./component.js";
 import { createEntity, destroyEntity } from "./entity.js";
+import { Duplicate, InvalidArgument } from "./error.js";
 import { getName, lookupByName, Name, removeName, setName } from "./name.js";
 import { defineComponent, defineTag } from "./registry.js";
 import { Type } from "./schema.js";
@@ -35,7 +36,7 @@ describe("Name", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
-      assert.throws(() => setName(world, entity, ""), /Name cannot be empty/);
+      assert.throws(() => setName(world, entity, ""), InvalidArgument);
     });
 
     it("throws on name collision", () => {
@@ -45,7 +46,7 @@ describe("Name", () => {
 
       setName(world, entity1, "player");
 
-      assert.throws(() => setName(world, entity2, "player"), /Name "player" already exists/);
+      assert.throws(() => setName(world, entity2, "player"), Duplicate);
     });
 
     it("updates name and registry on change", () => {

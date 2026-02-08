@@ -1,5 +1,6 @@
 import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
+import { assert, Duplicate, InvalidArgument } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue } from "./resource.js";
@@ -77,13 +78,8 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    if (!current) {
-      throw new Error("Name cannot be empty");
-    }
-
-    if (nameToEntity.has(current)) {
-      throw new Error(`Name "${current}" already exists`);
-    }
+    assert(current, InvalidArgument, { expected: "non-empty name" });
+    assert(!nameToEntity.has(current), Duplicate, { resource: "Name", id: current });
 
     // Remove old mapping if renaming an entity
     if (previous !== undefined) {
@@ -140,7 +136,8 @@ export function getName(world: World, entityId: EntityId): string | undefined {
  * @param world - World instance
  * @param entityId - Entity to name
  * @param name - Name to assign (must be unique and non-empty)
- * @throws Error if name is empty or already exists
+ * @throws {InvalidArgument} If name is empty
+ * @throws {Duplicate} If name already exists
  * @example
  * ```ts
  * setName(world, player, "player-1");

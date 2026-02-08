@@ -4,6 +4,7 @@ import { addComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { LimitExceeded, NotFound } from "./error.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
@@ -139,7 +140,7 @@ describe("Entity", () => {
 
       assert.throws(() => {
         ensureEntity(world, entity);
-      }, /Entity .* not registered in world/);
+      }, NotFound);
     });
   });
 
@@ -280,7 +281,7 @@ describe("Entity", () => {
       // Next entity should throw
       assert.throws(() => {
         createEntity(world);
-      }, RangeError);
+      }, LimitExceeded);
     });
   });
 

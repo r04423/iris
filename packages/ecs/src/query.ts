@@ -1,4 +1,5 @@
 import type { EntityId } from "./encoding.js";
+import { assert, InvalidArgument } from "./error.js";
 import type { FilterMeta } from "./filters.js";
 import { ensureFilter, iterateFilterEntities } from "./filters.js";
 import type { Observer } from "./observer.js";
@@ -148,7 +149,7 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
  * @param world - World instance
  * @param terms - Components and modifiers
  * @returns Query metadata
- * @throws {Error} If no included components (query must match something)
+ * @throws {InvalidArgument} If no included components (query must match something)
  *
  * @example
  * const query = ensureQuery(world, Position, Velocity, not(Dead));
@@ -181,9 +182,7 @@ export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]
   // Filter must include added/changed components since they must be present on entity
   const filterInclude = include.concat(added, changed);
 
-  if (filterInclude.length === 0) {
-    throw new Error("Query must include at least one component");
-  }
+  assert(filterInclude.length > 0, InvalidArgument, { expected: "at least one component in query" });
 
   const queryId = hashQuery(include, exclude, added, changed);
 

@@ -17,6 +17,7 @@ import {
   TAG_TYPE,
 } from "./encoding.js";
 import { destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { InvalidState } from "./error.js";
 import { OnDeleteTarget, Wildcard } from "./registry.js";
 import type { World } from "./world.js";
 
@@ -91,7 +92,7 @@ export function getPairTarget(world: World, pairId: Pair): RelationTargetId {
     }
 
     default:
-      throw new Error(`Invalid target type in pair: ${targetType}`);
+      throw new InvalidState({ message: `Invalid target type in pair: ${targetType}` });
   }
 }
 

@@ -4,6 +4,7 @@ import { createAndRegisterArchetype } from "./archetype.js";
 import { addComponent, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
+import { InvalidArgument, InvalidState } from "./error.js";
 import { hashFilterTerms } from "./filters.js";
 import {
   added,
@@ -272,7 +273,7 @@ describe("Query", () => {
       // Raw number without type bits is invalid
       assert.throws(() => {
         [...fetchEntities(world, 999 as EntityId)];
-      }, /Invalid entity type/);
+      }, InvalidState);
     });
   });
 
@@ -556,7 +557,7 @@ describe("Query", () => {
     it("throws when query has no components", () => {
       const world = createWorld();
 
-      assert.throws(() => ensureQuery(world), /must include at least one component/);
+      assert.throws(() => ensureQuery(world), InvalidArgument);
     });
   });
 

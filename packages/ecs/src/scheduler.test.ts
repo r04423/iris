@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
 import {
   addSystem,
   defineSchedule,
@@ -81,28 +82,28 @@ describe("Scheduler", () => {
   });
 
   describe("Registration Validation", () => {
-    it("throws TypeError for anonymous functions", () => {
+    it("throws InvalidArgument for anonymous functions", () => {
       const world = createWorld();
 
-      assert.throws(() => addSystem(world, () => {}), TypeError);
+      assert.throws(() => addSystem(world, () => {}), InvalidArgument);
     });
 
-    it("throws TypeError for anonymous function expression", () => {
+    it("throws InvalidArgument for anonymous function expression", () => {
       const world = createWorld();
 
       // biome-ignore lint/complexity/useArrowFunction: testing anonymous function expression specifically
       const anonymous = function () {};
 
-      assert.throws(() => addSystem(world, anonymous), TypeError);
+      assert.throws(() => addSystem(world, anonymous), InvalidArgument);
     });
 
-    it("throws Error for duplicate system name", () => {
+    it("throws Duplicate for duplicate system name", () => {
       const world = createWorld();
 
       function physicsSystem() {}
       addSystem(world, physicsSystem);
 
-      assert.throws(() => addSystem(world, physicsSystem), /already registered/i);
+      assert.throws(() => addSystem(world, physicsSystem), Duplicate);
     });
   });
 
@@ -209,19 +210,19 @@ describe("Scheduler", () => {
       addSystem(world, a, { before: "b" });
       addSystem(world, b, { before: "a" });
 
-      await assert.rejects(runOnce(world), /circular/i);
+      await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
     });
 
     it("throws on unknown system reference in before or after", async () => {
       const world1 = createWorld();
       function system1() {}
       addSystem(world1, system1, { after: "nonexistent" });
-      await assert.rejects(runOnce(world1), /unknown.*nonexistent/i);
+      await assert.rejects(runOnce(world1), (err) => err instanceof NotFound);
 
       const world2 = createWorld();
       function system2() {}
       addSystem(world2, system2, { before: "nonexistent" });
-      await assert.rejects(runOnce(world2), /unknown.*nonexistent/i);
+      await assert.rejects(runOnce(world2), (err) => err instanceof NotFound);
     });
   });
 
@@ -441,12 +442,12 @@ describe("Scheduler", () => {
       const Unknown = defineSchedule("Unknown");
 
       // Unknown anchor
-      assert.throws(() => insertScheduleBefore(world, Physics, Unknown), /not found/i);
-      assert.throws(() => insertScheduleAfter(world, Physics, Unknown), /not found/i);
+      assert.throws(() => insertScheduleBefore(world, Physics, Unknown), NotFound);
+      assert.throws(() => insertScheduleAfter(world, Physics, Unknown), NotFound);
 
       // Duplicate schedule
-      assert.throws(() => insertScheduleBefore(world, First, Update), /already in pipeline/i);
-      assert.throws(() => insertScheduleAfter(world, First, Update), /already in pipeline/i);
+      assert.throws(() => insertScheduleBefore(world, First, Update), Duplicate);
+      assert.throws(() => insertScheduleAfter(world, First, Update), Duplicate);
     });
 
     it("marks pipeline dirty on insert", async () => {

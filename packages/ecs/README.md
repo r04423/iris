@@ -468,7 +468,7 @@ Without constraints, systems run in registration order. Use arrays for multiple 
 Systems are grouped into **schedules** -- named execution phases. The default pipeline runs these schedules every frame:
 
 ```
-First → PreUpdate → Update → PostUpdate → Last
+First -> PreUpdate -> Update -> PostUpdate -> Last
 ```
 
 `Update` is the default schedule. Assign systems to other phases based on when they should run:
@@ -511,7 +511,7 @@ const Physics = defineSchedule("Physics");
 insertScheduleAfter(world, Physics, PreUpdate);
 addSystem(world, gravitySystem, { schedule: Physics });
 
-// Pipeline is now: First → PreUpdate → Physics → Update → PostUpdate → Last
+// Pipeline is now: First -> PreUpdate -> Physics -> Update -> PostUpdate -> Last
 ```
 
 #### Running the World
