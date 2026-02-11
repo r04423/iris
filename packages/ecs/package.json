@@ -2,7 +2,7 @@
   "name": "iris-ecs",
   "version": "0.0.3",
   "type": "module",
-  "description": "High-performance TypeScript Entity Component System",
+  "description": "Entity Component System implementation for TypeScript",
   "author": "Yury Tomilin (https://github.com/r04423)",
   "homepage": "https://github.com/r04423/iris#readme",
   "bugs": "https://github.com/r04423/iris/issues",

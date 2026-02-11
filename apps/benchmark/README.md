@@ -112,7 +112,7 @@ export const iris: LibraryAdapter = {
 >
 > Fixed 8,192 iterations per benchmark. `ops/frame` = operations per 16.67 ms frame at 60 fps.
 
-### Entity — Create Throughput
+### Entity Create
 
 Latency — avg (P99):
 
@@ -132,7 +132,7 @@ ops/sec (ops/frame):
 | create entity + 4 comps | 1,166,906 (19,448) | 1,160,476 (19,341) | 1,226,342 (20,439) | 1,088,281 (18,138) |
 | create entity + 8 comps | 617,548 (10,292) | 569,439 (9,491) | 645,177 (10,753) | 604,980 (10,083) |
 
-### Entity — Destroy Throughput
+### Entity Destroy
 
 Latency — avg (P99):
 
@@ -152,31 +152,60 @@ ops/sec (ops/frame):
 | destroy entity + 4 comps | 1,992,211 (33,204) | 2,455,855 (40,931) | 2,224,358 (37,073) |
 | destroy entity + 8 comps | 2,008,232 (33,471) | 1,974,681 (32,911) | 1,660,589 (27,676) |
 
-### Entity — Create Memory
+### Component Add
 
-Per-operation retained memory delta (heap + external). 2,048 iterations, median of 8 samples.
-
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| create empty entity | +213 B | +208 B | +169 B | +96 B |
-| create entity + 2 comps | +231 B | +222 B | +185 B | +115 B |
-| create entity + 4 comps | +243 B | +244 B | +201 B | +131 B |
-| create entity + 8 comps | +261 B | +256 B | +219 B | +149 B |
-
-Total heap after 2,048 creates:
+Latency — avg (P99):
 
 | Benchmark | empty | xsmall | small | medium |
 |-----------|------:|-------:|------:|-------:|
-| create empty entity | 9.4 MB | 10.9 MB | 21.8 MB | 128.1 MB |
-| create entity + 2 comps | 9.6 MB | 11.1 MB | 22.0 MB | 128.2 MB |
-| create entity + 4 comps | 9.8 MB | 11.3 MB | 22.1 MB | 128.4 MB |
-| create entity + 8 comps | 10.0 MB | 11.4 MB | 22.3 MB | 128.5 MB |
+| add comp to empty entity | 243 ns (708 ns) | 165 ns (250 ns) | 167 ns (250 ns) | 193 ns (333 ns) |
+| add comp to 2-comp entity | 326 ns (921 ns) | 281 ns (541 ns) | 280 ns (417 ns) | 327 ns (583 ns) |
+| add comp to 4-comp entity | 351 ns (542 ns) | 371 ns (625 ns) | 343 ns (500 ns) | 442 ns (1.12 us) |
+| add comp to 8-comp entity | 462 ns (671 ns) | 829 ns (1.67 us) | 475 ns (625 ns) | 506 ns (750 ns) |
 
-### Entity — Destroy Memory
+ops/sec (ops/frame):
+
+| Benchmark | empty | xsmall | small | medium |
+|-----------|------:|-------:|------:|-------:|
+| add comp to empty entity | 4,108,043 (68,467) | 6,075,921 (101,265) | 6,004,434 (100,074) | 5,191,082 (86,518) |
+| add comp to 2-comp entity | 3,064,263 (51,071) | 3,561,849 (59,364) | 3,570,876 (59,515) | 3,056,861 (50,948) |
+| add comp to 4-comp entity | 2,847,137 (47,452) | 2,697,870 (44,965) | 2,917,839 (48,631) | 2,263,995 (37,733) |
+| add comp to 8-comp entity | 2,164,791 (36,080) | 1,205,890 (20,098) | 2,103,689 (35,061) | 1,975,151 (32,919) |
+
+### Component Remove
+
+Latency — avg (P99):
 
 | Benchmark | xsmall | small | medium |
 |-----------|-------:|------:|-------:|
-| destroy empty entity | -77 B | -77 B | -77 B |
-| destroy entity + 2 comps | -166 B | -166 B | -166 B |
-| destroy entity + 4 comps | -255 B | -255 B | -255 B |
-| destroy entity + 8 comps | -303 B | -303 B | -303 B |
+| remove comp from 1-comp entity | 167 ns (334 ns) | 140 ns (250 ns) | 142 ns (625 ns) |
+| remove comp from 3-comp entity | 251 ns (459 ns) | 233 ns (500 ns) | 511 ns (1.25 us) |
+| remove comp from 5-comp entity | 348 ns (583 ns) | 327 ns (671 ns) | 1.17 us (2.37 us) |
+| remove comp from 8-comp entity | 423 ns (667 ns) | 443 ns (792 ns) | 429 ns (666 ns) |
+
+ops/sec (ops/frame):
+
+| Benchmark | xsmall | small | medium |
+|-----------|-------:|------:|-------:|
+| remove comp from 1-comp entity | 5,977,830 (99,630) | 7,130,963 (118,849) | 7,030,402 (117,173) |
+| remove comp from 3-comp entity | 3,976,359 (66,273) | 4,288,372 (71,473) | 1,957,758 (32,629) |
+| remove comp from 5-comp entity | 2,872,312 (47,872) | 3,062,366 (51,039) | 855,786 (14,263) |
+| remove comp from 8-comp entity | 2,366,083 (39,435) | 2,255,601 (37,593) | 2,332,961 (38,883) |
+
+### Component Access
+
+Latency — avg (P99):
+
+| Benchmark | empty | xsmall | small | medium |
+|-----------|------:|-------:|------:|-------:|
+| hasComponent | 29 ns (42 ns) | 29 ns (42 ns) | 25 ns (42 ns) | 29 ns (42 ns) |
+| getComponentValue | 37 ns (83 ns) | 38 ns (42 ns) | 30 ns (42 ns) | 54 ns (84 ns) |
+| setComponentValue | 80 ns (125 ns) | 86 ns (125 ns) | 74 ns (84 ns) | 83 ns (125 ns) |
+
+ops/sec (ops/frame):
+
+| Benchmark | empty | xsmall | small | medium |
+|-----------|------:|-------:|------:|-------:|
+| hasComponent | 34,738,949 (578,982) | 34,816,313 (580,272) | 39,947,530 (665,792) | 34,360,110 (572,669) |
+| getComponentValue | 27,034,876 (450,581) | 26,432,713 (440,545) | 33,542,702 (559,045) | 18,534,943 (308,916) |
+| setComponentValue | 12,481,013 (208,017) | 11,617,699 (193,628) | 13,526,254 (225,438) | 12,100,247 (201,671) |
