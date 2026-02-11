@@ -114,6 +114,8 @@ export const iris: LibraryAdapter = {
 
 ### Entity Create
 
+`createEntity` + `addComponent` for each component in the set.
+
 Latency — avg (P99):
 
 | Benchmark | empty | xsmall | small | medium |
@@ -133,6 +135,8 @@ ops/sec (ops/frame):
 | create entity + 8 comps | 617,548 (10,292) | 569,439 (9,491) | 645,177 (10,753) | 604,980 (10,083) |
 
 ### Entity Destroy
+
+`destroyEntity` on pre-created entities consumed from a pool (10,000 per benchmark).
 
 Latency — avg (P99):
 
@@ -154,6 +158,8 @@ ops/sec (ops/frame):
 
 ### Component Add
 
+`addComponent(Damage)` to entities with varying existing component counts, consumed from a homogeneous pool (10,000 per benchmark). All pool entities share the same archetype, so the transition edge is cached after warmup.
+
 Latency — avg (P99):
 
 | Benchmark | empty | xsmall | small | medium |
@@ -174,6 +180,8 @@ ops/sec (ops/frame):
 
 ### Component Remove
 
+`removeComponent(Damage)` from entities with varying base component sets, consumed from a pool (10,000 per benchmark). Same cached-edge methodology as Component Add. The N-comp label reflects total components before removal.
+
 Latency — avg (P99):
 
 | Benchmark | xsmall | small | medium |
@@ -193,6 +201,8 @@ ops/sec (ops/frame):
 | remove comp from 8-comp entity | 2,366,083 (39,435) | 2,255,601 (37,593) | 2,332,961 (38,883) |
 
 ### Component Access
+
+`hasComponent`, `getComponentValue`, and `setComponentValue` on a single persistent entity (Position + Player). Same entity each iteration -- operations are idempotent.
 
 Latency — avg (P99):
 
