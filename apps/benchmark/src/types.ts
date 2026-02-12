@@ -21,8 +21,19 @@ export type Suite = {
 
 export type MemoryResult = {
   label: string;
-  deltaPerOp: number;
-  totalDelta: number;
-  totalMemory: number;
+  /** Mean of positive per-iteration deltas (average bytes allocated per op). */
+  allocPerOp: number;
+  /** Minimum positive per-iteration delta. */
+  allocMin: number;
+  /** Maximum positive per-iteration delta. */
+  allocMax: number;
+  /** 99th percentile of positive per-iteration deltas. */
+  allocP99: number;
+  /** Number of iterations where GC fired (negative delta). */
+  gcCycles: number;
+  /** Net retained delta after final GC (leak indicator). */
+  retained: number;
+  /** Positive deltas sorted ascending, for histogram rendering. */
+  posDeltas: number[];
   iterations: number;
 };

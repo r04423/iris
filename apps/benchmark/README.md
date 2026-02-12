@@ -10,7 +10,15 @@ The harness supports two measurement modes:
 
 **Throughput** (default) runs each benchmark for a fixed number of iterations and reports `ops/sec`, `avg`, `P75`, and `P99` latency. Query benchmarks additionally report `ent/sec` and `ent/frame` (entity throughput scaled by matching entity count).
 
-**Memory** measures heap impact by taking GC-fenced snapshots before and after a batch of iterations. Heap measurements are inherently noisy, so the harness runs multiple independent samples per benchmark and reports the median.
+**Memory** (`--memory`) samples heap before/after each iteration to measure allocation rate, then runs a second GC-fenced pass to measure retention. Multiple independent samples per benchmark, median reported.
+
+| Metric | Description |
+|--------|-------------|
+| `alloc/op` | Average bytes allocated per operation (positive deltas only) |
+| `min` | Smallest single-operation allocation |
+| `max` | Largest single-operation allocation (resize spikes show up here) |
+| `retained` | Net delta after GC, per operation (leak indicator) |
+| `distribution` | Allocation size histogram: `▁▂▃▄▅▆▇█` |
 
 ## Methodology
 
@@ -131,6 +139,15 @@ ops/sec (ops/frame):
 | create entity + 4 types | 1,213,698 (20,228) | 1,269,391 (21,157) | 1,228,755 (20,479) | 794,248 (13,237) | 1,091,900 (18,198) |
 | create entity + 8 types | 471,536 (7,859) | 479,734 (7,996) | 490,565 (8,176) | 495,030 (8,250) | 446,971 (7,450) |
 
+alloc/op (retained):
+
+| Benchmark | empty | small | medium | large |
+|-----------|------:|------:|-------:|------:|
+| create empty entity | 508 B (+209 B) | 149 B (+209 B) | 248 B (+86 B) | 101 B (+94 B) |
+| create entity + 2 types | 707 B (+246 B) | 475 B (+245 B) | 435 B (+303 B) | 282 B (-135 B) |
+| create entity + 4 types | 630 B (+312 B) | 476 B (+318 B) | 491 B (+148 B) | 336 B (+110 B) |
+| create entity + 8 types | 1.0 KB (+371 B) | 839 B (+373 B) | 744 B (+382 B) | 576 B (+90 B) |
+
 ### Entity Destroy
 
 Destroy pre-created entities consumed from a pool (10,240 per benchmark). Each entity has a randomized template-based composition.
@@ -152,6 +169,15 @@ ops/sec (ops/frame):
 | destroy entity + 2 types | 2,995,123 (49,919) | 3,166,273 (52,771) | 3,328,080 (55,468) | 2,796,039 (46,601) |
 | destroy entity + 4 types | 2,467,698 (41,128) | 2,271,668 (37,861) | 2,654,502 (44,242) | 2,163,158 (36,053) |
 | destroy entity + 8 types | 1,732,519 (28,875) | 1,741,067 (29,018) | 1,940,508 (32,342) | 1,725,193 (28,753) |
+
+alloc/op (retained):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| destroy empty entity | 318 B (-79 B) | 285 B (-82 B) | 262 B (-81 B) | 262 B (-82 B) |
+| destroy entity + 2 types | 557 B (+82 B) | 637 B (+72 B) | 649 B (+73 B) | 637 B (+73 B) |
+| destroy entity + 4 types | 892 B (+255 B) | 1.0 KB (+233 B) | 977 B (+238 B) | 945 B (+227 B) |
+| destroy entity + 8 types | 1.6 KB (+566 B) | 1.8 KB (+558 B) | 1.7 KB (+566 B) | 1.8 KB (+571 B) |
 
 ### Component Add
 
@@ -175,6 +201,15 @@ ops/sec (ops/frame):
 | add comp to 4-type entity | 2,436,664 (40,611) | 2,393,806 (39,897) | 2,400,161 (40,003) | 2,204,465 (36,741) | 2,066,493 (34,442) |
 | add comp to 8-type entity | 1,634,189 (27,236) | 1,633,377 (27,223) | 1,582,388 (26,373) | 1,501,550 (25,026) | 1,474,131 (24,569) |
 
+alloc/op (retained):
+
+| Benchmark | empty | small | medium | large |
+|-----------|------:|------:|-------:|------:|
+| add comp to empty entity | 230 B (+94 B) | 195 B (+94 B) | 118 B (+94 B) | 102 B (+94 B) |
+| add comp to 2-type entity | 237 B (+102 B) | 240 B (+102 B) | 239 B (+102 B) | 239 B (+102 B) |
+| add comp to 4-type entity | 358 B (+204 B) | 362 B (+204 B) | 363 B (+205 B) | 361 B (+204 B) |
+| add comp to 8-type entity | 584 B (+259 B) | 589 B (+259 B) | 591 B (+259 B) | 591 B (+259 B) |
+
 ### Component Remove
 
 Remove a randomized type from each template. Entities consumed from a pool (10,240 per benchmark).
@@ -195,6 +230,14 @@ ops/sec (ops/frame):
 | remove comp from 4-type entity | 2,851,732 (47,529) | 3,078,918 (51,315) | 2,913,315 (48,555) | 2,855,383 (47,590) |
 | remove comp from 8-type entity | 1,773,105 (29,552) | 1,840,647 (30,677) | 1,678,070 (27,968) | 1,551,654 (25,861) |
 
+alloc/op (retained):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| remove comp from 2-type entity | 313 B (+110 B) | 255 B (+110 B) | 256 B (+110 B) | 256 B (+110 B) |
+| remove comp from 4-type entity | 290 B (+172 B) | 252 B (+172 B) | 294 B (+172 B) | 249 B (+172 B) |
+| remove comp from 8-type entity | 574 B (+198 B) | 537 B (+198 B) | 589 B (+198 B) | 542 B (+198 B) |
+
 ### Component Access
 
 Has, get, and set operations on a pool of entities with group 4 templates (4 types each). Each iteration targets a randomized entity with a randomized target component, cycling through the pool.
@@ -214,6 +257,14 @@ ops/sec (ops/frame):
 | hasComponent | 14,572,338 (242,872) | 14,987,769 (249,796) | 14,221,654 (237,028) | 20,553,015 (342,550) | 21,747,845 (362,464) |
 | getComponentValue | 14,370,568 (239,509) | 14,509,310 (241,822) | 14,024,636 (233,744) | 16,151,674 (269,195) | 16,388,490 (273,142) |
 | setComponentValue | 9,820,587 (163,676) | 8,805,298 (146,755) | 8,718,696 (145,312) | 9,710,476 (161,841) | 9,463,682 (157,728) |
+
+alloc/op (retained):
+
+| Benchmark | empty | small | medium | large |
+|-----------|------:|------:|-------:|------:|
+| hasComponent | 144 B (+0 B) | 0 B (+0 B) | 0 B (+0 B) | 0 B (+0 B) |
+| getComponentValue | 144 B (+0 B) | 0 B (+0 B) | 0 B (+0 B) | 0 B (+0 B) |
+| setComponentValue | 208 B (+0 B) | 64 B (+0 B) | 64 B (+0 B) | 64 B (+0 B) |
 
 ### Query Iteration
 
@@ -242,3 +293,11 @@ ent/sec (ent/frame):
 | iter all | 36.6 M (610,243) | 39.8 M (662,784) | 40.4 M (674,053) | 39.7 M (661,162) |
 | iter selective | 33.7 M (561,079) | 40.6 M (675,918) | 41.5 M (692,440) | 41.6 M (693,300) |
 | iter narrow | -- | 30.3 M (504,531) | 40.3 M (670,965) | 40.5 M (674,913) |
+
+alloc/op (retained):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| iter all | 4.6 KB (+0 B) | 39.8 KB (-8 B) | 391.4 KB (-9 B) | 3.8 MB (-0 B) |
+| iter selective | 2.6 KB (-8 B) | 18.0 KB (-8 B) | 170.1 KB (-8 B) | 1.7 MB (-0 B) |
+| iter narrow | -- | 2.5 KB (-8 B) | 20.2 KB (-0 B) | 284.0 KB (-0 B) |

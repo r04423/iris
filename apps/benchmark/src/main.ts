@@ -90,7 +90,7 @@ function groupBenchmarksByPreset(benchmarks: BenchmarkDef[]): Map<PresetName, Be
 }
 
 function pickMedianMemoryResult(samples: MemoryResult[]): MemoryResult {
-  const sorted = [...samples].sort((a, b) => a.deltaPerOp - b.deltaPerOp);
+  const sorted = [...samples].sort((a, b) => a.allocPerOp - b.allocPerOp);
   return sorted[Math.floor(sorted.length / 2)]!;
 }
 

@@ -54,7 +54,7 @@ function nsFromMs(ms: number): number {
 // Box-drawing table
 // ============================================================================
 
-function drawTable(headers: string[], rows: string[][], colWidths: number[]): string {
+function drawTable(headers: string[], rows: string[][], colWidths: number[], leftAlignCols?: Set<number>): string {
   const top = `┌${colWidths.map((w) => "─".repeat(w + 2)).join("┬")}┐`;
   const mid = `├${colWidths.map((w) => "─".repeat(w + 2)).join("┼")}┤`;
   const bot = `└${colWidths.map((w) => "─".repeat(w + 2)).join("┴")}┘`;
@@ -66,8 +66,9 @@ function drawTable(headers: string[], rows: string[][], colWidths: number[]): st
       "│" +
       row
         .map((cell, i) => {
-          // Right-align numeric columns (all except first)
-          return i === 0 ? ` ${padRight(cell, colWidths[i]!)} ` : ` ${padLeft(cell, colWidths[i]!)} `;
+          // Left-align first column and any explicitly marked columns
+          const left = i === 0 || leftAlignCols?.has(i);
+          return left ? ` ${padRight(cell, colWidths[i]!)} ` : ` ${padLeft(cell, colWidths[i]!)} `;
         })
         .join("│") +
       "│"
@@ -139,6 +140,54 @@ export function printThroughputReport(
 }
 
 // ============================================================================
+// ASCII histogram
+// ============================================================================
+
+const HIST_BLOCKS = " ▁▂▃▄▅▆▇█";
+const HIST_WIDTH = 20;
+
+/**
+ * Render an ASCII histogram from sorted positive deltas.
+ * Uses ~20 character-width bins with Unicode block characters.
+ * Range is capped at P99 so extreme outliers don't flatten the distribution
+ * (the min/max columns show the full range). Returns empty string if no data.
+ */
+function renderHistogram(posDeltas: number[]): string {
+  if (posDeltas.length === 0) return "";
+
+  const min = posDeltas[0]!;
+
+  // Cap range at P99 to keep distribution visible
+  const p99Idx = Math.min(Math.ceil(posDeltas.length * 0.99) - 1, posDeltas.length - 1);
+  const cap = posDeltas[p99Idx]!;
+
+  if (min === cap) {
+    return HIST_BLOCKS[8]!.repeat(Math.min(posDeltas.length, HIST_WIDTH));
+  }
+
+  const bins = new Array<number>(HIST_WIDTH).fill(0);
+  const range = cap - min;
+
+  for (let i = 0; i < posDeltas.length; i++) {
+    const binIdx = Math.min(Math.floor(((posDeltas[i]! - min) / range) * HIST_WIDTH), HIST_WIDTH - 1);
+    bins[binIdx] = bins[binIdx]! + 1;
+  }
+
+  let maxCount = 0;
+  for (let i = 0; i < bins.length; i++) {
+    if (bins[i]! > maxCount) maxCount = bins[i]!;
+  }
+
+  let result = "";
+  for (let i = 0; i < bins.length; i++) {
+    const level = maxCount > 0 ? Math.round((bins[i]! / maxCount) * 8) : 0;
+    result += HIST_BLOCKS[level]!;
+  }
+
+  return result.replace(/ +$/, "");
+}
+
+// ============================================================================
 // Memory report
 // ============================================================================
 
@@ -148,12 +197,19 @@ export function printMemoryReport(
   results: MemoryResult[],
   libName: string
 ): void {
-  const headers = ["Benchmark", "delta/op", "total delta", "total mem"];
+  const headers = ["Benchmark", "alloc/op", "min", "max", "retained", "distribution"];
   const rows: string[][] = [];
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i]!;
-    rows.push([r.label, formatDelta(r.deltaPerOp), formatDelta(r.totalDelta), formatBytes(r.totalMemory)]);
+    rows.push([
+      r.label,
+      formatBytes(r.allocPerOp),
+      formatBytes(r.allocMin),
+      formatBytes(r.allocMax),
+      formatDelta(r.retained),
+      renderHistogram(r.posDeltas),
+    ]);
   }
 
   const colWidths = headers.map((h, i) => {
@@ -164,6 +220,8 @@ export function printMemoryReport(
     return max;
   });
 
+  const distCol = headers.indexOf("distribution");
+
   console.log(`\n${suiteName} — ${presetName} world (${libName}, memory)`);
-  console.log(drawTable(headers, rows, colWidths));
+  console.log(drawTable(headers, rows, colWidths, new Set([distCol])));
 }
