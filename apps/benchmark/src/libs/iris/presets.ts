@@ -1,5 +1,4 @@
 import {
-  addComponent,
   type Component,
   createEntity,
   createWorld,
@@ -11,93 +10,55 @@ import {
 } from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
 import {
-  Active,
-  Damage,
-  Enemy,
-  generateComponents,
-  generateTags,
-  Health,
-  Player,
-  Position,
-  Velocity,
-  Visible,
-} from "./fixtures.js";
+  ALL_POOL_COMPONENTS,
+  ALL_POOL_TAGS,
+  addEntityTypes,
+  GROUP_2,
+  GROUP_4,
+  GROUP_8,
+  generateTemplatePool,
+  type TemplateGroup,
+} from "./pool.js";
+import { splitmix32 } from "./rng.js";
 
-// ---------------------------------------------------------------------------
-// Deterministic PRNG — splitmix32
-// ---------------------------------------------------------------------------
-
-/** Seeded RNG so preset population is reproducible across runs. */
-function splitmix32(seed: number): () => number {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x9e3779b9) | 0;
-    let t = seed ^ (seed >>> 16);
-    t = Math.imul(t, 0x21f0aaad);
-    t = t ^ (t >>> 15);
-    t = Math.imul(t, 0x735a2d97);
-    t = t ^ (t >>> 15);
-    return (t >>> 0) / 0xffffffff;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Data factories for named fixture components
-// ---------------------------------------------------------------------------
-
-type DataFactory = (rng: () => number) => Record<string, number>;
-
-const fixtureDataFactories = new Map<EntityId, DataFactory>([
-  [Position, (rng) => ({ x: rng(), y: rng() })],
-  [Velocity, (rng) => ({ vx: rng(), vy: rng() })],
-  [Health, (rng) => ({ hp: Math.floor(rng() * 100) })],
-  [Damage, (rng) => ({ amount: Math.floor(rng() * 50) })],
-]);
-
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Population helpers
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 /**
- * Assigns each entity a semi-random subset of registered types so the world
- * contains multiple archetypes — realistic fragmentation rather than one
- * monolithic archetype with every entity sharing the same component set.
+ * Populates the world with entities drawn from template groups using
+ * power-law weighted cycles. Each group receives a percentage of the
+ * total entity count, and within each group entities follow the
+ * template weight distribution.
+ *
+ * When `modifierRate` is provided, a fraction of entities receive
+ * 1-3 random modifier types, creating a long tail of variant
+ * archetypes beyond the 14 base templates.
  */
-function populateEntities(
+function populateFromTemplates(
   world: World,
   count: number,
-  components: Component[],
-  tags: Tag[],
-  seed: number,
-  dataFactories?: Map<EntityId, DataFactory>
+  distribution: { group: TemplateGroup; share: number }[],
+  modifierRate?: number
 ): void {
-  const rng = splitmix32(seed);
-  const allTypes: EntityId[] = [...components, ...tags];
-  const componentSet = new Set<EntityId>(components);
-
-  for (let i = 0; i < count; i++) {
-    const entity = createEntity(world);
-    const typeCount = 2 + Math.floor(rng() * 9);
-    for (let j = 0; j < typeCount; j++) {
-      const typeIdx = Math.floor(rng() * allTypes.length);
-      const type = allTypes[typeIdx]!;
-      if (componentSet.has(type)) {
-        const factory = dataFactories?.get(type);
-        const data = factory ? factory(rng) : { v: rng() };
-        // biome-ignore lint/suspicious/noExplicitAny: mixed component schemas
-        addComponent(world, entity, type as any, data);
-      } else {
-        addComponent(world, entity, type as Tag);
-      }
+  for (const { group, share } of distribution) {
+    const groupCount = Math.round(count * share);
+    const assignments = generateTemplatePool(groupCount, group, {
+      seed: 789,
+      modifiers: modifierRate != null ? { rate: modifierRate, seed: 456 } : undefined,
+    });
+    for (let i = 0; i < groupCount; i++) {
+      const entity = createEntity(world);
+      addEntityTypes(world, entity, assignments[i]!);
     }
   }
 }
 
 /**
  * Pre-executes randomized queries to populate the internal query cache and
- * archetype matching structures. This simulates a world where multiple systems
- * have already registered diverse queries — benchmarks then run against
- * realistic cache pressure rather than an empty query index.
+ * archetype matching structures. Populates query caches as if multiple systems
+ * had registered diverse queries. Benchmarks then run against
+ * cache pressure rather than an empty query index.
  */
 function activateQueries(world: World, count: number, components: Component[], tags: Tag[], seed: number): void {
   const rng = splitmix32(seed);
@@ -127,36 +88,18 @@ function activateQueries(world: World, count: number, components: Component[], t
   }
 }
 
-// ---------------------------------------------------------------------------
-// Pre-generated component/tag registrations
-// ---------------------------------------------------------------------------
-
-/**
- * Component and tag definitions are global singletons in iris-ecs. Generating
- * them inside each factory call would exhaust the ID space after a few worlds.
- * We register them once at module load and reuse across all presets.
- */
-const fixtureComponents: Component[] = [Position, Velocity, Health, Damage];
-const fixtureTags: Tag[] = [Player, Enemy, Active, Visible];
-
-const xsmallComponents = [...generateComponents(20), ...fixtureComponents];
-const xsmallTags = [...generateTags(20), ...fixtureTags];
-const smallComponents = [...generateComponents(100), ...fixtureComponents];
-const smallTags = [...generateTags(100), ...fixtureTags];
-const mediumComponents = [...generateComponents(400), ...fixtureComponents];
-const mediumTags = [...generateTags(400), ...fixtureTags];
-
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Preset factories
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 /**
- * | Preset | Entities | Component types | Tag types | Queries |
- * |--------|----------|-----------------|-----------|---------|
- * | empty  | 0        | 0               | 0         | 0       |
- * | xsmall | 100      | 24              | 24        | 20      |
- * | small  | 1,000    | 104             | 104       | 100     |
- * | medium | 10,000   | 404             | 404       | 400     |
+ * | Preset | Entities | Group 2 | Group 4 | Group 8 | ~Archetypes | Queries |
+ * |--------|----------|---------|---------|---------|-------------|---------|
+ * | empty  | 0        | --      | --      | --      | 0           | 0       |
+ * | xsmall | 100      | 60%     | 30%     | 10%     | ~38         | 20      |
+ * | small  | 1,000    | 50%     | 35%     | 15%     | ~132        | 100     |
+ * | medium | 10,000   | 40%     | 40%     | 20%     | ~213        | 400     |
+ * | large  | 100,000  | 30%     | 40%     | 30%     | ~229        | 1,000   |
  */
 
 function createEmptyPreset(): World {
@@ -165,22 +108,65 @@ function createEmptyPreset(): World {
 
 function createXSmallPreset(): World {
   const world = createWorld();
-  populateEntities(world, 100, xsmallComponents, xsmallTags, 42, fixtureDataFactories);
-  activateQueries(world, 20, xsmallComponents, xsmallTags, 123);
+  populateFromTemplates(
+    world,
+    100,
+    [
+      { group: GROUP_2, share: 0.6 },
+      { group: GROUP_4, share: 0.3 },
+      { group: GROUP_8, share: 0.1 },
+    ],
+    0.1
+  );
+  activateQueries(world, 20, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
   return world;
 }
 
 function createSmallPreset(): World {
   const world = createWorld();
-  populateEntities(world, 1_000, smallComponents, smallTags, 42, fixtureDataFactories);
-  activateQueries(world, 100, smallComponents, smallTags, 123);
+  populateFromTemplates(
+    world,
+    1_000,
+    [
+      { group: GROUP_2, share: 0.5 },
+      { group: GROUP_4, share: 0.35 },
+      { group: GROUP_8, share: 0.15 },
+    ],
+    0.05
+  );
+  activateQueries(world, 100, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
   return world;
 }
 
 function createMediumPreset(): World {
   const world = createWorld();
-  populateEntities(world, 10_000, mediumComponents, mediumTags, 42, fixtureDataFactories);
-  activateQueries(world, 400, mediumComponents, mediumTags, 123);
+  populateFromTemplates(
+    world,
+    10_000,
+    [
+      { group: GROUP_2, share: 0.4 },
+      { group: GROUP_4, share: 0.4 },
+      { group: GROUP_8, share: 0.2 },
+    ],
+    0.012
+  );
+  activateQueries(world, 400, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
+  return world;
+}
+
+function createLargePreset(): World {
+  const world = createWorld();
+  populateFromTemplates(
+    world,
+    100_000,
+    [
+      { group: GROUP_2, share: 0.3 },
+      { group: GROUP_4, share: 0.4 },
+      { group: GROUP_8, share: 0.3 },
+    ],
+    0.002
+  );
+  activateQueries(world, 1_000, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
   return world;
 }
 
@@ -189,4 +175,5 @@ export const presets: Record<PresetName, PresetFactory> = {
   xsmall: createXSmallPreset,
   small: createSmallPreset,
   medium: createMediumPreset,
+  large: createLargePreset,
 };

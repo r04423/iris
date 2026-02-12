@@ -1,4 +1,4 @@
-export type PresetName = "empty" | "xsmall" | "small" | "medium";
+export type PresetName = "empty" | "xsmall" | "small" | "medium" | "large";
 
 // biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
 export type PresetFactory = () => any;
@@ -10,6 +10,8 @@ export type BenchmarkDef = {
   fn: (world: any) => void;
   // biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
   setup?: (world: any) => void;
+  /** Entity count per iteration for throughput scaling. Constant or per-preset. */
+  entityCount?: number | Partial<Record<PresetName, number>>;
 };
 
 export type Suite = {

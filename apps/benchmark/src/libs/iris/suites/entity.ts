@@ -1,76 +1,60 @@
-import { addComponent, createEntity, destroyEntity, type Entity, type World } from "iris-ecs";
+import { createEntity, destroyEntity, type Entity, type World } from "iris-ecs";
 import type { BenchmarkDef, PresetName } from "../../../types.js";
-import { Active, Enemy, Health, Player, Position, Velocity, Visible } from "../fixtures.js";
+import { addTemplateTypes, GROUPS, generateTemplatePool, POOL_SIZE, type TemplateAssignment } from "../pool.js";
 
-// ---------------------------------------------------------------------------
-// Component sets by size
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Presets
+// ============================================================================
 
-const componentSets = [
-  { label: "empty entity", components: [], tags: [] },
-  { label: "entity + 2 comps", components: [Position], tags: [Player] },
-  { label: "entity + 4 comps", components: [Position, Velocity], tags: [Player, Enemy] },
-  {
-    label: "entity + 8 comps",
-    components: [Position, Velocity, Health],
-    tags: [Player, Enemy, Active, Visible],
-  },
-] as const;
+const allPresets: PresetName[] = ["empty", "xsmall", "small", "medium", "large"];
+const destroyPresets: PresetName[] = ["xsmall", "small", "medium", "large"];
 
-type CompSet = {
-  label: string;
-  components: readonly (typeof Position | typeof Velocity | typeof Health)[];
-  tags: readonly (typeof Player | typeof Enemy | typeof Active | typeof Visible)[];
+// ============================================================================
+// World extensions for pool state
+// ============================================================================
+
+type CreatePoolWorld = World & {
+  __assignments: TemplateAssignment[];
+  __assignIdx: number;
 };
 
-// ---------------------------------------------------------------------------
-// Presets
-// ---------------------------------------------------------------------------
+type DestroyPoolWorld = World & {
+  __destroyPool: Entity[];
+  __destroyIdx: number;
+};
 
-const allPresets: PresetName[] = ["empty", "xsmall", "small", "medium"];
-const destroyPresets: PresetName[] = ["xsmall", "small", "medium"];
-
-// ---------------------------------------------------------------------------
-// Helper — populate entity with a component set
-// ---------------------------------------------------------------------------
-
-/**
- * addComponent requires typed data matching the component schema, so we
- * dispatch by identity rather than using a generic loop. This is only used
- * in setup/benchmark functions, not in a hot path.
- */
-function addComponentSet(world: World, e: Entity, set: CompSet): void {
-  for (let c = 0; c < set.components.length; c++) {
-    const comp = set.components[c]!;
-    if (comp === Position) {
-      addComponent(world, e, Position, { x: 0, y: 0 });
-    } else if (comp === Velocity) {
-      addComponent(world, e, Velocity, { vx: 0, vy: 0 });
-    } else {
-      addComponent(world, e, Health, { hp: 100 });
-    }
-  }
-  for (let t = 0; t < set.tags.length; t++) {
-    addComponent(world, e, set.tags[t]!);
-  }
-}
-
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Generate create benchmarks
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 function createBenchmarks(): BenchmarkDef[] {
   const defs: BenchmarkDef[] = [];
 
-  for (let s = 0; s < componentSets.length; s++) {
-    const set = componentSets[s] as CompSet;
+  // Create empty entity (no setup needed)
+  defs.push({
+    name: "create empty entity",
+    presets: allPresets,
+    fn(world: World) {
+      createEntity(world);
+    },
+  });
 
+  // Create entity + N types (template-based)
+  for (const group of GROUPS) {
     defs.push({
-      name: `create ${set.label}`,
+      name: `create entity + ${group.width} types`,
       presets: allPresets,
+      setup(world: World) {
+        const w = world as CreatePoolWorld;
+        w.__assignments = generateTemplatePool(POOL_SIZE, group, { seed: 789 });
+        w.__assignIdx = 0;
+      },
       fn(world: World) {
+        const w = world as CreatePoolWorld;
+        if (w.__assignIdx >= w.__assignments.length) return;
         const e = createEntity(world);
-        addComponentSet(world, e, set);
+        addTemplateTypes(world, e, w.__assignments[w.__assignIdx]!.template);
+        w.__assignIdx++;
       },
     });
   }
@@ -78,42 +62,55 @@ function createBenchmarks(): BenchmarkDef[] {
   return defs;
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Generate destroy benchmarks
-// ---------------------------------------------------------------------------
-
-/**
- * Destroy benchmarks pre-create a pool of entities in setup, then consume one
- * per iteration. The pool must be larger than warmupIterations + iterations
- * (currently 1,024 + 8,192 = 9,216) to avoid measuring no-ops on dead entities.
- */
-const DESTROY_POOL_SIZE = 10_000;
+// ============================================================================
 
 function destroyBenchmarks(): BenchmarkDef[] {
   const defs: BenchmarkDef[] = [];
 
-  for (let s = 0; s < componentSets.length; s++) {
-    const set = componentSets[s] as CompSet;
+  // Destroy empty entity
+  defs.push({
+    name: "destroy empty entity",
+    presets: destroyPresets,
+    setup(world: World) {
+      const pool: Entity[] = [];
+      for (let i = 0; i < POOL_SIZE; i++) {
+        pool.push(createEntity(world));
+      }
+      (world as DestroyPoolWorld).__destroyPool = pool;
+      (world as DestroyPoolWorld).__destroyIdx = 0;
+    },
+    fn(world: World) {
+      const w = world as DestroyPoolWorld;
+      if (w.__destroyIdx >= w.__destroyPool.length) return;
+      destroyEntity(world, w.__destroyPool[w.__destroyIdx]!);
+      w.__destroyIdx++;
+    },
+  });
+
+  // Destroy entity + N types (template-based)
+  for (const group of GROUPS) {
+    const assignments = generateTemplatePool(POOL_SIZE, group, { seed: 789 });
 
     defs.push({
-      name: `destroy ${set.label}`,
+      name: `destroy entity + ${group.width} types`,
       presets: destroyPresets,
       setup(world: World) {
         const pool: Entity[] = [];
-        for (let i = 0; i < DESTROY_POOL_SIZE; i++) {
+        for (let i = 0; i < POOL_SIZE; i++) {
           const e = createEntity(world);
-          addComponentSet(world, e, set);
+          addTemplateTypes(world, e, assignments[i]!.template);
           pool.push(e);
         }
-        (world as World & { __destroyPool: Entity[] }).__destroyPool = pool;
-        (world as World & { __destroyIdx: number }).__destroyIdx = 0;
+        (world as DestroyPoolWorld).__destroyPool = pool;
+        (world as DestroyPoolWorld).__destroyIdx = 0;
       },
       fn(world: World) {
-        const pool = (world as World & { __destroyPool: Entity[] }).__destroyPool;
-        const idx = (world as World & { __destroyIdx: number }).__destroyIdx;
-        if (idx >= pool.length) return;
-        destroyEntity(world, pool[idx]!);
-        (world as World & { __destroyIdx: number }).__destroyIdx = idx + 1;
+        const w = world as DestroyPoolWorld;
+        if (w.__destroyIdx >= w.__destroyPool.length) return;
+        destroyEntity(world, w.__destroyPool[w.__destroyIdx]!);
+        w.__destroyIdx++;
       },
     });
   }
@@ -121,9 +118,9 @@ function destroyBenchmarks(): BenchmarkDef[] {
   return defs;
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Suite export
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 export const suite = {
   name: "Entity",

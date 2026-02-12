@@ -1,7 +1,9 @@
 import {
   addComponent,
+  type Component,
   createEntity,
   type Entity,
+  type EntityId,
   getComponentValue,
   hasComponent,
   removeComponent,
@@ -9,91 +11,94 @@ import {
   type World,
 } from "iris-ecs";
 import type { BenchmarkDef, PresetName } from "../../../types.js";
-import { Active, Damage, Enemy, Health, Player, Position, Velocity, Visible } from "../fixtures.js";
+import { ADD_TARGET, addTemplateTypes, GROUPS, generateTemplatePool, POOL_SIZE } from "../pool.js";
 
-// ---------------------------------------------------------------------------
-// Component sets by size
-// ---------------------------------------------------------------------------
+// ============================================================================
+// Presets
+// ============================================================================
 
-const componentSets = [
-  { label: "empty entity", components: [], tags: [] },
-  { label: "2-comp entity", components: [Position], tags: [Player] },
-  { label: "4-comp entity", components: [Position, Velocity], tags: [Player, Enemy] },
-  {
-    label: "8-comp entity",
-    components: [Position, Velocity, Health],
-    tags: [Player, Enemy, Active, Visible],
-  },
-] as const;
+const allPresets: PresetName[] = ["empty", "xsmall", "small", "medium", "large"];
+const removePresets: PresetName[] = ["xsmall", "small", "medium", "large"];
 
-type CompSet = {
-  label: string;
-  components: readonly (typeof Position | typeof Velocity | typeof Health)[];
-  tags: readonly (typeof Player | typeof Enemy | typeof Active | typeof Visible)[];
+// ============================================================================
+// World extensions for pool state
+// ============================================================================
+
+type AddPoolWorld = World & {
+  __addPool: Entity[];
+  __addTargets: Component[];
+  __addIdx: number;
 };
 
-// ---------------------------------------------------------------------------
-// Presets
-// ---------------------------------------------------------------------------
+type RemovePoolWorld = World & {
+  __removePool: Entity[];
+  __removeTargets: EntityId[];
+  __removeIdx: number;
+};
 
-const allPresets: PresetName[] = ["empty", "xsmall", "small", "medium"];
-const removePresets: PresetName[] = ["xsmall", "small", "medium"];
+type AccessPoolWorld = World & {
+  __accessPool: Entity[];
+  __accessHasTargets: EntityId[];
+  __accessCompTargets: Component[];
+  __accessIdx: number;
+};
 
-// ---------------------------------------------------------------------------
-// Helper — populate entity with a component set
-// ---------------------------------------------------------------------------
-
-function addComponentSet(world: World, e: Entity, set: CompSet): void {
-  for (let c = 0; c < set.components.length; c++) {
-    const comp = set.components[c]!;
-    if (comp === Position) {
-      addComponent(world, e, Position, { x: 0, y: 0 });
-    } else if (comp === Velocity) {
-      addComponent(world, e, Velocity, { vx: 0, vy: 0 });
-    } else {
-      addComponent(world, e, Health, { hp: 100 });
-    }
-  }
-  for (let t = 0; t < set.tags.length; t++) {
-    addComponent(world, e, set.tags[t]!);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pool size
-// ---------------------------------------------------------------------------
-
-const POOL_SIZE = 10_000;
-
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Generate addComponent benchmarks
-// ---------------------------------------------------------------------------
-
-type AddPoolWorld = World & { __addPool: Entity[]; __addIdx: number };
+// ============================================================================
 
 function addComponentBenchmarks(): BenchmarkDef[] {
   const defs: BenchmarkDef[] = [];
 
-  for (let s = 0; s < componentSets.length; s++) {
-    const set = componentSets[s] as CompSet;
+  // Add comp to empty entity, constant ADD_TARGET (nothing template-specific to randomize)
+  defs.push({
+    name: "add comp to empty entity",
+    presets: allPresets,
+    setup(world: World) {
+      const pool: Entity[] = [];
+      for (let i = 0; i < POOL_SIZE; i++) {
+        pool.push(createEntity(world));
+      }
+      const w = world as AddPoolWorld;
+      w.__addPool = pool;
+      w.__addTargets = [];
+      w.__addIdx = 0;
+    },
+    fn(world: World) {
+      const w = world as AddPoolWorld;
+      if (w.__addIdx >= w.__addPool.length) return;
+      // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
+      addComponent(world, w.__addPool[w.__addIdx]!, ADD_TARGET as any, { v: 0 });
+      w.__addIdx++;
+    },
+  });
+
+  // Add comp to N-type entity (template-based, randomized add targets)
+  for (const group of GROUPS) {
+    const assignments = generateTemplatePool(POOL_SIZE, group, { seed: 789 });
 
     defs.push({
-      name: `add comp to ${set.label}`,
+      name: `add comp to ${group.width}-type entity`,
       presets: allPresets,
       setup(world: World) {
         const pool: Entity[] = [];
+        const targets: Component[] = [];
         for (let i = 0; i < POOL_SIZE; i++) {
           const e = createEntity(world);
-          addComponentSet(world, e, set);
+          addTemplateTypes(world, e, assignments[i]!.template);
           pool.push(e);
+          targets.push(assignments[i]!.addTarget);
         }
-        (world as AddPoolWorld).__addPool = pool;
-        (world as AddPoolWorld).__addIdx = 0;
+        const w = world as AddPoolWorld;
+        w.__addPool = pool;
+        w.__addTargets = targets;
+        w.__addIdx = 0;
       },
       fn(world: World) {
         const w = world as AddPoolWorld;
         if (w.__addIdx >= w.__addPool.length) return;
-        addComponent(world, w.__addPool[w.__addIdx]!, Damage, { amount: 10 });
+        // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
+        addComponent(world, w.__addPool[w.__addIdx]!, w.__addTargets[w.__addIdx]! as any, { v: 0 });
         w.__addIdx++;
       },
     });
@@ -102,37 +107,37 @@ function addComponentBenchmarks(): BenchmarkDef[] {
   return defs;
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Generate removeComponent benchmarks
-// ---------------------------------------------------------------------------
-
-type RemovePoolWorld = World & { __removePool: Entity[]; __removeIdx: number };
+// ============================================================================
 
 function removeComponentBenchmarks(): BenchmarkDef[] {
   const defs: BenchmarkDef[] = [];
 
-  for (let s = 0; s < componentSets.length; s++) {
-    const set = componentSets[s] as CompSet;
-    const totalBefore = set.components.length + set.tags.length + 1; // base + Damage
+  for (const group of GROUPS) {
+    const assignments = generateTemplatePool(POOL_SIZE, group, { seed: 789 });
 
     defs.push({
-      name: `remove comp from ${totalBefore}-comp entity`,
+      name: `remove comp from ${group.width}-type entity`,
       presets: removePresets,
       setup(world: World) {
         const pool: Entity[] = [];
+        const targets: EntityId[] = [];
         for (let i = 0; i < POOL_SIZE; i++) {
           const e = createEntity(world);
-          addComponentSet(world, e, set);
-          addComponent(world, e, Damage, { amount: 10 });
+          addTemplateTypes(world, e, assignments[i]!.template);
           pool.push(e);
+          targets.push(assignments[i]!.removeTarget);
         }
-        (world as RemovePoolWorld).__removePool = pool;
-        (world as RemovePoolWorld).__removeIdx = 0;
+        const w = world as RemovePoolWorld;
+        w.__removePool = pool;
+        w.__removeTargets = targets;
+        w.__removeIdx = 0;
       },
       fn(world: World) {
         const w = world as RemovePoolWorld;
         if (w.__removeIdx >= w.__removePool.length) return;
-        removeComponent(world, w.__removePool[w.__removeIdx]!, Damage);
+        removeComponent(world, w.__removePool[w.__removeIdx]!, w.__removeTargets[w.__removeIdx]!);
         w.__removeIdx++;
       },
     });
@@ -141,51 +146,83 @@ function removeComponentBenchmarks(): BenchmarkDef[] {
   return defs;
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Generate access benchmarks (has / get / set)
-// ---------------------------------------------------------------------------
+// ============================================================================
 
-type TargetWorld = World & { __target: Entity };
-
+/**
+ * Access benchmarks use group 4 templates (4 types). Group size doesn't
+ * affect access cost. Lookup is O(1) regardless
+ * of archetype width. 5 templates with power-law distribution provide
+ * archetype diversity.
+ *
+ * These benchmarks cycle through the pool (modular wrap) since they don't
+ * consume entities.
+ */
 function accessBenchmarks(): BenchmarkDef[] {
-  const setup = (world: World) => {
-    const e = createEntity(world);
-    addComponent(world, e, Position, { x: 0, y: 0 });
-    addComponent(world, e, Player);
-    (world as TargetWorld).__target = e;
-  };
+  const assignments = generateTemplatePool(POOL_SIZE, GROUPS[1]!, { seed: 789 });
+
+  function setupAccess(world: World): void {
+    const pool: Entity[] = [];
+    const hasTargets: EntityId[] = [];
+    const compTargets: Component[] = [];
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const a = assignments[i]!;
+      const e = createEntity(world);
+      addTemplateTypes(world, e, a.template);
+      pool.push(e);
+      hasTargets.push(a.hasTarget);
+      compTargets.push(a.componentTarget);
+    }
+    const w = world as AccessPoolWorld;
+    w.__accessPool = pool;
+    w.__accessHasTargets = hasTargets;
+    w.__accessCompTargets = compTargets;
+    w.__accessIdx = 0;
+  }
 
   return [
     {
       name: "hasComponent",
       presets: allPresets,
-      setup,
+      setup: setupAccess,
       fn(world: World) {
-        hasComponent(world, (world as TargetWorld).__target, Position);
+        const w = world as AccessPoolWorld;
+        const idx = w.__accessIdx % w.__accessPool.length;
+        hasComponent(world, w.__accessPool[idx]!, w.__accessHasTargets[idx]!);
+        w.__accessIdx++;
       },
     },
     {
       name: "getComponentValue",
       presets: allPresets,
-      setup,
+      setup: setupAccess,
       fn(world: World) {
-        getComponentValue(world, (world as TargetWorld).__target, Position, "x");
+        const w = world as AccessPoolWorld;
+        const idx = w.__accessIdx % w.__accessPool.length;
+        // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
+        getComponentValue(world, w.__accessPool[idx]!, w.__accessCompTargets[idx]! as any, "v");
+        w.__accessIdx++;
       },
     },
     {
       name: "setComponentValue",
       presets: allPresets,
-      setup,
+      setup: setupAccess,
       fn(world: World) {
-        setComponentValue(world, (world as TargetWorld).__target, Position, "x", 1.0);
+        const w = world as AccessPoolWorld;
+        const idx = w.__accessIdx % w.__accessPool.length;
+        // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
+        setComponentValue(world, w.__accessPool[idx]!, w.__accessCompTargets[idx]! as any, "v", 1.0);
+        w.__accessIdx++;
       },
     },
   ];
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Suite export
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 export const suite = {
   name: "Component",

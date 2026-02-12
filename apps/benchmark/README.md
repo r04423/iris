@@ -8,22 +8,47 @@ Use this to detect regressions, compare optimization strategies, and validate pe
 
 The harness supports two measurement modes:
 
-**Throughput** (default) runs each benchmark for a fixed number of iterations and reports `ops/sec`, `avg`, `P75`, and `P99` latency.
+**Throughput** (default) runs each benchmark for a fixed number of iterations and reports `ops/sec`, `avg`, `P75`, and `P99` latency. Query benchmarks additionally report `ent/sec` and `ent/frame` (entity throughput scaled by matching entity count).
 
 **Memory** measures heap impact by taking GC-fenced snapshots before and after a batch of iterations. Heap measurements are inherently noisy, so the harness runs multiple independent samples per benchmark and reports the median.
+
+## Methodology
+
+### Templates
+
+14 templates across 3 width groups (2/4/8 types) with power-law weights -- "hot" templates (Particle, Prop, Enemy) spawn far more often than "cold" ones (Player, Waypoint). All templates share C[0]; several share C[1].
+
+### Type fragmentation
+
+Presets apply **modifiers** -- optional types from a pool of 20 (10 components, 10 tags) -- to a fraction of entities during population, creating a long tail of composition variants beyond the 14 base templates. Per-entity, a seeded RNG decides whether to apply modifiers (per-preset rate), how many (75%/20%/5% for 1/2/3), and which ones (uniform random, sorted for deterministic identity). Modifiers only apply during preset population -- benchmark operations use pure templates.
+
+### Randomized selection and targets
+
+Template selection uses seeded RNG over the weighted cycle (preserving distribution, randomizing order). Per-assignment targets are also randomized: **add** picks from C[95..99] (none in any template), **remove** and **has** pick a random type from the template, **get/set** pick a random component.
+
+### Query iteration
+
+Query benchmarks iterate cached queries over existing preset worlds with natural archetype fragmentation. Three selectivity tiers target different match rates based on component overlap across templates:
+
+| Query | Match rate | Description |
+|-------|-----------|-------------|
+| iter all | 100% | Matches every entity across all archetypes |
+| iter selective | ~45% | Matches 5 of 14 templates (multi-group) |
+| iter narrow | ~7% | Matches 2 templates in a single group |
 
 ## Presets
 
 Each benchmark runs against one or more **world presets** -- pre-populated worlds of varying size:
 
-| Preset | Entities | Component types | Tag types | Active queries |
-|--------|----------|-----------------|-----------|----------------|
-| empty  | 0        | 0               | 0         | 0              |
-| xsmall | 100      | 24              | 24        | 20             |
-| small  | 1,000    | 104             | 104       | 100            |
-| medium | 10,000   | 404             | 404       | 400            |
+| Preset | Entities | Group 2 | Group 4 | Group 8 | ~Compositions | Queries |
+|--------|----------|---------|---------|---------|-------------|---------|
+| empty  | 0        | --      | --      | --      | 0           | 0       |
+| xsmall | 100      | 60%     | 30%     | 10%     | ~38         | 20      |
+| small  | 1,000    | 50%     | 35%     | 15%     | ~132        | 100     |
+| medium | 10,000   | 40%     | 40%     | 20%     | ~213        | 400     |
+| large  | 100,000  | 30%     | 40%     | 30%     | ~229        | 1,000   |
 
-Entities receive semi-random component subsets (deterministic seed) so the world contains multiple archetypes rather than one monolithic table. Queries are pre-executed to populate internal caches. This reflects realistic usage where larger worlds accumulate type diversity and query pressure.
+Entities follow power-law weights within each group. Randomized queries are pre-executed against all pool types to populate internal caches.
 
 ## Commands
 
@@ -41,36 +66,8 @@ From `apps/benchmark`:
 pnpm bench                   # all suites, throughput mode
 pnpm bench Entity            # single suite
 pnpm bench:memory            # all suites, memory mode
-pnpm bench:compare           # all registered library adapters
 pnpm typecheck               # typecheck benchmark code
 ```
-
-## Multi-Library Support
-
-The harness supports benchmarking multiple ECS libraries behind a `--lib` flag. Each library implements a `LibraryAdapter` (see `src/libs/types.ts`) providing its own presets and suites. The runner is library-agnostic -- it calls `factory()` and passes the result to `def.fn(world)`.
-
-```sh
-pnpm bench --lib iris        # run only iris (default)
-pnpm bench --lib all         # run all registered adapters
-```
-
-## Adding a Library Adapter
-
-1. Create `src/libs/<name>/` with:
-   - `fixtures.ts` — component/tag definitions
-   - `presets.ts` — preset factories matching the standard preset sizes
-   - `suites/<suite>.ts` — benchmark definitions using the library's API
-   - `index.ts` — exports a `LibraryAdapter`
-
-2. Register in `src/main.ts`:
-
-```typescript
-import { myLib } from "./libs/my-lib/index.js";
-
-const allAdapters: LibraryAdapter[] = [iris, myLib];
-```
-
-3. Verify: `pnpm typecheck && pnpm bench --lib all`
 
 ## Adding a Suite
 
@@ -84,7 +81,7 @@ export const suite: Suite = {
   benchmarks: [
     {
       name: "some operation",
-      presets: ["empty", "xsmall", "small", "medium"],
+      presets: ["empty", "xsmall", "small", "medium", "large"],
       fn(world) { /* measured operation */ },
       setup(world) { /* optional one-time setup */ },
     },
@@ -114,108 +111,134 @@ export const iris: LibraryAdapter = {
 
 ### Entity Create
 
-`createEntity` + `addComponent` for each component in the set.
+Create an entity and add each type in the template. Template selection is randomized (weighted distribution preserved).
 
-Latency — avg (P99):
+Latency -- avg (P99):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| create empty entity | 150 ns (209 ns) | 145 ns (666 ns) | 130 ns (417 ns) | 183 ns (459 ns) |
-| create entity + 2 comps | 540 ns (1.37 us) | 454 ns (1.25 us) | 397 ns (541 ns) | 423 ns (757 ns) |
-| create entity + 4 comps | 857 ns (921 ns) | 862 ns (1.71 us) | 815 ns (959 ns) | 919 ns (1.34 us) |
-| create entity + 8 comps | 1.62 us (1.83 us) | 1.76 us (4.94 us) | 1.55 us (1.84 us) | 1.65 us (2.21 us) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| create empty entity | 183 ns (875 ns) | 137 ns (500 ns) | 133 ns (208 ns) | 130 ns (209 ns) | 231 ns (625 ns) |
+| create entity + 2 types | 435 ns (1.21 us) | 427 ns (1.00 us) | 404 ns (1.08 us) | 424 ns (671 ns) | 529 ns (917 ns) |
+| create entity + 4 types | 824 ns (1.58 us) | 788 ns (1.50 us) | 814 ns (1.63 us) | 1.26 us (2.67 us) | 916 ns (1.83 us) |
+| create entity + 8 types | 2.12 us (3.38 us) | 2.08 us (2.96 us) | 2.04 us (2.71 us) | 2.02 us (2.46 us) | 2.24 us (2.71 us) |
 
 ops/sec (ops/frame):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| create empty entity | 6,682,356 (111,373) | 6,890,467 (114,841) | 7,668,768 (127,813) | 5,467,709 (91,128) |
-| create entity + 2 comps | 1,852,299 (30,872) | 2,200,680 (36,678) | 2,519,483 (41,991) | 2,365,240 (39,421) |
-| create entity + 4 comps | 1,166,906 (19,448) | 1,160,476 (19,341) | 1,226,342 (20,439) | 1,088,281 (18,138) |
-| create entity + 8 comps | 617,548 (10,292) | 569,439 (9,491) | 645,177 (10,753) | 604,980 (10,083) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| create empty entity | 5,456,477 (90,941) | 7,278,588 (121,310) | 7,512,116 (125,202) | 7,709,842 (128,497) | 4,333,518 (72,225) |
+| create entity + 2 types | 2,299,354 (38,323) | 2,339,966 (38,999) | 2,477,342 (41,289) | 2,361,076 (39,351) | 1,888,697 (31,478) |
+| create entity + 4 types | 1,213,698 (20,228) | 1,269,391 (21,157) | 1,228,755 (20,479) | 794,248 (13,237) | 1,091,900 (18,198) |
+| create entity + 8 types | 471,536 (7,859) | 479,734 (7,996) | 490,565 (8,176) | 495,030 (8,250) | 446,971 (7,450) |
 
 ### Entity Destroy
 
-`destroyEntity` on pre-created entities consumed from a pool (10,000 per benchmark).
+Destroy pre-created entities consumed from a pool (10,240 per benchmark). Each entity has a randomized template-based composition.
 
-Latency — avg (P99):
+Latency -- avg (P99):
 
-| Benchmark | xsmall | small | medium |
-|-----------|-------:|------:|-------:|
-| destroy empty entity | 285 ns (458 ns) | 225 ns (500 ns) | 213 ns (334 ns) |
-| destroy entity + 2 comps | 404 ns (1.21 us) | 436 ns (1.17 us) | 602 ns (3.87 us) |
-| destroy entity + 4 comps | 502 ns (1.33 us) | 407 ns (750 ns) | 450 ns (1.17 us) |
-| destroy entity + 8 comps | 498 ns (1.05 us) | 506 ns (750 ns) | 602 ns (1.37 us) |
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| destroy empty entity | 257 ns (375 ns) | 222 ns (375 ns) | 195 ns (292 ns) | 236 ns (500 ns) |
+| destroy entity + 2 types | 334 ns (875 ns) | 316 ns (583 ns) | 300 ns (459 ns) | 358 ns (917 ns) |
+| destroy entity + 4 types | 405 ns (1.29 us) | 440 ns (1.42 us) | 377 ns (583 ns) | 462 ns (958 ns) |
+| destroy entity + 8 types | 577 ns (1.55 us) | 574 ns (1.46 us) | 515 ns (1.05 us) | 580 ns (1.00 us) |
 
 ops/sec (ops/frame):
 
-| Benchmark | xsmall | small | medium |
-|-----------|-------:|------:|-------:|
-| destroy empty entity | 3,509,441 (58,491) | 4,451,567 (74,193) | 4,696,898 (78,282) |
-| destroy entity + 2 comps | 2,475,099 (41,252) | 2,291,486 (38,191) | 1,661,950 (27,699) |
-| destroy entity + 4 comps | 1,992,211 (33,204) | 2,455,855 (40,931) | 2,224,358 (37,073) |
-| destroy entity + 8 comps | 2,008,232 (33,471) | 1,974,681 (32,911) | 1,660,589 (27,676) |
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| destroy empty entity | 3,897,554 (64,959) | 4,502,999 (75,050) | 5,123,164 (85,386) | 4,239,373 (70,656) |
+| destroy entity + 2 types | 2,995,123 (49,919) | 3,166,273 (52,771) | 3,328,080 (55,468) | 2,796,039 (46,601) |
+| destroy entity + 4 types | 2,467,698 (41,128) | 2,271,668 (37,861) | 2,654,502 (44,242) | 2,163,158 (36,053) |
+| destroy entity + 8 types | 1,732,519 (28,875) | 1,741,067 (29,018) | 1,940,508 (32,342) | 1,725,193 (28,753) |
 
 ### Component Add
 
-`addComponent(Damage)` to entities with varying existing component counts, consumed from a homogeneous pool (10,000 per benchmark). All pool entities share the same archetype, so the transition edge is cached after warmup.
+Add a component with a randomized target from C[95..99] (none in any template). Entities have randomized template-based compositions.
 
-Latency — avg (P99):
+Latency -- avg (P99):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| add comp to empty entity | 243 ns (708 ns) | 165 ns (250 ns) | 167 ns (250 ns) | 193 ns (333 ns) |
-| add comp to 2-comp entity | 326 ns (921 ns) | 281 ns (541 ns) | 280 ns (417 ns) | 327 ns (583 ns) |
-| add comp to 4-comp entity | 351 ns (542 ns) | 371 ns (625 ns) | 343 ns (500 ns) | 442 ns (1.12 us) |
-| add comp to 8-comp entity | 462 ns (671 ns) | 829 ns (1.67 us) | 475 ns (625 ns) | 506 ns (750 ns) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| add comp to empty entity | 198 ns (291 ns) | 180 ns (250 ns) | 181 ns (292 ns) | 175 ns (250 ns) | 181 ns (292 ns) |
+| add comp to 2-type entity | 318 ns (504 ns) | 299 ns (588 ns) | 317 ns (546 ns) | 327 ns (546 ns) | 344 ns (625 ns) |
+| add comp to 4-type entity | 410 ns (2.00 us) | 418 ns (1.97 us) | 417 ns (3.25 us) | 454 ns (2.79 us) | 484 ns (3.46 us) |
+| add comp to 8-type entity | 612 ns (3.17 us) | 612 ns (3.46 us) | 632 ns (5.33 us) | 666 ns (6.26 us) | 678 ns (6.21 us) |
 
 ops/sec (ops/frame):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| add comp to empty entity | 4,108,043 (68,467) | 6,075,921 (101,265) | 6,004,434 (100,074) | 5,191,082 (86,518) |
-| add comp to 2-comp entity | 3,064,263 (51,071) | 3,561,849 (59,364) | 3,570,876 (59,515) | 3,056,861 (50,948) |
-| add comp to 4-comp entity | 2,847,137 (47,452) | 2,697,870 (44,965) | 2,917,839 (48,631) | 2,263,995 (37,733) |
-| add comp to 8-comp entity | 2,164,791 (36,080) | 1,205,890 (20,098) | 2,103,689 (35,061) | 1,975,151 (32,919) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| add comp to empty entity | 5,056,444 (84,274) | 5,557,568 (92,626) | 5,522,910 (92,049) | 5,699,369 (94,989) | 5,515,184 (91,920) |
+| add comp to 2-type entity | 3,142,239 (52,371) | 3,343,420 (55,724) | 3,156,838 (52,614) | 3,060,748 (51,012) | 2,909,406 (48,490) |
+| add comp to 4-type entity | 2,436,664 (40,611) | 2,393,806 (39,897) | 2,400,161 (40,003) | 2,204,465 (36,741) | 2,066,493 (34,442) |
+| add comp to 8-type entity | 1,634,189 (27,236) | 1,633,377 (27,223) | 1,582,388 (26,373) | 1,501,550 (25,026) | 1,474,131 (24,569) |
 
 ### Component Remove
 
-`removeComponent(Damage)` from entities with varying base component sets, consumed from a pool (10,000 per benchmark). Same cached-edge methodology as Component Add. The N-comp label reflects total components before removal.
+Remove a randomized type from each template. Entities consumed from a pool (10,240 per benchmark).
 
-Latency — avg (P99):
+Latency -- avg (P99):
 
-| Benchmark | xsmall | small | medium |
-|-----------|-------:|------:|-------:|
-| remove comp from 1-comp entity | 167 ns (334 ns) | 140 ns (250 ns) | 142 ns (625 ns) |
-| remove comp from 3-comp entity | 251 ns (459 ns) | 233 ns (500 ns) | 511 ns (1.25 us) |
-| remove comp from 5-comp entity | 348 ns (583 ns) | 327 ns (671 ns) | 1.17 us (2.37 us) |
-| remove comp from 8-comp entity | 423 ns (667 ns) | 443 ns (792 ns) | 429 ns (666 ns) |
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| remove comp from 2-type entity | 250 ns (917 ns) | 213 ns (417 ns) | 213 ns (459 ns) | 225 ns (417 ns) |
+| remove comp from 4-type entity | 351 ns (917 ns) | 325 ns (799 ns) | 343 ns (959 ns) | 350 ns (791 ns) |
+| remove comp from 8-type entity | 564 ns (4.54 us) | 543 ns (4.54 us) | 596 ns (5.22 us) | 644 ns (5.29 us) |
 
 ops/sec (ops/frame):
 
-| Benchmark | xsmall | small | medium |
-|-----------|-------:|------:|-------:|
-| remove comp from 1-comp entity | 5,977,830 (99,630) | 7,130,963 (118,849) | 7,030,402 (117,173) |
-| remove comp from 3-comp entity | 3,976,359 (66,273) | 4,288,372 (71,473) | 1,957,758 (32,629) |
-| remove comp from 5-comp entity | 2,872,312 (47,872) | 3,062,366 (51,039) | 855,786 (14,263) |
-| remove comp from 8-comp entity | 2,366,083 (39,435) | 2,255,601 (37,593) | 2,332,961 (38,883) |
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| remove comp from 2-type entity | 4,007,318 (66,789) | 4,696,119 (78,269) | 4,689,555 (78,159) | 4,439,418 (73,990) |
+| remove comp from 4-type entity | 2,851,732 (47,529) | 3,078,918 (51,315) | 2,913,315 (48,555) | 2,855,383 (47,590) |
+| remove comp from 8-type entity | 1,773,105 (29,552) | 1,840,647 (30,677) | 1,678,070 (27,968) | 1,551,654 (25,861) |
 
 ### Component Access
 
-`hasComponent`, `getComponentValue`, and `setComponentValue` on a single persistent entity (Position + Player). Same entity each iteration -- operations are idempotent.
+Has, get, and set operations on a pool of entities with group 4 templates (4 types each). Each iteration targets a randomized entity with a randomized target component, cycling through the pool.
 
-Latency — avg (P99):
+Latency -- avg (P99):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| hasComponent | 29 ns (42 ns) | 29 ns (42 ns) | 25 ns (42 ns) | 29 ns (42 ns) |
-| getComponentValue | 37 ns (83 ns) | 38 ns (42 ns) | 30 ns (42 ns) | 54 ns (84 ns) |
-| setComponentValue | 80 ns (125 ns) | 86 ns (125 ns) | 74 ns (84 ns) | 83 ns (125 ns) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| hasComponent | 69 ns (125 ns) | 67 ns (125 ns) | 70 ns (125 ns) | 49 ns (125 ns) | 46 ns (167 ns) |
+| getComponentValue | 70 ns (125 ns) | 69 ns (125 ns) | 71 ns (125 ns) | 62 ns (125 ns) | 61 ns (166 ns) |
+| setComponentValue | 102 ns (167 ns) | 114 ns (167 ns) | 115 ns (167 ns) | 103 ns (167 ns) | 106 ns (208 ns) |
 
 ops/sec (ops/frame):
 
-| Benchmark | empty | xsmall | small | medium |
-|-----------|------:|-------:|------:|-------:|
-| hasComponent | 34,738,949 (578,982) | 34,816,313 (580,272) | 39,947,530 (665,792) | 34,360,110 (572,669) |
-| getComponentValue | 27,034,876 (450,581) | 26,432,713 (440,545) | 33,542,702 (559,045) | 18,534,943 (308,916) |
-| setComponentValue | 12,481,013 (208,017) | 11,617,699 (193,628) | 13,526,254 (225,438) | 12,100,247 (201,671) |
+| Benchmark | empty | xsmall | small | medium | large |
+|-----------|------:|-------:|------:|-------:|------:|
+| hasComponent | 14,572,338 (242,872) | 14,987,769 (249,796) | 14,221,654 (237,028) | 20,553,015 (342,550) | 21,747,845 (362,464) |
+| getComponentValue | 14,370,568 (239,509) | 14,509,310 (241,822) | 14,024,636 (233,744) | 16,151,674 (269,195) | 16,388,490 (273,142) |
+| setComponentValue | 9,820,587 (163,676) | 8,805,298 (146,755) | 8,718,696 (145,312) | 9,710,476 (161,841) | 9,463,682 (157,728) |
+
+### Query Iteration
+
+Iterate all matching entities through a pre-cached query. Pure iteration with no component access. `ent/sec` = ops/sec x matching entity count.
+
+Latency -- avg (P99):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| iter all | 2.73 us (3.42 us) | 25.15 us (29.67 us) | 247.26 us (279.96 us) | 2.52 ms (2.80 ms) |
+| iter selective | 1.34 us (1.67 us) | 10.85 us (11.88 us) | 103.50 us (114.43 us) | 1.07 ms (1.24 ms) |
+| iter narrow | -- | 1.19 us (1.50 us) | 12.17 us (13.96 us) | 180.27 us (206.75 us) |
+
+ops/sec (ops/frame):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| iter all | 366,146 (6,102) | 39,767 (663) | 4,044 (67) | 397 (7) |
+| iter selective | 748,105 (12,468) | 92,171 (1,536) | 9,662 (161) | 931 (16) |
+| iter narrow | -- | 840,885 (14,015) | 82,159 (1,369) | 5,547 (92) |
+
+ent/sec (ent/frame):
+
+| Benchmark | xsmall | small | medium | large |
+|-----------|-------:|------:|-------:|------:|
+| iter all | 36.6 M (610,243) | 39.8 M (662,784) | 40.4 M (674,053) | 39.7 M (661,162) |
+| iter selective | 33.7 M (561,079) | 40.6 M (675,918) | 41.5 M (692,440) | 41.6 M (693,300) |
+| iter narrow | -- | 30.3 M (504,531) | 40.3 M (670,965) | 40.5 M (674,913) |

@@ -27,7 +27,7 @@ export function measureMemory(label: string, iterations: number, fn: () => void)
   if (!gc) {
     if (!didWarnAboutMissingGc) {
       didWarnAboutMissingGc = true;
-      console.warn("GC not exposed — run with --expose-gc for memory measurements");
+      console.warn("GC not exposed. Run with --expose-gc for memory measurements");
     }
     return { label, deltaPerOp: 0, totalDelta: 0, totalMemory: 0, iterations };
   }

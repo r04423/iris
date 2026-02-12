@@ -6,15 +6,21 @@ import { measureMemory } from "./memory.js";
 import { printMemoryReport, printThroughputReport } from "./report.js";
 import type { BenchmarkDef, MemoryResult, PresetName, Suite } from "./types.js";
 
-// ---------------------------------------------------------------------------
-// Library adapters — add new libraries here
-// ---------------------------------------------------------------------------
+function resolveEntityCount(def: BenchmarkDef, presetName: PresetName): number | undefined {
+  if (def.entityCount == null) return undefined;
+  if (typeof def.entityCount === "number") return def.entityCount;
+  return def.entityCount[presetName];
+}
+
+// ============================================================================
+// Library adapters
+// ============================================================================
 
 const allAdapters: LibraryAdapter[] = [iris];
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Benchmark runtime settings
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 /**
  * time/warmupTime are set to 0 to disable tinybench's time-based mode, which
@@ -37,9 +43,9 @@ const MEMORY_ITERATIONS = 2048;
  */
 const MEMORY_SAMPLES = 8;
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // CLI argument parsing
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 const args = process.argv.slice(2);
 const memoryMode = args.includes("--memory");
@@ -62,9 +68,9 @@ function filterAdapters(all: LibraryAdapter[], flag: string | undefined): Librar
   return [adapter];
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Runner
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 function groupBenchmarksByPreset(benchmarks: BenchmarkDef[]): Map<PresetName, BenchmarkDef[]> {
   const byPreset = new Map<PresetName, BenchmarkDef[]>();
@@ -98,7 +104,7 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
 
     for (let i = 0; i < benchmarks.length; i++) {
       const def = benchmarks[i]!;
-      // Lazy init — only one world at a time (some libraries limit concurrent worlds)
+      // Lazy init: only one world at a time (some libraries limit concurrent worlds)
       // biome-ignore lint/suspicious/noExplicitAny: world type varies per library
       let world: any;
 
@@ -112,7 +118,7 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
             world = factory();
             def.setup?.(world);
           },
-          // Entities accumulate across iterations intentionally — creating a
+          // Entities accumulate across iterations intentionally. Creating a
           // fresh world per iteration is prohibitively expensive and adds GC noise.
           afterAll() {
             teardown?.(world);
@@ -122,7 +128,20 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
     }
 
     await bench.run();
-    printThroughputReport(suite.name, presetName, bench.tasks, adapter.name);
+
+    const entityCounts = new Map<string, number>();
+    for (let i = 0; i < benchmarks.length; i++) {
+      const count = resolveEntityCount(benchmarks[i]!, presetName);
+      if (count != null) entityCounts.set(benchmarks[i]!.name, count);
+    }
+
+    printThroughputReport(
+      suite.name,
+      presetName,
+      bench.tasks,
+      adapter.name,
+      entityCounts.size > 0 ? entityCounts : undefined
+    );
   }
 }
 
@@ -156,9 +175,9 @@ function runMemory(adapter: LibraryAdapter, suite: Suite): void {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Main
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 async function main(): Promise<void> {
   const mode = memoryMode ? "memory" : "throughput";

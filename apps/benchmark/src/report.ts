@@ -1,9 +1,9 @@
 import type { Task } from "tinybench";
 import type { MemoryResult } from "./types.js";
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Formatting helpers
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 function padRight(str: string, len: number): string {
   return str + " ".repeat(Math.max(0, len - str.length));
@@ -39,13 +39,20 @@ function formatTime(ns: number): string {
   return `${(ns / 1_000_000).toFixed(2)} ms`;
 }
 
+function formatLargeNumber(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)} K`;
+  return formatNumber(Math.round(n));
+}
+
 function nsFromMs(ms: number): number {
   return ms * 1_000_000;
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Box-drawing table
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 function drawTable(headers: string[], rows: string[][], colWidths: number[]): string {
   const top = `┌${colWidths.map((w) => "─".repeat(w + 2)).join("┬")}┐`;
@@ -69,12 +76,21 @@ function drawTable(headers: string[], rows: string[][], colWidths: number[]): st
   return [top, headerRow, mid, ...dataRows, bot].join("\n");
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Throughput report
-// ---------------------------------------------------------------------------
+// ============================================================================
 
-export function printThroughputReport(suiteName: string, presetName: string, tasks: Task[], libName: string): void {
-  const headers = ["Benchmark", "ops/sec", "ops/frame", "avg", "P75", "P99"];
+export function printThroughputReport(
+  suiteName: string,
+  presetName: string,
+  tasks: Task[],
+  libName: string,
+  entityCounts?: Map<string, number>
+): void {
+  const hasEntCols = entityCounts != null && entityCounts.size > 0;
+  const headers = hasEntCols
+    ? ["Benchmark", "ops/sec", "ops/frame", "ent/sec", "ent/frame", "avg", "P75", "P99"]
+    : ["Benchmark", "ops/sec", "ops/frame", "avg", "P75", "P99"];
   const rows: string[][] = [];
 
   // Nanoseconds in one frame at 60 fps
@@ -84,17 +100,30 @@ export function printThroughputReport(suiteName: string, presetName: string, tas
     const task = tasks[i]!;
     const result = task.result;
     if (result.state !== "completed") {
-      rows.push([task.name, "—", "—", "—", "—", "—"]);
+      const row = Array.from({ length: headers.length }, () => "—");
+      row[0] = task.name;
+      rows.push(row);
       continue;
     }
     const { latency } = result;
     const meanNs = nsFromMs(latency.mean);
-    const opsPerSec = meanNs > 0 ? formatNumber(Math.round(1_000_000_000 / meanNs)) : "—";
-    const opsPerFrame = meanNs > 0 ? formatNumber(Math.round(nsPerFrame / meanNs)) : "—";
+    const rawOpsPerSec = meanNs > 0 ? 1_000_000_000 / meanNs : 0;
+    const rawOpsPerFrame = meanNs > 0 ? nsPerFrame / meanNs : 0;
+    const opsPerSec = rawOpsPerSec > 0 ? formatNumber(Math.round(rawOpsPerSec)) : "—";
+    const opsPerFrame = rawOpsPerFrame > 0 ? formatNumber(Math.round(rawOpsPerFrame)) : "—";
     const avg = meanNs > 0 ? formatTime(meanNs) : "—";
     const p75 = formatTime(nsFromMs(latency.p75));
     const p99 = formatTime(nsFromMs(latency.p99));
-    rows.push([task.name, opsPerSec, opsPerFrame, avg, p75, p99]);
+
+    if (hasEntCols) {
+      const entCount = entityCounts!.get(task.name);
+      const entPerSec = entCount != null && rawOpsPerSec > 0 ? formatLargeNumber(rawOpsPerSec * entCount) : "—";
+      const entPerFrame =
+        entCount != null && rawOpsPerFrame > 0 ? formatNumber(Math.round(rawOpsPerFrame * entCount)) : "—";
+      rows.push([task.name, opsPerSec, opsPerFrame, entPerSec, entPerFrame, avg, p75, p99]);
+    } else {
+      rows.push([task.name, opsPerSec, opsPerFrame, avg, p75, p99]);
+    }
   }
 
   const colWidths = headers.map((h, i) => {
@@ -109,9 +138,9 @@ export function printThroughputReport(suiteName: string, presetName: string, tas
   console.log(drawTable(headers, rows, colWidths));
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================================
 // Memory report
-// ---------------------------------------------------------------------------
+// ============================================================================
 
 export function printMemoryReport(
   suiteName: string,
