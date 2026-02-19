@@ -1,14 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { createAndRegisterArchetype } from "./archetype.js";
-import {
-  addComponent,
-  emitComponentChanged,
-  getComponentValue,
-  hasComponent,
-  removeComponent,
-  setComponentValue,
-} from "./component.js";
+import { addComponent, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { InvalidArgument, InvalidState } from "./error.js";
