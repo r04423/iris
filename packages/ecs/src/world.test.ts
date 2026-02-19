@@ -6,7 +6,7 @@ import { createEntity } from "./entity.js";
 import { defineEvent, emitEvent } from "./event.js";
 import { lookupByName, setName } from "./name.js";
 import { registerObserverCallback } from "./observer.js";
-import { fetchEntities } from "./query.js";
+import { collectEntities } from "./query.js";
 import { defineTag } from "./registry.js";
 import {
   addSystem,
@@ -139,7 +139,7 @@ describe("World", () => {
       addComponent(world, entity, Tag);
 
       // Create query (populates filter and query registries)
-      const results = [...fetchEntities(world, Tag)];
+      const results = collectEntities(world, [Tag]);
       assert.strictEqual(results.length, 1);
       assert.ok(world.filters.byId.size > 0);
       assert.ok(world.queries.byId.size > 0);

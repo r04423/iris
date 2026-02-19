@@ -1,7 +1,7 @@
 import type { EntityId } from "./encoding.js";
 import { assert, InvalidArgument } from "./error.js";
 import type { FilterMeta } from "./filters.js";
-import { ensureFilter, iterateFilterEntities } from "./filters.js";
+import { ensureFilter } from "./filters.js";
 import type { Observer } from "./observer.js";
 import { registerObserverCallback, unregisterObserverCallback } from "./observer.js";
 import type { World } from "./world.js";
@@ -70,7 +70,7 @@ export type QueryModifier = NotModifier | AddedModifier | ChangedModifier;
  *
  * @example
  * ```typescript
- * fetchEntities(world, Position, not(Dead))
+ * queryEntities(world, [Position, not(Dead)], (entity) => { ... });
  * ```
  */
 export function not(componentId: EntityId): NotModifier {
@@ -86,7 +86,7 @@ export function not(componentId: EntityId): NotModifier {
  * @returns Added modifier
  *
  * @example
- * for (const entity of fetchEntities(world, added(Enemy))) { ... }
+ * queryEntities(world, [added(Enemy)], (entity) => { ... });
  */
 export function added(componentId: EntityId): AddedModifier {
   return { type: "added", componentId };
@@ -101,7 +101,7 @@ export function added(componentId: EntityId): AddedModifier {
  * @returns Changed modifier
  *
  * @example
- * for (const entity of fetchEntities(world, changed(Health))) { ... }
+ * queryEntities(world, [changed(Health)], (entity) => { ... });
  */
 export function changed(componentId: EntityId): ChangedModifier {
   return { type: "changed", componentId };
@@ -223,55 +223,58 @@ export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]
 }
 
 /**
- * Fetch entities using pre-registered query metadata.
+ * Destroy query and clean up associated resources.
  *
- * Filters by change modifiers (added/changed) when present and updates
- * lastTick after iteration for per-query/per-system change tracking.
+ * Unregisters observer callbacks and removes from query registry.
  *
  * @param world - World instance
- * @param queryMeta - Query metadata from ensureQuery()
- * @returns Entity IDs in backward order (safe for deletion during iteration)
+ * @param queryMeta - Query metadata to destroy
  *
  * @example
  * ```typescript
- * const query = ensureQuery(world, Position, Velocity);
- * for (const entity of fetchEntitiesWithQuery(world, query)) {
- *   // Process entity
- * }
+ * const query = ensureQuery(world, Position);
+ * // ... use query ...
+ * destroyQuery(world, query);
  * ```
  */
-export function* fetchEntitiesWithQuery(world: World, queryMeta: QueryMeta): IterableIterator<EntityId> {
+export function destroyQuery(world: World, queryMeta: QueryMeta): void {
+  const queryId = hashQuery(queryMeta.include, queryMeta.exclude, queryMeta.added, queryMeta.changed);
+
+  unregisterObserverCallback(world, "filterDestroyed", queryMeta.onFilterDestroy);
+
+  world.queries.byId.delete(queryId);
+}
+
+// ============================================================================
+// Query Iteration (Internal)
+// ============================================================================
+
+/**
+ * Iterate entities using pre-registered query metadata via callback.
+ */
+function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (entity: EntityId) => unknown): void {
   const hasChangeModifiers = queryMeta.added.length > 0 || queryMeta.changed.length > 0;
-
-  // Fast path: no change modifiers
-  if (!hasChangeModifiers) {
-    yield* iterateFilterEntities(queryMeta.filter);
-    return;
-  }
-
-  // Outside system context: change detection returns empty (no meaningful tick tracking)
   const { systemId, tick } = world.execution;
-  if (systemId === null) {
+
+  // Change detection requires system context, no meaningful tick tracking otherwise
+  if (hasChangeModifiers && systemId === null) {
     return;
   }
 
-  // Slow path: filter by change detection using archetype-local tick arrays.
-  // Each component tracks when it was added/changed per-entity via tick timestamps.
-  const lastTick = queryMeta.lastTick.get(systemId) ?? 0;
-
+  const lastTick = hasChangeModifiers ? (queryMeta.lastTick.get(systemId!) ?? 0) : 0;
   const archetypes = queryMeta.filter.archetypes;
 
   // Pre-allocated arrays reused across archetypes to avoid allocation in hot loop
   const addedTickArrays: Uint32Array[] = [];
   const changedTickArrays: Uint32Array[] = [];
 
-  // Use try/finally to ensure lastTick updates even on early exit (break/return/throw).
+  // Use try/finally to ensure lastTick updates even on early exit
   try {
     for (let a = 0; a < archetypes.length; a++) {
       const archetype = archetypes[a]!;
       const entities = archetype.entities;
 
-      // Pre-fetch tick arrays for this archetype (one Map lookup per component per archetype)
+      // Pre-fetch tick arrays for this archetype
       addedTickArrays.length = 0;
       for (let j = 0; j < queryMeta.added.length; j++) {
         const ticks = archetype.ticks.get(queryMeta.added[j]!);
@@ -304,90 +307,123 @@ export function* fetchEntitiesWithQuery(world: World, queryMeta: QueryMeta): Ite
           }
         }
 
-        yield entityId;
+        if (callback(entityId) === false) {
+          return;
+        }
       }
     }
   } finally {
-    // Update lastTick after iteration completes (or on break/return/throw).
-    // This ensures subsequent iterations only see changes since this execution.
-    queryMeta.lastTick.set(systemId!, tick);
+    if (hasChangeModifiers) {
+      // Update lastTick after iteration completes or on early exit, this ensures
+      // subsequent iterations only see changes since this execution
+      queryMeta.lastTick.set(systemId!, tick);
+    }
   }
 }
 
 /**
- * Destroy query and clean up associated resources.
- *
- * Unregisters observer callbacks and removes from query registry.
- *
- * @param world - World instance
- * @param queryMeta - Query metadata to destroy
- *
- * @example
- * ```typescript
- * const query = ensureQuery(world, Position);
- * // ... use query ...
- * destroyQuery(world, query);
- * ```
+ * Resolve terms-or-query argument to QueryMeta.
  */
-export function destroyQuery(world: World, queryMeta: QueryMeta): void {
-  const queryId = hashQuery(queryMeta.include, queryMeta.exclude, queryMeta.added, queryMeta.changed);
+function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta): QueryMeta {
+  if (!Array.isArray(termsOrQuery)) {
+    return termsOrQuery;
+  }
 
-  unregisterObserverCallback(world, "filterDestroyed", queryMeta.onFilterDestroy);
-
-  world.queries.byId.delete(queryId);
+  return ensureQuery(world, ...termsOrQuery);
 }
 
 // ============================================================================
-// Query Iteration
+// Query Iteration (Public)
 // ============================================================================
 
 /**
- * Fetch entities matching components and modifiers.
+ * Iterate entities matching components and modifiers via callback.
  *
  * Iterates backward for safe entity destruction during iteration.
  * Creates/reuses cached query internally.
  *
  * @param world - World instance
- * @param terms - Component IDs and query modifiers (not, added, changed)
- * @returns Entity IDs in deletion-safe order
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
+ * @param callback - Called for each matching entity. Return `false` to stop iteration early
  *
  * @example
  * ```typescript
- * for (const entity of fetchEntities(world, Position, Velocity, not(Dead))) {
- *   const pos = get(world, entity, Position);
- *   // Entity can be safely destroyed here
- * }
+ * // With inline terms
+ * queryEntities(world, [Position, Velocity, not(Dead)], (entity) => {
+ *   const pos = getComponentValue(world, entity, Position, "x");
+ * });
+ *
+ * // With pre-built query
+ * const q = ensureQuery(world, Position, Velocity);
+ * queryEntities(world, q, (entity) => { ... });
+ *
+ * // Early exit
+ * queryEntities(world, [Position], (entity) => {
+ *   if (done) return false;
+ * });
  * ```
  */
-export function* fetchEntities(world: World, ...terms: (EntityId | QueryModifier)[]): IterableIterator<EntityId> {
-  const queryMeta = ensureQuery(world, ...terms);
-
-  yield* fetchEntitiesWithQuery(world, queryMeta);
+export function queryEntities(
+  world: World,
+  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
+  callback: (entity: EntityId) => unknown
+): void {
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), callback);
 }
 
 /**
- * Fetch first entity matching components and modifiers.
+ * Get first entity matching components and modifiers.
  *
  * Useful for singleton patterns or when only one match is expected.
  *
  * @param world - World instance
- * @param terms - Component IDs and query modifiers (not, added, changed)
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
  * @returns First matching entity ID, or undefined if no matches
  *
  * @example
  * ```typescript
- * const player = fetchFirstEntity(world, Player, not(Dead));
+ * const player = queryFirstEntity(world, [Player, not(Dead)]);
  * if (player !== undefined) {
- *   const health = get(world, player, Health);
+ *   const health = getComponentValue(world, player, Health, "value");
  * }
  * ```
  */
-export function fetchFirstEntity(world: World, ...terms: (EntityId | QueryModifier)[]): EntityId | undefined {
-  const queryMeta = ensureQuery(world, ...terms);
+export function queryFirstEntity(
+  world: World,
+  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta
+): EntityId | undefined {
+  let result: EntityId | undefined;
 
-  for (const entityId of fetchEntitiesWithQuery(world, queryMeta)) {
-    return entityId;
-  }
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), (entity) => {
+    result = entity;
+    return false;
+  });
 
-  return undefined;
+  return result;
+}
+
+/**
+ * Collect all matching entities into an array.
+ *
+ * @param world - World instance
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
+ * @returns Array of matching entity IDs
+ *
+ * @example
+ * ```typescript
+ * const entities = collectEntities(world, [Position, Velocity]);
+ *
+ * // Pre-sort before iteration
+ * const sorted = collectEntities(world, [Position]);
+ * sorted.sort((a, b) => getComponentValue(world, a, Position, "x")! - getComponentValue(world, b, Position, "x")!);
+ * ```
+ */
+export function collectEntities(world: World, termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta): EntityId[] {
+  const result: EntityId[] = [];
+
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), (entity) => {
+    result.push(entity);
+  });
+
+  return result;
 }

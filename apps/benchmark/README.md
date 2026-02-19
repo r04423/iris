@@ -56,7 +56,7 @@ Each benchmark runs against one or more **world presets** -- pre-populated world
 | medium | 10,000   | 40%     | 40%     | 20%     | ~213        | 400     |
 | large  | 100,000  | 30%     | 40%     | 30%     | ~229        | 1,000   |
 
-Entities follow power-law weights within each group. Randomized queries are pre-executed against all pool types to populate internal caches.
+Entities follow power-law weights within each group. Template-derived queries are pre-executed to populate internal caches -- each picks a random template and selects 1-3 of its types as terms, with a chance of adding a modifier (include or `not()`).
 
 ## Commands
 
@@ -125,19 +125,19 @@ Latency -- avg (P99):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| create empty entity | 183 ns (875 ns) | 137 ns (500 ns) | 133 ns (208 ns) | 130 ns (209 ns) | 231 ns (625 ns) |
-| create entity + 2 types | 435 ns (1.21 us) | 427 ns (1.00 us) | 404 ns (1.08 us) | 424 ns (671 ns) | 529 ns (917 ns) |
-| create entity + 4 types | 824 ns (1.58 us) | 788 ns (1.50 us) | 814 ns (1.63 us) | 1.26 us (2.67 us) | 916 ns (1.83 us) |
-| create entity + 8 types | 2.12 us (3.38 us) | 2.08 us (2.96 us) | 2.04 us (2.71 us) | 2.02 us (2.46 us) | 2.24 us (2.71 us) |
+| create empty entity | 235 ns (959 ns) | 154 ns (667 ns) | 133 ns (167 ns) | 615 ns (667 ns) | 146 ns (375 ns) |
+| create entity + 2 types | 473 ns (1.25 us) | 490 ns (1.42 us) | 430 ns (713 ns) | 453 ns (542 ns) | 483 ns (750 ns) |
+| create entity + 4 types | 867 ns (1.83 us) | 812 ns (1.38 us) | 818 ns (1.50 us) | 825 ns (1.00 us) | 846 ns (1.08 us) |
+| create entity + 8 types | 2.17 us (3.46 us) | 2.20 us (3.46 us) | 2.15 us (3.17 us) | 2.19 us (2.62 us) | 2.15 us (2.62 us) |
 
 ops/sec (ops/frame):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| create empty entity | 5,456,477 (90,941) | 7,278,588 (121,310) | 7,512,116 (125,202) | 7,709,842 (128,497) | 4,333,518 (72,225) |
-| create entity + 2 types | 2,299,354 (38,323) | 2,339,966 (38,999) | 2,477,342 (41,289) | 2,361,076 (39,351) | 1,888,697 (31,478) |
-| create entity + 4 types | 1,213,698 (20,228) | 1,269,391 (21,157) | 1,228,755 (20,479) | 794,248 (13,237) | 1,091,900 (18,198) |
-| create entity + 8 types | 471,536 (7,859) | 479,734 (7,996) | 490,565 (8,176) | 495,030 (8,250) | 446,971 (7,450) |
+| create empty entity | 4,263,693 (71,062) | 6,484,111 (108,069) | 7,529,087 (125,485) | 1,626,014 (27,100) | 6,844,439 (114,074) |
+| create entity + 2 types | 2,115,417 (35,257) | 2,042,099 (34,035) | 2,323,754 (38,729) | 2,205,184 (36,753) | 2,069,754 (34,496) |
+| create entity + 4 types | 1,153,444 (19,224) | 1,231,389 (20,523) | 1,222,948 (20,382) | 1,212,066 (20,201) | 1,182,646 (19,711) |
+| create entity + 8 types | 459,950 (7,666) | 454,127 (7,569) | 465,611 (7,760) | 457,407 (7,623) | 465,054 (7,751) |
 
 alloc/op (retained):
 
@@ -156,19 +156,19 @@ Latency -- avg (P99):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| destroy empty entity | 257 ns (375 ns) | 222 ns (375 ns) | 195 ns (292 ns) | 236 ns (500 ns) |
-| destroy entity + 2 types | 334 ns (875 ns) | 316 ns (583 ns) | 300 ns (459 ns) | 358 ns (917 ns) |
-| destroy entity + 4 types | 405 ns (1.29 us) | 440 ns (1.42 us) | 377 ns (583 ns) | 462 ns (958 ns) |
-| destroy entity + 8 types | 577 ns (1.55 us) | 574 ns (1.46 us) | 515 ns (1.05 us) | 580 ns (1.00 us) |
+| destroy empty entity | 291 ns (500 ns) | 238 ns (375 ns) | 203 ns (333 ns) | 223 ns (417 ns) |
+| destroy entity + 2 types | 424 ns (1.25 us) | 338 ns (1.04 us) | 303 ns (458 ns) | 361 ns (1.05 us) |
+| destroy entity + 4 types | 472 ns (1.50 us) | 455 ns (1.33 us) | 418 ns (1.25 us) | 557 ns (1.17 us) |
+| destroy entity + 8 types | 672 ns (1.75 us) | 660 ns (1.84 us) | 569 ns (1.46 us) | 683 ns (1.29 us) |
 
 ops/sec (ops/frame):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| destroy empty entity | 3,897,554 (64,959) | 4,502,999 (75,050) | 5,123,164 (85,386) | 4,239,373 (70,656) |
-| destroy entity + 2 types | 2,995,123 (49,919) | 3,166,273 (52,771) | 3,328,080 (55,468) | 2,796,039 (46,601) |
-| destroy entity + 4 types | 2,467,698 (41,128) | 2,271,668 (37,861) | 2,654,502 (44,242) | 2,163,158 (36,053) |
-| destroy entity + 8 types | 1,732,519 (28,875) | 1,741,067 (29,018) | 1,940,508 (32,342) | 1,725,193 (28,753) |
+| destroy empty entity | 3,440,594 (57,343) | 4,201,918 (70,032) | 4,918,758 (81,979) | 4,489,488 (74,825) |
+| destroy entity + 2 types | 2,357,720 (39,295) | 2,957,832 (49,297) | 3,300,198 (55,003) | 2,772,078 (46,201) |
+| destroy entity + 4 types | 2,120,107 (35,335) | 2,198,957 (36,649) | 2,391,586 (39,860) | 1,794,815 (29,914) |
+| destroy entity + 8 types | 1,486,996 (24,783) | 1,515,342 (25,256) | 1,757,108 (29,285) | 1,464,532 (24,409) |
 
 alloc/op (retained):
 
@@ -187,19 +187,19 @@ Latency -- avg (P99):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| add comp to empty entity | 198 ns (291 ns) | 180 ns (250 ns) | 181 ns (292 ns) | 175 ns (250 ns) | 181 ns (292 ns) |
-| add comp to 2-type entity | 318 ns (504 ns) | 299 ns (588 ns) | 317 ns (546 ns) | 327 ns (546 ns) | 344 ns (625 ns) |
-| add comp to 4-type entity | 410 ns (2.00 us) | 418 ns (1.97 us) | 417 ns (3.25 us) | 454 ns (2.79 us) | 484 ns (3.46 us) |
-| add comp to 8-type entity | 612 ns (3.17 us) | 612 ns (3.46 us) | 632 ns (5.33 us) | 666 ns (6.26 us) | 678 ns (6.21 us) |
+| add comp to empty entity | 188 ns (292 ns) | 194 ns (333 ns) | 197 ns (292 ns) | 188 ns (333 ns) | 210 ns (375 ns) |
+| add comp to 2-type entity | 318 ns (588 ns) | 335 ns (833 ns) | 318 ns (625 ns) | 363 ns (879 ns) | 387 ns (1.04 us) |
+| add comp to 4-type entity | 488 ns (2.68 us) | 468 ns (2.80 us) | 491 ns (3.34 us) | 473 ns (3.13 us) | 540 ns (3.33 us) |
+| add comp to 8-type entity | 657 ns (3.12 us) | 1.65 us (4.46 us) | 722 ns (5.71 us) | 691 ns (5.47 us) | 1.93 us (9.22 us) |
 
 ops/sec (ops/frame):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| add comp to empty entity | 5,056,444 (84,274) | 5,557,568 (92,626) | 5,522,910 (92,049) | 5,699,369 (94,989) | 5,515,184 (91,920) |
-| add comp to 2-type entity | 3,142,239 (52,371) | 3,343,420 (55,724) | 3,156,838 (52,614) | 3,060,748 (51,012) | 2,909,406 (48,490) |
-| add comp to 4-type entity | 2,436,664 (40,611) | 2,393,806 (39,897) | 2,400,161 (40,003) | 2,204,465 (36,741) | 2,066,493 (34,442) |
-| add comp to 8-type entity | 1,634,189 (27,236) | 1,633,377 (27,223) | 1,582,388 (26,373) | 1,501,550 (25,026) | 1,474,131 (24,569) |
+| add comp to empty entity | 5,317,243 (88,621) | 5,164,863 (86,081) | 5,072,047 (84,534) | 5,305,858 (88,431) | 4,763,646 (79,394) |
+| add comp to 2-type entity | 3,148,309 (52,472) | 2,983,315 (49,722) | 3,144,261 (52,404) | 2,754,136 (45,902) | 2,586,726 (43,112) |
+| add comp to 4-type entity | 2,047,771 (34,130) | 2,136,724 (35,612) | 2,038,734 (33,979) | 2,112,921 (35,215) | 1,850,523 (30,842) |
+| add comp to 8-type entity | 1,521,991 (25,367) | 606,018 (10,100) | 1,385,927 (23,099) | 1,446,693 (24,112) | 516,900 (8,615) |
 
 alloc/op (retained):
 
@@ -218,17 +218,17 @@ Latency -- avg (P99):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| remove comp from 2-type entity | 250 ns (917 ns) | 213 ns (417 ns) | 213 ns (459 ns) | 225 ns (417 ns) |
-| remove comp from 4-type entity | 351 ns (917 ns) | 325 ns (799 ns) | 343 ns (959 ns) | 350 ns (791 ns) |
-| remove comp from 8-type entity | 564 ns (4.54 us) | 543 ns (4.54 us) | 596 ns (5.22 us) | 644 ns (5.29 us) |
+| remove comp from 2-type entity | 259 ns (708 ns) | 276 ns (917 ns) | 231 ns (459 ns) | 230 ns (417 ns) |
+| remove comp from 4-type entity | 395 ns (1.71 us) | 370 ns (1.38 us) | 361 ns (1.09 us) | 378 ns (1.34 us) |
+| remove comp from 8-type entity | 598 ns (4.29 us) | 611 ns (4.63 us) | 588 ns (4.71 us) | 775 ns (5.04 us) |
 
 ops/sec (ops/frame):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| remove comp from 2-type entity | 4,007,318 (66,789) | 4,696,119 (78,269) | 4,689,555 (78,159) | 4,439,418 (73,990) |
-| remove comp from 4-type entity | 2,851,732 (47,529) | 3,078,918 (51,315) | 2,913,315 (48,555) | 2,855,383 (47,590) |
-| remove comp from 8-type entity | 1,773,105 (29,552) | 1,840,647 (30,677) | 1,678,070 (27,968) | 1,551,654 (25,861) |
+| remove comp from 2-type entity | 3,863,817 (64,397) | 3,618,641 (60,311) | 4,327,678 (72,128) | 4,354,179 (72,570) |
+| remove comp from 4-type entity | 2,530,467 (42,174) | 2,699,803 (44,997) | 2,768,921 (46,149) | 2,648,860 (44,148) |
+| remove comp from 8-type entity | 1,671,450 (27,857) | 1,635,503 (27,258) | 1,699,272 (28,321) | 1,291,082 (21,518) |
 
 alloc/op (retained):
 
@@ -246,17 +246,17 @@ Latency -- avg (P99):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| hasComponent | 69 ns (125 ns) | 67 ns (125 ns) | 70 ns (125 ns) | 49 ns (125 ns) | 46 ns (167 ns) |
-| getComponentValue | 70 ns (125 ns) | 69 ns (125 ns) | 71 ns (125 ns) | 62 ns (125 ns) | 61 ns (166 ns) |
-| setComponentValue | 102 ns (167 ns) | 114 ns (167 ns) | 115 ns (167 ns) | 103 ns (167 ns) | 106 ns (208 ns) |
+| hasComponent | 71 ns (166 ns) | 71 ns (167 ns) | 78 ns (208 ns) | 56 ns (209 ns) | 62 ns (208 ns) |
+| getComponentValue | 79 ns (208 ns) | 82 ns (166 ns) | 80 ns (209 ns) | 73 ns (209 ns) | 76 ns (209 ns) |
+| setComponentValue | 121 ns (209 ns) | 125 ns (208 ns) | 116 ns (208 ns) | 112 ns (167 ns) | 132 ns (333 ns) |
 
 ops/sec (ops/frame):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|-------:|------:|-------:|------:|
-| hasComponent | 14,572,338 (242,872) | 14,987,769 (249,796) | 14,221,654 (237,028) | 20,553,015 (342,550) | 21,747,845 (362,464) |
-| getComponentValue | 14,370,568 (239,509) | 14,509,310 (241,822) | 14,024,636 (233,744) | 16,151,674 (269,195) | 16,388,490 (273,142) |
-| setComponentValue | 9,820,587 (163,676) | 8,805,298 (146,755) | 8,718,696 (145,312) | 9,710,476 (161,841) | 9,463,682 (157,728) |
+| hasComponent | 14,142,474 (235,708) | 14,051,506 (234,192) | 12,790,567 (213,176) | 17,894,121 (298,235) | 16,008,661 (266,811) |
+| getComponentValue | 12,732,557 (212,209) | 12,131,695 (202,195) | 12,568,774 (209,480) | 13,620,916 (227,015) | 13,082,563 (218,043) |
+| setComponentValue | 8,296,024 (138,267) | 8,008,196 (133,470) | 8,610,052 (143,501) | 8,891,117 (148,185) | 7,598,194 (126,637) |
 
 alloc/op (retained):
 
@@ -274,25 +274,25 @@ Latency -- avg (P99):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| iter all | 2.73 us (3.42 us) | 25.15 us (29.67 us) | 247.26 us (279.96 us) | 2.52 ms (2.80 ms) |
-| iter selective | 1.34 us (1.67 us) | 10.85 us (11.88 us) | 103.50 us (114.43 us) | 1.07 ms (1.24 ms) |
-| iter narrow | -- | 1.19 us (1.50 us) | 12.17 us (13.96 us) | 180.27 us (206.75 us) |
+| iter all | 657 ns (833 ns) | 6.17 us (10.09 us) | 54.49 us (65.51 us) | 532.75 us (720.79 us) |
+| iter selective | 321 ns (417 ns) | 2.63 us (3.21 us) | 23.74 us (31.46 us) | 237.91 us (292.96 us) |
+| iter narrow | -- | 297 ns (375 ns) | 2.82 us (3.50 us) | 40.07 us (50.79 us) |
 
 ops/sec (ops/frame):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| iter all | 366,146 (6,102) | 39,767 (663) | 4,044 (67) | 397 (7) |
-| iter selective | 748,105 (12,468) | 92,171 (1,536) | 9,662 (161) | 931 (16) |
-| iter narrow | -- | 840,885 (14,015) | 82,159 (1,369) | 5,547 (92) |
+| iter all | 1,521,100 (25,352) | 162,068 (2,701) | 18,353 (306) | 1,877 (31) |
+| iter selective | 3,114,706 (51,912) | 380,951 (6,349) | 42,119 (702) | 4,203 (70) |
+| iter narrow | -- | 3,363,694 (56,062) | 354,404 (5,907) | 24,953 (416) |
 
 ent/sec (ent/frame):
 
 | Benchmark | xsmall | small | medium | large |
 |-----------|-------:|------:|-------:|------:|
-| iter all | 36.6 M (610,243) | 39.8 M (662,784) | 40.4 M (674,053) | 39.7 M (661,162) |
-| iter selective | 33.7 M (561,079) | 40.6 M (675,918) | 41.5 M (692,440) | 41.6 M (693,300) |
-| iter narrow | -- | 30.3 M (504,531) | 40.3 M (670,965) | 40.5 M (674,913) |
+| iter all | 152.1 M (2,535,167) | 162.1 M (2,701,137) | 183.5 M (3,058,901) | 187.7 M (3,128,437) |
+| iter selective | 149.5 M (2,491,765) | 168.8 M (2,812,688) | 182.6 M (3,043,802) | 188.5 M (3,141,816) |
+| iter narrow | -- | 154.7 M (2,578,832) | 178.3 M (2,971,088) | 181.0 M (3,016,844) |
 
 alloc/op (retained):
 

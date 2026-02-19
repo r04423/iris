@@ -1,7 +1,14 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { createAndRegisterArchetype } from "./archetype.js";
-import { addComponent, removeComponent, setComponentValue } from "./component.js";
+import {
+  addComponent,
+  emitComponentChanged,
+  getComponentValue,
+  hasComponent,
+  removeComponent,
+  setComponentValue,
+} from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { InvalidArgument, InvalidState } from "./error.js";
@@ -9,13 +16,13 @@ import { hashFilterTerms } from "./filters.js";
 import {
   added,
   changed,
+  collectEntities,
   destroyQuery,
   ensureQuery,
-  fetchEntities,
-  fetchEntitiesWithQuery,
-  fetchFirstEntity,
   hashQuery,
   not,
+  queryEntities,
+  queryFirstEntity,
 } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
@@ -170,7 +177,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const entities = [...fetchEntities(world, Position)];
+      const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 3);
       assert.ok(entities.includes(entity1));
@@ -193,7 +200,7 @@ describe("Query", () => {
       addComponent(world, entity2, Velocity);
 
       // Fetch entities with Position (should match both archetypes)
-      const entities = [...fetchEntities(world, Position)];
+      const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 2);
       assert.ok(entities.includes(entity1));
@@ -212,7 +219,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const entities = [...fetchEntities(world, Position)];
+      const entities = collectEntities(world, [Position]);
 
       // Reverse order: last entity first
       assert.strictEqual(entities[0], entity3);
@@ -220,7 +227,7 @@ describe("Query", () => {
       assert.strictEqual(entities[2], entity1);
     });
 
-    it("returns empty iterator for non-matching query", () => {
+    it("returns empty for non-matching query", () => {
       const world = createWorld();
       const Position = createEntity(world);
       const Velocity = createEntity(world);
@@ -229,7 +236,7 @@ describe("Query", () => {
       addComponent(world, entity, Position);
 
       // Fetch entities with Velocity (entity only has Position)
-      const entities = [...fetchEntities(world, Velocity)];
+      const entities = collectEntities(world, [Velocity]);
 
       assert.strictEqual(entities.length, 0);
     });
@@ -247,18 +254,18 @@ describe("Query", () => {
       addComponent(world, entity2, Velocity);
 
       // Fetch entities with both Position and Velocity
-      const entities = [...fetchEntities(world, Position, Velocity)];
+      const entities = collectEntities(world, [Position, Velocity]);
 
       // Only entity2 has both
       assert.strictEqual(entities.length, 1);
       assert.strictEqual(entities[0], entity2);
     });
 
-    it("returns empty iterator for empty world", () => {
+    it("returns empty for empty world", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const entities = [...fetchEntities(world, Position)];
+      const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 0);
     });
@@ -272,7 +279,7 @@ describe("Query", () => {
 
       // Raw number without type bits is invalid
       assert.throws(() => {
-        [...fetchEntities(world, 999 as EntityId)];
+        collectEntities(world, [999 as EntityId]);
       }, InvalidState);
     });
   });
@@ -291,12 +298,11 @@ describe("Query", () => {
       addComponent(world, entity3, Dead);
 
       let destroyedCount = 0;
-      const entities = fetchEntities(world, Dead);
 
-      for (const entity of entities) {
+      queryEntities(world, [Dead], (entity) => {
         destroyEntity(world, entity);
         destroyedCount++;
-      }
+      });
 
       // Verify all entities were visited
       assert.strictEqual(destroyedCount, 3);
@@ -322,15 +328,14 @@ describe("Query", () => {
       addComponent(world, entity4, Position);
 
       const visited: number[] = [];
-      const entities = fetchEntities(world, Position);
 
-      for (const entity of entities) {
+      queryEntities(world, [Position], (entity) => {
         visited.push(entity);
         // Destroy every other entity
         if (entity === entity4 || entity === entity2) {
           destroyEntity(world, entity);
         }
-      }
+      });
 
       // All 4 entities should be visited (reverse order)
       assert.strictEqual(visited.length, 4);
@@ -358,7 +363,7 @@ describe("Query", () => {
       addComponent(world, entity2, Velocity);
 
       // Fetch entities with both Position and Velocity
-      const entities = [...fetchEntities(world, Position, Velocity)];
+      const entities = collectEntities(world, [Position, Velocity]);
 
       assert.strictEqual(entities.length, 1);
       assert.strictEqual(entities[0], entity2);
@@ -377,7 +382,7 @@ describe("Query", () => {
       addComponent(world, entity2, Health);
 
       // Fetch Position, but exclude entities with Health
-      const entities = [...fetchEntities(world, Position, not(Health))];
+      const entities = collectEntities(world, [Position, not(Health)]);
 
       assert.strictEqual(entities.length, 1);
       assert.strictEqual(entities[0], entity1);
@@ -409,7 +414,7 @@ describe("Query", () => {
       addComponent(world, entity4, Dead);
 
       // Fetch entities with Position and Velocity, but exclude those with Health or Dead
-      const entities = [...fetchEntities(world, Position, Velocity, not(Health), not(Dead))];
+      const entities = collectEntities(world, [Position, Velocity, not(Health), not(Dead)]);
 
       assert.strictEqual(entities.length, 1);
       assert.strictEqual(entities[0], entity1);
@@ -423,7 +428,7 @@ describe("Query", () => {
 
       createAndRegisterArchetype(world, [Position], new Map());
 
-      const entities = [...fetchEntities(world, Position)];
+      const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 0);
 
@@ -440,8 +445,8 @@ describe("Query", () => {
 
       createAndRegisterArchetype(world, [Position], new Map());
 
-      [...fetchEntities(world, Position)];
-      [...fetchEntities(world, Position)];
+      collectEntities(world, [Position]);
+      collectEntities(world, [Position]);
 
       assert.strictEqual(world.filters.byId.size, 1);
     });
@@ -453,7 +458,7 @@ describe("Query", () => {
 
       createAndRegisterArchetype(world, [Position], new Map());
 
-      [...fetchEntities(world, Position)];
+      collectEntities(world, [Position]);
 
       const filterId = hashFilterTerms({ include: [Position], exclude: [] });
       const filter1 = world.filters.byId.get(filterId);
@@ -462,7 +467,7 @@ describe("Query", () => {
 
       createAndRegisterArchetype(world, [Position, Velocity], new Map());
 
-      [...fetchEntities(world, Position)];
+      collectEntities(world, [Position]);
 
       const filter2 = world.filters.byId.get(filterId);
 
@@ -478,7 +483,7 @@ describe("Query", () => {
       createAndRegisterArchetype(world, [Position, Velocity], new Map());
       createAndRegisterArchetype(world, [Position, Dead], new Map());
 
-      const entities = [...fetchEntities(world, Position, not(Dead))];
+      const entities = collectEntities(world, [Position, not(Dead)]);
 
       assert.strictEqual(entities.length, 0);
 
@@ -498,9 +503,9 @@ describe("Query", () => {
       createAndRegisterArchetype(world, [Velocity], new Map());
       createAndRegisterArchetype(world, [Position, Velocity], new Map());
 
-      [...fetchEntities(world, Position)];
-      [...fetchEntities(world, Velocity)];
-      [...fetchEntities(world, Position, Velocity)];
+      collectEntities(world, [Position]);
+      collectEntities(world, [Velocity]);
+      collectEntities(world, [Position, Velocity]);
 
       assert.strictEqual(world.filters.byId.size, 3);
     });
@@ -744,7 +749,7 @@ describe("Query", () => {
     });
   });
 
-  describe("fetchFirstEntity", () => {
+  describe("queryFirstEntity", () => {
     it("returns first matching entity", () => {
       const world = createWorld();
       const Position = createEntity(world);
@@ -757,7 +762,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const first = fetchFirstEntity(world, Position);
+      const first = queryFirstEntity(world, [Position]);
 
       // Returns last added
       assert.strictEqual(first, entity3);
@@ -767,7 +772,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const first = fetchFirstEntity(world, Position);
+      const first = queryFirstEntity(world, [Position]);
 
       assert.strictEqual(first, undefined);
     });
@@ -784,7 +789,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity2, Velocity);
 
-      const first = fetchFirstEntity(world, Position, Velocity);
+      const first = queryFirstEntity(world, [Position, Velocity]);
 
       assert.strictEqual(first, entity2);
     });
@@ -801,7 +806,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity1, Dead);
 
-      const first = fetchFirstEntity(world, Position, not(Dead));
+      const first = queryFirstEntity(world, [Position, not(Dead)]);
 
       assert.strictEqual(first, entity2);
     });
@@ -817,9 +822,9 @@ describe("Query", () => {
       let first2: EntityId | undefined;
 
       addSystem(world, function checker() {
-        first1 = fetchFirstEntity(world, added(Health));
+        first1 = queryFirstEntity(world, [added(Health)]);
         // Second call should return undefined (lastTick updated)
-        first2 = fetchFirstEntity(world, added(Health));
+        first2 = queryFirstEntity(world, [added(Health)]);
       });
 
       await runOnce(world);
@@ -836,13 +841,13 @@ describe("Query", () => {
 
       addComponent(world, child, pair(ChildOf, parent));
 
-      const first = fetchFirstEntity(world, pair(ChildOf, parent));
+      const first = queryFirstEntity(world, [pair(ChildOf, parent)]);
 
       assert.strictEqual(first, child);
     });
   });
 
-  describe("fetchEntitiesWithQuery", () => {
+  describe("queryEntities with QueryMeta", () => {
     it("fetches entities using query metadata", () => {
       const world = createWorld();
       const Position = createEntity(world);
@@ -854,19 +859,19 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
 
       const query = ensureQuery(world, Position);
-      const entities = [...fetchEntitiesWithQuery(world, query)];
+      const entities = collectEntities(world, query);
 
       assert.strictEqual(entities.length, 2);
       assert.ok(entities.includes(entity1));
       assert.ok(entities.includes(entity2));
     });
 
-    it("returns empty iterator for query with no matching entities", () => {
+    it("returns empty for query with no matching entities", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
       const query = ensureQuery(world, Position);
-      const entities = [...fetchEntitiesWithQuery(world, query)];
+      const entities = collectEntities(world, query);
 
       assert.strictEqual(entities.length, 0);
     });
@@ -884,7 +889,7 @@ describe("Query", () => {
       addComponent(world, entity3, Position);
 
       const query = ensureQuery(world, Position);
-      const entities = [...fetchEntitiesWithQuery(world, query)];
+      const entities = collectEntities(world, query);
 
       assert.strictEqual(entities[0], entity3);
       assert.strictEqual(entities[1], entity2);
@@ -905,7 +910,7 @@ describe("Query", () => {
         addComponent(world, child1, pair(ChildOf, parent));
         addComponent(world, child2, pair(ChildOf, parent));
 
-        const entities = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities = collectEntities(world, [pair(ChildOf, parent)]);
 
         assert.strictEqual(entities.length, 2);
         assert.ok(entities.includes(child1));
@@ -924,8 +929,8 @@ describe("Query", () => {
         addComponent(world, child1, pair(ChildOf, parent1));
         addComponent(world, child2, pair(ChildOf, parent2));
 
-        const childrenOfParent1 = [...fetchEntities(world, pair(ChildOf, parent1))];
-        const childrenOfParent2 = [...fetchEntities(world, pair(ChildOf, parent2))];
+        const childrenOfParent1 = collectEntities(world, [pair(ChildOf, parent1)]);
+        const childrenOfParent2 = collectEntities(world, [pair(ChildOf, parent2)]);
 
         assert.strictEqual(childrenOfParent1.length, 1);
         assert.strictEqual(childrenOfParent1[0], child1);
@@ -940,7 +945,7 @@ describe("Query", () => {
         const parent = createEntity(world);
         createEntity(world); // child with no pair
 
-        const entities = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities = collectEntities(world, [pair(ChildOf, parent)]);
 
         assert.strictEqual(entities.length, 0);
       });
@@ -961,7 +966,7 @@ describe("Query", () => {
         addComponent(world, child3, pair(ChildOf, parent1));
 
         // Query: entities with ANY ChildOf relation
-        const entities = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const entities = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
         assert.strictEqual(entities.length, 3);
         assert.ok(entities.includes(child1));
@@ -980,7 +985,7 @@ describe("Query", () => {
         addComponent(world, entity1, pair(ChildOf, target));
         addComponent(world, entity2, pair(Likes, target));
 
-        const entities = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const entities = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], entity1);
@@ -996,7 +1001,7 @@ describe("Query", () => {
         addComponent(world, child, pair(ChildOf, parent1));
         addComponent(world, child, pair(ChildOf, parent2));
 
-        const entities = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const entities = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], child);
@@ -1016,7 +1021,7 @@ describe("Query", () => {
         addComponent(world, entity2, pair(Likes, target));
 
         // Query: all entities targeting 'target' (any relation)
-        const entities = [...fetchEntities(world, pair(Wildcard, target))];
+        const entities = collectEntities(world, [pair(Wildcard, target)]);
 
         assert.strictEqual(entities.length, 2);
         assert.ok(entities.includes(entity1));
@@ -1034,7 +1039,7 @@ describe("Query", () => {
         addComponent(world, entity1, pair(ChildOf, target1));
         addComponent(world, entity2, pair(ChildOf, target2));
 
-        const entities = [...fetchEntities(world, pair(Wildcard, target1))];
+        const entities = collectEntities(world, [pair(Wildcard, target1)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], entity1);
@@ -1049,7 +1054,7 @@ describe("Query", () => {
 
         addComponent(world, entity1, pair(Has, Weapon));
 
-        const entities = [...fetchEntities(world, pair(Wildcard, Weapon))];
+        const entities = collectEntities(world, [pair(Wildcard, Weapon)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], entity1);
@@ -1071,7 +1076,7 @@ describe("Query", () => {
         // child2 doesn't have Active
 
         // Query: children of parent that are also Active
-        const entities = [...fetchEntities(world, pair(ChildOf, parent), Active)];
+        const entities = collectEntities(world, [pair(ChildOf, parent), Active]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], child1);
@@ -1090,7 +1095,7 @@ describe("Query", () => {
         addComponent(world, child2, Dead);
 
         // Query: children of parent that are NOT dead
-        const entities = [...fetchEntities(world, pair(ChildOf, parent), not(Dead))];
+        const entities = collectEntities(world, [pair(ChildOf, parent), not(Dead)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], child1);
@@ -1111,7 +1116,7 @@ describe("Query", () => {
         // entity2 doesn't like friend
 
         // Query: children of parent who also like friend
-        const entities = [...fetchEntities(world, pair(ChildOf, parent), pair(Likes, friend))];
+        const entities = collectEntities(world, [pair(ChildOf, parent), pair(Likes, friend)]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], entity1);
@@ -1129,7 +1134,7 @@ describe("Query", () => {
         addComponent(world, child2, pair(ChildOf, parent2));
 
         // Query: entities with any ChildOf, excluding those targeting parent2
-        const entities = [...fetchEntities(world, pair(ChildOf, Wildcard), not(pair(ChildOf, parent2)))];
+        const entities = collectEntities(world, [pair(ChildOf, Wildcard), not(pair(ChildOf, parent2))]);
 
         assert.strictEqual(entities.length, 1);
         assert.strictEqual(entities[0], child1);
@@ -1182,12 +1187,12 @@ describe("Query", () => {
         const parent = createEntity(world);
         const child = createEntity(world);
 
-        const entities1 = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities1 = collectEntities(world, [pair(ChildOf, parent)]);
         assert.strictEqual(entities1.length, 0);
 
         addComponent(world, child, pair(ChildOf, parent));
 
-        const entities2 = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities2 = collectEntities(world, [pair(ChildOf, parent)]);
         assert.strictEqual(entities2.length, 1);
         assert.strictEqual(entities2[0], child);
       });
@@ -1200,12 +1205,12 @@ describe("Query", () => {
 
         addComponent(world, child, pair(ChildOf, parent));
 
-        const entities1 = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities1 = collectEntities(world, [pair(ChildOf, parent)]);
         assert.strictEqual(entities1.length, 1);
 
         removeComponent(world, child, pair(ChildOf, parent));
 
-        const entities2 = [...fetchEntities(world, pair(ChildOf, parent))];
+        const entities2 = collectEntities(world, [pair(ChildOf, parent)]);
         assert.strictEqual(entities2.length, 0);
       });
 
@@ -1217,12 +1222,12 @@ describe("Query", () => {
 
         addComponent(world, child, pair(ChildOf, parent));
 
-        const entities1 = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const entities1 = collectEntities(world, [pair(ChildOf, Wildcard)]);
         assert.strictEqual(entities1.length, 1);
 
         removeComponent(world, child, pair(ChildOf, parent));
 
-        const entities2 = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const entities2 = collectEntities(world, [pair(ChildOf, Wildcard)]);
         assert.strictEqual(entities2.length, 0);
       });
     });
@@ -1244,13 +1249,13 @@ describe("Query", () => {
         addComponent(world, leaf2, pair(ChildOf, branch1));
 
         // Direct children of root
-        const rootChildren = [...fetchEntities(world, pair(ChildOf, root))];
+        const rootChildren = collectEntities(world, [pair(ChildOf, root)]);
         assert.strictEqual(rootChildren.length, 2);
         assert.ok(rootChildren.includes(branch1));
         assert.ok(rootChildren.includes(branch2));
 
         // Direct children of branch1
-        const branch1Children = [...fetchEntities(world, pair(ChildOf, branch1))];
+        const branch1Children = collectEntities(world, [pair(ChildOf, branch1)]);
         assert.strictEqual(branch1Children.length, 2);
         assert.ok(branch1Children.includes(leaf1));
         assert.ok(branch1Children.includes(leaf2));
@@ -1270,7 +1275,7 @@ describe("Query", () => {
         addComponent(world, bag, pair(Contains, potion));
 
         // Find all containers (entities with ANY Contains relation)
-        const containers = [...fetchEntities(world, pair(Contains, Wildcard))];
+        const containers = collectEntities(world, [pair(Contains, Wildcard)]);
 
         assert.strictEqual(containers.length, 2);
         assert.ok(containers.includes(chest));
@@ -1293,7 +1298,7 @@ describe("Query", () => {
         addComponent(world, entity3, pair(Owns, target));
 
         // Find all entities that have ANY relationship to target
-        const related = [...fetchEntities(world, pair(Wildcard, target))];
+        const related = collectEntities(world, [pair(Wildcard, target)]);
 
         assert.strictEqual(related.length, 3);
         assert.ok(related.includes(entity1));
@@ -1317,10 +1322,10 @@ describe("Query", () => {
         addComponent(world, child3, pair(ChildOf, parent));
 
         let destroyed = 0;
-        for (const entity of fetchEntities(world, pair(ChildOf, parent))) {
+        queryEntities(world, [pair(ChildOf, parent)], (entity) => {
           destroyEntity(world, entity);
           destroyed++;
-        }
+        });
 
         assert.strictEqual(destroyed, 3);
         assert.strictEqual(isEntityAlive(world, child1), false);
@@ -1341,15 +1346,15 @@ describe("Query", () => {
         addComponent(world, child2, pair(ChildOf, parent2));
 
         let processed = 0;
-        for (const entity of fetchEntities(world, pair(ChildOf, Wildcard))) {
+        queryEntities(world, [pair(ChildOf, Wildcard)], (entity) => {
           removeComponent(world, entity, pair(ChildOf, entity === child1 ? parent1 : parent2));
           processed++;
-        }
+        });
 
         assert.strictEqual(processed, 2);
 
         // Verify pairs were removed
-        const remaining = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+        const remaining = collectEntities(world, [pair(ChildOf, Wildcard)]);
         assert.strictEqual(remaining.length, 0);
       });
     });
@@ -1372,13 +1377,13 @@ describe("Query", () => {
 
       addSystem(world, function checker() {
         // First query: entity1 was added at tick 1, lastTick is 0, should match
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           firstCount++;
-        }
+        });
         // Second query at same tick: lastTick updated, no match
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           secondCount++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1397,9 +1402,9 @@ describe("Query", () => {
       const results: EntityId[] = [];
 
       addSystem(world, function tracker() {
-        for (const e of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], (e) => {
           results.push(e);
-        }
+        });
       });
 
       // First frame: sees entity1
@@ -1428,9 +1433,9 @@ describe("Query", () => {
       let count = 0;
 
       addSystem(world, function checker() {
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           count++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1451,9 +1456,9 @@ describe("Query", () => {
       const results: EntityId[] = [];
 
       addSystem(world, function tracker() {
-        for (const e of fetchEntities(world, changed(Position))) {
+        queryEntities(world, [changed(Position)], (e) => {
           results.push(e);
-        }
+        });
       });
 
       // First frame: sees initial add
@@ -1483,9 +1488,9 @@ describe("Query", () => {
       let count = 0;
 
       addSystem(world, function checker() {
-        for (const _ of fetchEntities(world, changed(Health))) {
+        queryEntities(world, [changed(Health)], () => {
           count++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1506,9 +1511,9 @@ describe("Query", () => {
 
       addSystem(world, function tracker() {
         let count = 0;
-        for (const _ of fetchEntities(world, changed(Position))) {
+        queryEntities(world, [changed(Position)], () => {
           count++;
-        }
+        });
         results.push(count);
       });
 
@@ -1536,10 +1541,10 @@ describe("Query", () => {
       let matched: EntityId | undefined;
 
       addSystem(world, function checker() {
-        for (const e of fetchEntities(world, added(Position), Velocity)) {
+        queryEntities(world, [added(Position), Velocity], (e) => {
           count++;
           matched = e;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1565,9 +1570,9 @@ describe("Query", () => {
 
       addSystem(world, function tracker() {
         const batch: EntityId[] = [];
-        for (const e of fetchEntities(world, changed(Position), not(Dead))) {
+        queryEntities(world, [changed(Position), not(Dead)], (e) => {
           batch.push(e);
-        }
+        });
         results.push(batch);
       });
 
@@ -1603,10 +1608,10 @@ describe("Query", () => {
       let matched: EntityId | undefined;
 
       addSystem(world, function checker() {
-        for (const e of fetchEntities(world, added(Health), added(Mana))) {
+        queryEntities(world, [added(Health), added(Mana)], (e) => {
           count++;
           matched = e;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1634,10 +1639,10 @@ describe("Query", () => {
       let matched: EntityId | undefined;
 
       addSystem(world, function checker() {
-        for (const e of fetchEntities(world, added(pair(ChildOf, parent)), Active)) {
+        queryEntities(world, [added(pair(ChildOf, parent)), Active], (e) => {
           count++;
           matched = e;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1659,9 +1664,9 @@ describe("Query", () => {
 
       addSystem(world, function tracker() {
         const batch: EntityId[] = [];
-        for (const e of fetchEntities(world, added(NewState), changed(Position))) {
+        queryEntities(world, [added(NewState), changed(Position)], (e) => {
           batch.push(e);
-        }
+        });
         results.push(batch);
       });
 
@@ -1696,17 +1701,17 @@ describe("Query", () => {
 
       addSystem(world, function checker() {
         // Query 1: added(Health)
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           healthCount1++;
-        }
+        });
         // Query 2: added(Mana) - independent, should still see the entity
-        for (const _ of fetchEntities(world, added(Mana))) {
+        queryEntities(world, [added(Mana)], () => {
           manaCount++;
-        }
+        });
         // Query 1 again: should be empty (its own lastTick was updated)
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           healthCount2++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1730,15 +1735,15 @@ describe("Query", () => {
 
       // Both systems use the same query (added(Health))
       addSystem(world, function systemA() {
-        for (const e of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], (e) => {
           systemAResults.push(e);
-        }
+        });
       });
 
       addSystem(world, function systemB() {
-        for (const e of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], (e) => {
           systemBResults.push(e);
-        }
+        });
       });
 
       await runOnce(world);
@@ -1760,9 +1765,9 @@ describe("Query", () => {
 
       addSystem(world, function tracker() {
         let count = 0;
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           count++;
-        }
+        });
         results.push(count);
       });
 
@@ -1780,9 +1785,9 @@ describe("Query", () => {
       let systemBSawEntity = false;
 
       addSystem(world, function systemB() {
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           systemBSawEntity = true;
-        }
+        });
       });
 
       addSystem(
@@ -1808,11 +1813,11 @@ describe("Query", () => {
       addComponent(world, entity, Health, { value: 100 });
 
       // added() outside system context returns empty
-      const addedResults = [...fetchEntities(world, added(Health))];
+      const addedResults = collectEntities(world, [added(Health)]);
       assert.strictEqual(addedResults.length, 0);
 
       // changed() outside system context returns empty
-      const changedResults = [...fetchEntities(world, changed(Health))];
+      const changedResults = collectEntities(world, [changed(Health)]);
       assert.strictEqual(changedResults.length, 0);
     });
 
@@ -1827,17 +1832,17 @@ describe("Query", () => {
       const systemBResults: EntityId[] = [];
 
       addSystem(world, function systemB() {
-        for (const e of fetchEntities(world, changed(Position))) {
+        queryEntities(world, [changed(Position)], (e) => {
           systemBResults.push(e);
-        }
+        });
       });
 
       addSystem(
         world,
         function systemA() {
-          for (const e of fetchEntities(world, changed(Position))) {
+          queryEntities(world, [changed(Position)], (e) => {
             systemAResults.push(e);
-          }
+          });
           // Modify after querying
           setComponentValue(world, entity, Position, "x", systemAResults.length);
         },
@@ -1864,7 +1869,7 @@ describe("Query", () => {
   });
 
   describe("Change Detection - Edge Cases", () => {
-    it("updates lastTick even when loop exits early via break", async () => {
+    it("updates lastTick even when callback returns false early", async () => {
       const world = createWorld();
       const Health = createEntity(world);
 
@@ -1880,16 +1885,16 @@ describe("Query", () => {
       let secondCount = 0;
 
       addSystem(world, function checker() {
-        // Break after first entity - should still update lastTick
-        for (const _ of fetchEntities(world, added(Health))) {
+        // Return false after first entity - should still update lastTick
+        queryEntities(world, [added(Health)], () => {
           breakCount++;
-          if (breakCount === 1) break;
-        }
+          return breakCount === 1 ? false : undefined;
+        });
 
         // Second query should see nothing (lastTick was updated despite early exit)
-        for (const _ of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], () => {
           secondCount++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1910,9 +1915,9 @@ describe("Query", () => {
       let count = 0;
 
       addSystem(world, function checker() {
-        for (const _ of fetchEntities(world, added(Shield))) {
+        queryEntities(world, [added(Shield)], () => {
           count++;
-        }
+        });
       });
 
       await runOnce(world);
@@ -1936,9 +1941,9 @@ describe("Query", () => {
       const results: EntityId[] = [];
 
       addSystem(world, function checker() {
-        for (const e of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], (e) => {
           results.push(e);
-        }
+        });
       });
 
       await runOnce(world);
@@ -1957,9 +1962,9 @@ describe("Query", () => {
       const seen: EntityId[] = [];
 
       addSystem(world, function reader() {
-        for (const e of fetchEntities(world, added(Health))) {
+        queryEntities(world, [added(Health)], (e) => {
           seen.push(e);
-        }
+        });
       });
 
       // First frame: no entities with Health

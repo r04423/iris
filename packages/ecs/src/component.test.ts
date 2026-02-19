@@ -13,7 +13,7 @@ import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { NotFound } from "./error.js";
-import { changed, fetchEntities } from "./query.js";
+import { changed, collectEntities, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { addSystem, runOnce } from "./scheduler.js";
@@ -644,7 +644,7 @@ describe("Component", () => {
       addComponent(world, e1, Flying);
       addComponent(world, e3, Flying);
 
-      const results = [...fetchEntities(world, Flying)];
+      const results = collectEntities(world, [Flying]);
 
       assert.strictEqual(results.length, 2);
       assert.ok(results.includes(e1));
@@ -830,7 +830,7 @@ describe("Component", () => {
       addComponent(world, e3, Alive);
 
       // Query for entities with both Alive and Position
-      const results = [...fetchEntities(world, Alive, Position)];
+      const results = collectEntities(world, [Alive, Position]);
 
       assert.strictEqual(results.length, 1);
       assert.ok(results.includes(e1));
@@ -1139,9 +1139,9 @@ describe("Component", () => {
 
       addSystem(world, function tracker() {
         const batch: EntityId[] = [];
-        for (const e of fetchEntities(world, changed(Position))) {
+        queryEntities(world, [changed(Position)], (e) => {
           batch.push(e);
-        }
+        });
         results.push(batch);
       });
 

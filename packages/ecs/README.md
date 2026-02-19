@@ -41,11 +41,11 @@ import {
   addComponent,
   getComponentValue,
   setComponentValue,
-  fetchEntities,
+  queryEntities,
   addSystem,
   runOnce,
   Type,
-} from "iris-ecs";
+} from "iris-ecs"; 
 
 // Define components
 const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
@@ -62,7 +62,7 @@ addComponent(world, player, Player);
 
 // Define a system
 function movementSystem(world) {
-  for (const e of fetchEntities(world, Position, Velocity)) {
+  queryEntities(world, [Position, Velocity], (e) => {
     const px = getComponentValue(world, e, Position, "x");
     const py = getComponentValue(world, e, Position, "y");
     const vx = getComponentValue(world, e, Velocity, "x");
@@ -70,7 +70,7 @@ function movementSystem(world) {
 
     setComponentValue(world, e, Position, "x", px + vx);
     setComponentValue(world, e, Position, "y", py + vy);
-  }
+  });
 }
 
 // Register and run
@@ -246,9 +246,9 @@ if (hasResource(world, Time)) {
 Resources use the **component-on-self pattern** internally -- the component is added to itself as an entity. This means resources appear in queries:
 
 ```typescript
-for (const entity of fetchEntities(world, Time)) {
+queryEntities(world, [Time], (entity) => {
   // entity === Time (the component ID itself)
-}
+});
 ```
 
 Use resources for frame timing, configuration, asset registry, input state, physics settings, or any global data that systems need but doesn't belong to a specific entity.
@@ -262,7 +262,7 @@ import {
   defineRelation,
   pair,
   addComponent,
-  fetchEntities,
+  queryEntities,
   getRelationTargets,
   Wildcard,
 } from "iris-ecs";
@@ -277,9 +277,9 @@ addComponent(world, player, pair(ChildOf, scene));
 addComponent(world, weapon, pair(ChildOf, player));
 
 // Query children of a specific parent
-for (const child of fetchEntities(world, pair(ChildOf, scene))) {
+queryEntities(world, [pair(ChildOf, scene)], (child) => {
   // child === player
-}
+});
 
 // Get all targets for a relation on an entity
 const parents = getRelationTargets(world, weapon, ChildOf); // [player]
@@ -292,11 +292,13 @@ Use relations for hierarchies (parent/child), ownership, targeting, dependencies
 Use `Wildcard` to match any relation or target:
 
 ```typescript
+import { collectEntities } from "iris-ecs";
+
 // All entities with ANY ChildOf relation (any target)
-const allChildren = [...fetchEntities(world, pair(ChildOf, Wildcard))];
+const allChildren = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
 // All entities targeting a specific entity (any relation)
-const relatedToPlayer = [...fetchEntities(world, pair(Wildcard, player))];
+const relatedToPlayer = collectEntities(world, [pair(Wildcard, player)]);
 ```
 
 #### Exclusive Relations
@@ -372,19 +374,19 @@ Adding or removing a component moves an entity to a different archetype. This is
 
 ### Queries
 
-A **Query** fetches entities that match a set of component constraints. Use `fetchEntities()` to iterate all matches or `fetchFirstEntity()` for singletons.
+A **Query** fetches entities that match a set of component constraints. Use `queryEntities()` to iterate matches, `queryFirstEntity()` for singletons, or `collectEntities()` for array results.
 
 ```typescript
-import { fetchEntities, fetchFirstEntity, not } from "iris-ecs";
+import { queryEntities, queryFirstEntity, not } from "iris-ecs";
 
 // Iterate all entities with Position and Velocity
-for (const entity of fetchEntities(world, Position, Velocity)) {
+queryEntities(world, [Position, Velocity], (entity) => {
   const x = getComponentValue(world, entity, Position, "x");
   // ...
-}
+});
 
 // Get a singleton (first match or undefined)
-const player = fetchFirstEntity(world, Player, not(Dead));
+const player = queryFirstEntity(world, [Player, not(Dead)]);
 ```
 
 💡 **Tip:** Queries are cached internally -- the same component set returns the same cached query.
@@ -395,14 +397,14 @@ Use `not()` to exclude entities that have a component:
 
 ```typescript
 // All entities with Position but WITHOUT the Dead tag
-for (const entity of fetchEntities(world, Position, not(Dead))) {
+queryEntities(world, [Position, not(Dead)], (entity) => {
   // Only living entities
-}
+});
 
 // Multiple exclusions
-for (const entity of fetchEntities(world, Position, Velocity, not(Frozen), not(Disabled))) {
+queryEntities(world, [Position, Velocity, not(Frozen), not(Disabled)], (entity) => {
   // Entities that can move
-}
+});
 ```
 
 #### Filters and Archetypes (Under the Hood)
@@ -418,13 +420,13 @@ import {
   addSystem,
   run,
   stop,
-  fetchEntities,
+  queryEntities,
   getComponentValue,
   setComponentValue,
 } from "iris-ecs";
 
 function movementSystem(world) {
-  for (const e of fetchEntities(world, Position, Velocity)) {
+  queryEntities(world, [Position, Velocity], (e) => {
     const px = getComponentValue(world, e, Position, "x");
     const py = getComponentValue(world, e, Position, "y");
     const vx = getComponentValue(world, e, Velocity, "x");
@@ -432,7 +434,7 @@ function movementSystem(world) {
 
     setComponentValue(world, e, Position, "x", px + vx);
     setComponentValue(world, e, Position, "y", py + vy);
-  }
+  });
 }
 
 addSystem(world, movementSystem);
@@ -658,7 +660,7 @@ Events use double-buffered storage. Buffers rotate automatically at the end of e
 
 ```typescript
 import {
-  fetchEntities,
+  queryEntities,
   added,
   changed,
   removed,
@@ -666,19 +668,19 @@ import {
 } from "iris-ecs";
 
 // Entities where Position was added this tick
-for (const entity of fetchEntities(world, added(Position))) {
+queryEntities(world, [added(Position)], (entity) => {
   initializePhysicsBody(entity);
-}
+});
 
 // Entities where Health was modified (added OR value changed)
-for (const entity of fetchEntities(world, changed(Health))) {
+queryEntities(world, [changed(Health)], (entity) => {
   updateHealthBar(entity);
-}
+});
 
 // Combine with regular filters
-for (const e of fetchEntities(world, Player, changed(Position), not(Dead))) {
+queryEntities(world, [Player, changed(Position), not(Dead)], (e) => {
   updatePlayerOnMinimap(e);
-}
+});
 ```
 
 Each system tracks changes independently -- if two systems query `added(Position)`, both see the same newly added entities.

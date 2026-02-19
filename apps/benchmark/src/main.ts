@@ -6,8 +6,10 @@ import { measureMemory } from "./memory.js";
 import { printMemoryReport, printThroughputReport } from "./report.js";
 import type { BenchmarkDef, MemoryResult, PresetName, Suite } from "./types.js";
 
-function resolveEntityCount(def: BenchmarkDef, presetName: PresetName): number | undefined {
+// biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
+function resolveEntityCount(def: BenchmarkDef, presetName: PresetName, world?: any): number | undefined {
   if (def.entityCount == null) return undefined;
+  if (typeof def.entityCount === "function") return def.entityCount(world);
   if (typeof def.entityCount === "number") return def.entityCount;
   return def.entityCount[presetName];
 }
@@ -101,6 +103,7 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
   for (const [presetName, benchmarks] of byPreset) {
     const factory = adapter.presets[presetName];
     const bench = new Bench(THROUGHPUT_CONFIG);
+    const entityCounts = new Map<string, number>();
 
     for (let i = 0; i < benchmarks.length; i++) {
       const def = benchmarks[i]!;
@@ -117,6 +120,8 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
           beforeAll() {
             world = factory();
             def.setup?.(world);
+            const count = resolveEntityCount(def, presetName, world);
+            if (count != null) entityCounts.set(def.name, count);
           },
           // Entities accumulate across iterations intentionally. Creating a
           // fresh world per iteration is prohibitively expensive and adds GC noise.
@@ -128,12 +133,6 @@ async function runThroughput(adapter: LibraryAdapter, suite: Suite): Promise<voi
     }
 
     await bench.run();
-
-    const entityCounts = new Map<string, number>();
-    for (let i = 0; i < benchmarks.length; i++) {
-      const count = resolveEntityCount(benchmarks[i]!, presetName);
-      if (count != null) entityCounts.set(benchmarks[i]!.name, count);
-    }
 
     printThroughputReport(
       suite.name,

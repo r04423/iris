@@ -66,12 +66,12 @@ export { getName, lookupByName, Name, removeName, setName } from "./name.js";
 export {
   added,
   changed,
+  collectEntities,
   destroyQuery,
   ensureQuery,
-  fetchEntities,
-  fetchEntitiesWithQuery,
-  fetchFirstEntity,
   not,
+  queryEntities,
+  queryFirstEntity,
 } from "./query.js";
 
 // ============================================================================

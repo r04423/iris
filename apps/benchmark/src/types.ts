@@ -10,8 +10,14 @@ export type BenchmarkDef = {
   fn: (world: any) => void;
   // biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
   setup?: (world: any) => void;
-  /** Entity count per iteration for throughput scaling. Constant or per-preset. */
-  entityCount?: number | Partial<Record<PresetName, number>>;
+  /**
+   * Entity count per iteration for throughput scaling.
+   * Static (constant or per-preset) or dynamic (function called after setup
+   * with the populated world, so query-match counts stay in sync with the
+   * actual entity distribution).
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: world type varies per library adapter
+  entityCount?: number | Partial<Record<PresetName, number>> | ((world: any) => number);
 };
 
 export type Suite = {

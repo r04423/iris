@@ -1,22 +1,13 @@
-import {
-  type Component,
-  createEntity,
-  createWorld,
-  type EntityId,
-  fetchEntities,
-  not,
-  type Tag,
-  type World,
-} from "iris-ecs";
+import { createEntity, createWorld, type EntityId, not, queryEntities, type World } from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
 import {
-  ALL_POOL_COMPONENTS,
-  ALL_POOL_TAGS,
   addEntityTypes,
   GROUP_2,
   GROUP_4,
   GROUP_8,
+  GROUPS,
   generateTemplatePool,
+  MODIFIER_POOL,
   type TemplateGroup,
 } from "./pool.js";
 import { splitmix32 } from "./rng.js";
@@ -55,36 +46,47 @@ function populateFromTemplates(
 }
 
 /**
- * Pre-executes randomized queries to populate the internal query cache and
- * archetype matching structures. Populates query caches as if multiple systems
- * had registered diverse queries. Benchmarks then run against
- * cache pressure rather than an empty query index.
+ * Pre-executes template-derived queries to populate the internal query cache
+ * and archetype matching structures. Each query is built by picking a random
+ * template and selecting 1-3 of its types as terms, with a chance of adding
+ * a modifier type (include or `not()`). This produces realistic cache pressure
+ * since queries target component sets that actually co-occur on entities.
  */
-function activateQueries(world: World, count: number, components: Component[], tags: Tag[], seed: number): void {
+function activateQueries(world: World, count: number, seed: number): void {
   const rng = splitmix32(seed);
-  const allTypes: EntityId[] = [...components, ...tags];
+  const allTemplates = GROUPS.flatMap((g) => g.templates);
 
   for (let i = 0; i < count; i++) {
-    const termCount = 1 + Math.floor(rng() * 3);
+    const template = allTemplates[Math.floor(rng() * allTemplates.length)]!;
+    const types = template.types;
+
+    // 1-3 terms drawn from the template's own types
+    const maxTerms = Math.min(3, types.length);
+    const termCount = 1 + Math.floor(rng() * maxTerms);
     const terms: EntityId[] = [];
-    // First term must be an include (queries require at least one)
-    const firstIdx = Math.floor(rng() * allTypes.length);
-    terms.push(allTypes[firstIdx]!);
-    for (let j = 1; j < termCount; j++) {
-      const typeIdx = Math.floor(rng() * allTypes.length);
-      const type = allTypes[typeIdx]!;
-      if (rng() < 0.2) {
-        // ~20% chance of not() modifier
-        terms.push(not(type) as unknown as EntityId);
+    const used = new Set<number>();
+
+    for (let j = 0; j < termCount; j++) {
+      let idx: number;
+      do {
+        idx = Math.floor(rng() * types.length);
+      } while (used.has(idx));
+      used.add(idx);
+      terms.push(types[idx]!);
+    }
+
+    // ~20% chance of adding a modifier term (include or not())
+    if (rng() < 0.2) {
+      const modifier = MODIFIER_POOL[Math.floor(rng() * MODIFIER_POOL.length)]!;
+      if (rng() < 0.5) {
+        terms.push(not(modifier) as unknown as EntityId);
       } else {
-        terms.push(type);
+        terms.push(modifier);
       }
     }
+
     // biome-ignore lint/suspicious/noExplicitAny: benchmark infrastructure
-    const iter = fetchEntities(world, ...(terms as any));
-    for (const _e of iter) {
-      /* drain to activate query */
-    }
+    queryEntities(world, terms as any, () => undefined);
   }
 }
 
@@ -118,7 +120,7 @@ function createXSmallPreset(): World {
     ],
     0.1
   );
-  activateQueries(world, 20, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
+  activateQueries(world, 20, 123);
   return world;
 }
 
@@ -134,7 +136,7 @@ function createSmallPreset(): World {
     ],
     0.05
   );
-  activateQueries(world, 100, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
+  activateQueries(world, 100, 123);
   return world;
 }
 
@@ -150,7 +152,7 @@ function createMediumPreset(): World {
     ],
     0.012
   );
-  activateQueries(world, 400, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
+  activateQueries(world, 400, 123);
   return world;
 }
 
@@ -166,7 +168,7 @@ function createLargePreset(): World {
     ],
     0.002
   );
-  activateQueries(world, 1_000, ALL_POOL_COMPONENTS, ALL_POOL_TAGS, 123);
+  activateQueries(world, 1_000, 123);
   return world;
 }
 

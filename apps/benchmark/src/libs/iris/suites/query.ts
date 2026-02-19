@@ -1,4 +1,4 @@
-import { ensureQuery, fetchEntitiesWithQuery, type QueryMeta, type World } from "iris-ecs";
+import { ensureQuery, type QueryMeta, queryEntities, type World } from "iris-ecs";
 import type { BenchmarkDef, PresetName } from "../../../types.js";
 import { GENERATED_COMPONENTS } from "../fixtures.js";
 
@@ -22,6 +22,18 @@ type QueryPoolWorld = World & { __queryMeta: QueryMeta; __sink: number };
 const C = GENERATED_COMPONENTS;
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function countMatches(world: World, meta: QueryMeta): number {
+  let count = 0;
+  queryEntities(world, meta, () => {
+    count++;
+  });
+  return count;
+}
+
+// ============================================================================
 // Benchmarks
 // ============================================================================
 
@@ -30,7 +42,9 @@ function queryBenchmarks(): BenchmarkDef[] {
     {
       name: "iter all",
       presets: allPresets,
-      entityCount: { xsmall: 100, small: 1_000, medium: 10_000, large: 100_000 },
+      entityCount(world: World) {
+        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+      },
       setup(world: World) {
         const w = world as QueryPoolWorld;
         w.__queryMeta = ensureQuery(world, C[0]!);
@@ -39,16 +53,18 @@ function queryBenchmarks(): BenchmarkDef[] {
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        for (const entity of fetchEntitiesWithQuery(world, w.__queryMeta)) {
+        queryEntities(world, w.__queryMeta, (entity) => {
           sink += entity as number;
-        }
+        });
         w.__sink = sink;
       },
     },
     {
       name: "iter selective",
       presets: allPresets,
-      entityCount: { xsmall: 45, small: 440, medium: 4_300, large: 44_700 },
+      entityCount(world: World) {
+        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+      },
       setup(world: World) {
         const w = world as QueryPoolWorld;
         w.__queryMeta = ensureQuery(world, C[0]!, C[1]!);
@@ -57,16 +73,18 @@ function queryBenchmarks(): BenchmarkDef[] {
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        for (const entity of fetchEntitiesWithQuery(world, w.__queryMeta)) {
+        queryEntities(world, w.__queryMeta, (entity) => {
           sink += entity as number;
-        }
+        });
         w.__sink = sink;
       },
     },
     {
       name: "iter narrow",
       presets: narrowPresets,
-      entityCount: { small: 36, medium: 490, large: 7_300 },
+      entityCount(world: World) {
+        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+      },
       setup(world: World) {
         const w = world as QueryPoolWorld;
         w.__queryMeta = ensureQuery(world, C[10]!);
@@ -75,9 +93,9 @@ function queryBenchmarks(): BenchmarkDef[] {
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        for (const entity of fetchEntitiesWithQuery(world, w.__queryMeta)) {
+        queryEntities(world, w.__queryMeta, (entity) => {
           sink += entity as number;
-        }
+        });
         w.__sink = sink;
       },
     },

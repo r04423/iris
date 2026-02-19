@@ -162,56 +162,6 @@ export const GROUP_8: TemplateGroup = {
 export const GROUPS: TemplateGroup[] = [GROUP_2, GROUP_4, GROUP_8];
 
 // ============================================================================
-// All pool types (for query activation)
-// ============================================================================
-
-/** All unique components used across all templates and modifiers. */
-export const ALL_POOL_COMPONENTS: Component[] = (() => {
-  const seen = new Set<EntityId>();
-  const result: Component[] = [];
-  for (const group of GROUPS) {
-    for (const template of group.templates) {
-      for (const type of template.types) {
-        if (componentSet.has(type) && !seen.has(type)) {
-          seen.add(type);
-          result.push(type as Component);
-        }
-      }
-    }
-  }
-  for (const comp of MODIFIER_COMPONENTS) {
-    if (!seen.has(comp)) {
-      seen.add(comp);
-      result.push(comp);
-    }
-  }
-  return result;
-})();
-
-/** All unique tags used across all templates and modifiers. */
-export const ALL_POOL_TAGS: Tag[] = (() => {
-  const seen = new Set<EntityId>();
-  const result: Tag[] = [];
-  for (const group of GROUPS) {
-    for (const template of group.templates) {
-      for (const type of template.types) {
-        if (!componentSet.has(type) && !seen.has(type)) {
-          seen.add(type);
-          result.push(type as Tag);
-        }
-      }
-    }
-  }
-  for (const tag of MODIFIER_TAGS) {
-    if (!seen.has(tag)) {
-      seen.add(tag);
-      result.push(tag);
-    }
-  }
-  return result;
-})();
-
-// ============================================================================
 // Modifier helpers
 // ============================================================================
 

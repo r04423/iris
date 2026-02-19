@@ -210,9 +210,9 @@ export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined {
-  const meta = ensureEntity(world, entityId);
+  const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = meta.archetype.columns.get(componentId);
+  const fieldColumns = archetype.columns.get(componentId);
   if (!fieldColumns) {
     return;
   }
@@ -222,7 +222,7 @@ export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
     return;
   }
 
-  return column[meta.row] as InferSchema<S[K]>;
+  return column[row] as InferSchema<S[K]>;
 }
 
 /**
@@ -247,9 +247,9 @@ export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
   fieldName: K,
   value: InferSchema<S[K]>
 ): void {
-  const meta = ensureEntity(world, entityId);
+  const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = meta.archetype.columns.get(componentId);
+  const fieldColumns = archetype.columns.get(componentId);
   if (!fieldColumns) {
     return;
   }
@@ -259,11 +259,11 @@ export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
     return;
   }
 
-  column[meta.row] = value;
+  column[row] = value;
 
-  const ticks = meta.archetype.ticks.get(componentId);
+  const ticks = archetype.ticks.get(componentId);
   if (ticks) {
-    ticks.changed[meta.row] = world.execution.tick;
+    ticks.changed[row] = world.execution.tick;
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
@@ -280,11 +280,11 @@ export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
  * emitComponentChanged(world, entity, Position);  // Notify change tracking
  */
 export function emitComponentChanged(world: World, entityId: EntityId, componentId: EntityId): void {
-  const meta = ensureEntity(world, entityId);
+  const { archetype, row } = ensureEntity(world, entityId);
 
-  const ticks = meta.archetype.ticks.get(componentId);
+  const ticks = archetype.ticks.get(componentId);
   if (ticks) {
-    ticks.changed[meta.row] = world.execution.tick;
+    ticks.changed[row] = world.execution.tick;
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);

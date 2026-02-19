@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { hasComponent } from "./component.js";
-import { fetchEntities } from "./query.js";
+import { collectEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue, hasResource, removeResource, setResourceValue } from "./resource.js";
 import { Type } from "./schema.js";
@@ -60,7 +60,7 @@ describe("Resource", () => {
 
       addResource(world, Physics, { gravity: 9.81 });
 
-      const results = [...fetchEntities(world, Physics)];
+      const results = collectEntities(world, [Physics]);
 
       // Should find the singleton entity (which is the component ID itself)
       assert.strictEqual(results.length, 1);

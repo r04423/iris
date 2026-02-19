@@ -246,36 +246,3 @@ export function ensureFilter(world: World, terms: FilterTerms): FilterMeta {
 
   return filterMeta;
 }
-
-// ============================================================================
-// Filter Iteration
-// ============================================================================
-
-/**
- * Iterates all entities matching a filter in reverse order.
- *
- * Reverse iteration allows safe entity deletion during iteration without
- * skipping entities or invalidating indices.
- *
- * @param filter - Filter metadata containing cached matching archetypes
- * @returns Generator yielding entity IDs from all matching archetypes
- *
- * @example
- * for (const entity of iterateFilterEntities(filter)) {
- *   // Safe to delete entity here due to reverse iteration
- *   destroyEntity(world, entity);
- * }
- */
-export function* iterateFilterEntities(filter: FilterMeta): IterableIterator<EntityId> {
-  const archetypes = filter.archetypes;
-
-  for (let a = 0; a < archetypes.length; a++) {
-    const archetype = archetypes[a]!;
-    const entities = archetype.entities;
-
-    // Reverse iteration enables safe deletion during traversal
-    for (let i = entities.length - 1; i >= 0; i--) {
-      yield entities[i]!;
-    }
-  }
-}
