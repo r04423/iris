@@ -1,4 +1,4 @@
-name: Deploy Space Shooter
+name: Deploy to Pages
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
     paths:
       - "apps/space-shooter/**"
       - "packages/ecs/**"
+      - "README.md"
+      - ".github/workflows/deploy-space-shooter.yml"
 
 permissions:
   contents: read
@@ -43,6 +45,19 @@ jobs:
         run: |
           mkdir -p _site/space-shooter
           cp -r apps/space-shooter/dist/* _site/space-shooter/
+          cat > _site/index.html << 'LANDING'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="refresh" content="0; url=space-shooter/">
+            <title>Iris</title>
+          </head>
+          <body>
+            <p><a href="space-shooter/">Space Shooter</a></p>
+          </body>
+          </html>
+          LANDING
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
