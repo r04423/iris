@@ -1,6 +1,22 @@
 # Iris
 
-High-performance, Entity Component System library for TypeScript.
+Libraries for building realtime applications in TypeScript.
+
+## Principles
+
+**Performance through simplicity** -- Simple code is fast code. Index-based `for` loops over iterators. `Map`/`Set` over object lookups in hot paths. TypedArrays for columnar data. Non-null assertions (`!`) where proven safe. Never chase synthetic benchmarks -- measure real workloads.
+
+**Type safety is non-negotiable** -- Full TypeScript inference across all public APIs. Branded types for ID safety. Phantom type fields carry schema information at zero runtime cost. No `any` in public API surface. If a type can't be inferred, the API design is wrong.
+
+**Data and logic are separate** -- All data lives in plain objects, TypedArrays, Maps, and Sets. All logic lives in pure functions. No classes. No methods on data structures. This makes state inspectable, serializable, and cache-friendly.
+
+**Documentation is code** -- JSDoc with `@example` blocks MUST exist on all public APIs (everything exported from `index.ts`). Functions exported from their module but NOT from `index.ts` MUST have the `@internal` tag. Section headers (`// ====`) divide files into logical regions. Comments explain "why", never "what."
+
+**Zero runtime dependencies** -- The core library is fully self-contained. No npm packages at runtime. Every byte shipped is code we wrote and can debug.
+
+**YAGNI** -- No abstractions until code proves necessity. No speculative error codes, utilities, or patterns. If grep finds zero usages, delete it. Three similar lines of code is better than a premature abstraction.
+
+**Tests are production code** -- Same quality standards as implementation. One behavior per test, minimal setup. Test only the module's public contract. Strive to cover all scenarios including edge cases. If a behavior is tested elsewhere, don't retest it. Test names describe behavior, not implementation.
 
 ## Commands
 
@@ -10,112 +26,14 @@ High-performance, Entity Component System library for TypeScript.
 | `pnpm run test` | Run all tests |
 | `pnpm run check:fix` | Auto-fix lint/format issues |
 | `pnpm run build -F iris-ecs` | Build specific package |
-
-## Philosophy
-
-**Performance through simplicity** - Write expressive, readable code that is also performant. Simple code is easier to optimize and maintain.
-
-**Documentation is code** - JSDoc with `@example` blocks required for all public APIs. Inline comments explain "why" for non-obvious logic. Clear docs help both humans and LLMs understand intent.
+| `pnpm bench` | All benchmark suites (throughput mode) |
+| `pnpm --filter iris-benchmark bench Entity` | Single benchmark suite |
+| `pnpm --filter iris-benchmark bench:memory` | Memory profiling mode |
 
 ## Architecture
 
 Monorepo structure:
-- `packages/ecs` - Core ECS library (iris-ecs)
-- `packages/*` - Future library packages
-- `apps/*` - Example applications
-
-### Module Overview
-
-| Module | Responsibility |
-|--------|----------------|
-| `error.ts` | Structured error classes (LimitExceeded, NotFound, Duplicate, InvalidArgument, InvalidState) and assert() |
-| `encoding.ts` | Bit-packed ID encoding (Entity, Tag, Component, Relation, Pair types) |
-| `world.ts` | World creation and state container (entity registry, archetypes, queries) |
-| `entity.ts` | Entity lifecycle (create, destroy, aliveness check, ID recycling) |
-| `component.ts` | Component add/remove/get/set operations, archetype transitions |
-| `archetype.ts` | Columnar storage, capacity management, graph traversal |
-| `registry.ts` | Component/Tag/Relation definitions (defineComponent, defineTag, defineRelation) |
-| `relation.ts` | Pair encoding/decoding, relation target queries |
-| `query.ts` | Entity queries with filters (added, changed, not), change detection |
-| `filters.ts` | Query filter matching against archetypes |
-| `scheduler.ts` | System registration and schedule execution |
-| `observer.ts` | Lifecycle event callbacks (entityCreated, componentAdded, etc.) |
-| `event.ts` | Event queue system for inter-system communication |
-| `resource.ts` | Singleton resources (world-scoped data) |
-| `name.ts` | Entity naming and lookup by name |
-| `removal.ts` | Removal detection for queries |
-| `schema.ts` | Type definitions for component data (Type.f32(), Type.i32(), etc.) |
-| `actions.ts` | Cached world-bound action getters |
-
-### ECS Core Concepts
-- **Entities**: Lightweight 32-bit identifiers with generation tracking
-- **Components**: Data (typed schemas) or Tags (markers)
-- **Archetypes**: Columnar storage grouping entities by component set
-- **Relations**: Directed entity pairs (e.g., ChildOf, InstanceOf)
-- **Queries**: Filtered entity iteration with change detection
-
-## Code Patterns
-
-**Branded types** for type safety - never use raw numbers for Entity, Tag, Component IDs:
-```typescript
-type Entity = number & { [ENTITY_BRAND]: true };
-```
-
-**Built-in primitives only** - No classes. Use plain objects, TypedArrays, Maps, Sets:
-```typescript
-// Good: plain object with typed fields
-type Archetype = { types: EntityId[]; columns: Map<EntityId, FieldColumns>; ... };
-
-// Avoid: class definitions
-class Archetype { ... }
-```
-
-**Simple iteration** - Prefer `for` loops with index access over `for...of`:
-```typescript
-// Good: index-based for loop
-for (let i = 0; i < archetype.types.length; i++) {
-  const typeId = archetype.types[i]!;
-  // ...
-}
-
-// Avoid: for...of (creates iterator overhead)
-for (const typeId of archetype.types) { ... }
-```
-
-**Non-null assertions** (!) allowed where proven safe in performance-critical paths
-
-**Function overloads** for optional data parameters - see component.ts pattern
-
-**Structured errors** - Use typed error classes from `error.ts`, never inline `new Error()`:
-```typescript
-// Good: assert() for preconditions (lazy construction, type narrowing)
-assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Entity", max: ID_MASK_20, id: rawId });
-
-// Good: throw for unreachable/switch-default paths
-throw new InvalidState({ message: `Invalid entity type: ${type}` });
-
-// Avoid: inline Error with string messages
-throw new Error(`Entity limit exceeded: ${rawId}`);
-```
-Error classes: `LimitExceeded`, `NotFound`, `Duplicate`, `InvalidArgument`, `InvalidState` (all extend `IrisError`). Tests should verify error types via `instanceof`, not regex.
-
-## Testing
-
-**Tests are production code** - Apply same quality standards to tests as implementation.
-
-- Native Node.js test runner via tsx
-- Test files colocated: `foo.ts` → `foo.test.ts`
-- Run single test: `pnpm tsx --test packages/ecs/src/foo.test.ts`
-- All tests must pass before committing
-
-**Test principles:**
-- **Minimal** - One behavior per test, minimal setup
-- **Relevant** - Test only the module's public contract
-- **Exhaustive** - Strive to cover all usage scenarios, including edge cases
-- **No duplication** - If a behavior is tested elsewhere, don't retest it
-- **Descriptive names** - Test name should describe the behavior, not implementation
-
-## Constraints
-
-- **Zero runtime dependencies** - Core library is self-contained
-- **YAGNI** - Don't add abstractions until code proves necessity. No speculative error codes, utilities, or patterns. If grep finds zero usages, delete it.
+- `packages/ecs` -- Core ECS library (iris-ecs)
+- `packages/*` -- Future library packages
+- `apps/benchmark` -- Performance benchmarks
+- `apps/*` -- Example applications
