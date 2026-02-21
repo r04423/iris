@@ -16,6 +16,7 @@ Libraries for building realtime applications in TypeScript.
 | App | Description |
 |-----|-------------|
 | [`benchmark`](./apps/benchmark) | Performance benchmarks and results |
+| [`space-shooter`](./apps/space-shooter) | Space combat game built with ECS |
 
 ## Development
 
