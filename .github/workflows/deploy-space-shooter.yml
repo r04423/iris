@@ -45,19 +45,7 @@ jobs:
         run: |
           mkdir -p _site/space-shooter
           cp -r apps/space-shooter/dist/* _site/space-shooter/
-          cat > _site/index.html << 'LANDING'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta http-equiv="refresh" content="0; url=space-shooter/">
-            <title>Iris</title>
-          </head>
-          <body>
-            <p><a href="space-shooter/">Space Shooter</a></p>
-          </body>
-          </html>
-          LANDING
+          echo '404' > _site/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
