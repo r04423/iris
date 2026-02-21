@@ -1,5 +1,7 @@
 # Space Shooter
 
+[Play it live](https://r04423.github.io/iris/space-shooter/)
+
 A space combat game built with [iris-ecs](../../packages/ecs). Enemies chase the player, bullets
 destroy enemies, collisions activate a shield. All game state lives in ECS components and resources.
 
