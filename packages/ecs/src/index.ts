@@ -115,12 +115,13 @@ export type { World } from "./world.js";
 
 export {
   clearEvents,
+  collectEvents,
   countEvents,
   defineEvent,
   emitEvent,
-  fetchEvents,
-  fetchLastEvent,
   hasEvents,
+  readEvents,
+  readLastEvent,
 } from "./event.js";
 
 // ============================================================================

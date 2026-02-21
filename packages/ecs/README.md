@@ -578,7 +578,7 @@ Actions are initialized lazily and cached per world -- calling `spawnActions(wor
 An **Event** is an ephemeral message for communication between systems. Unlike components (persistent data on entities), events are fire-and-forget: emit once, consume once per system, then gone.
 
 ```typescript
-import { defineEvent, emitEvent, fetchEvents, Type } from "iris-ecs";
+import { defineEvent, emitEvent, readEvents, Type } from "iris-ecs";
 
 // Tag event (no data)
 const GameStarted = defineEvent("GameStarted");
@@ -595,9 +595,9 @@ emitEvent(world, DamageDealt, { target: enemy, amount: 25 });
 
 // Consume events in a system
 function damageSystem(world) {
-  for (const event of fetchEvents(world, DamageDealt)) {
+  readEvents(world, DamageDealt, (event) => {
     applyDamage(event.target, event.amount);
-  }
+  });
 }
 ```
 
@@ -609,15 +609,15 @@ Each system independently tracks which events it has consumed. Multiple systems 
 
 ```typescript
 function uiSystem(world) {
-  for (const e of fetchEvents(world, DamageDealt)) {
+  readEvents(world, DamageDealt, (e) => {
     showDamageNumber(e.target, e.amount);
-  }
+  });
 }
 
 function audioSystem(world) {
-  for (const e of fetchEvents(world, DamageDealt)) {
+  readEvents(world, DamageDealt, (e) => {
     playHitSound(e.amount);
-  }
+  });
 }
 
 // Both systems see the same DamageDealt events
@@ -629,7 +629,7 @@ function audioSystem(world) {
 import {
   hasEvents,
   countEvents,
-  fetchLastEvent,
+  readLastEvent,
   clearEvents,
 } from "iris-ecs";
 
@@ -639,7 +639,7 @@ if (hasEvents(world, DamageDealt)) {
 }
 
 // Get only the most recent event (marks all as read)
-const lastInput = fetchLastEvent(world, InputChanged);
+const lastInput = readLastEvent(world, InputChanged);
 
 // Skip events without processing
 if (isPaused) {
@@ -650,7 +650,7 @@ if (isPaused) {
 
 #### Event Lifetime
 
-Events use double-buffered storage. Buffers rotate automatically at the end of each frame -- events survive one frame (so systems that run next frame can still read them), then are discarded. Calling `fetchEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
+Events use double-buffered storage. Buffers rotate automatically at the end of each frame -- events survive one frame (so systems that run next frame can still read them), then are discarded. Calling `readEvents()` marks events as read for that system -- a second call in the same system sees nothing new.
 
 ⚠️ **Events are not entities.** Unlike components and tags, events exist outside the entity-component model. You cannot query for events or attach them to entities.
 
@@ -664,7 +664,7 @@ import {
   added,
   changed,
   removed,
-  fetchEvents,
+  readEvents,
 } from "iris-ecs";
 
 // Entities where Position was added this tick
@@ -691,9 +691,9 @@ Use `removed()` to detect when a component is removed from an entity. Unlike `ad
 
 ```typescript
 // Iterate removal events (not a query filter)
-for (const event of fetchEvents(world, removed(Health))) {
+readEvents(world, removed(Health), (event) => {
   playDeathAnimation(event.entity);
-}
+});
 ```
 
 #### Under the Hood

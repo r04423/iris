@@ -239,7 +239,7 @@ export function emitEvent<S extends EventSchema>(
 /**
  * Update lastTick for current system.
  *
- * Internal helper shared by fetchEvents, fetchLastEvent, and clearEvents.
+ * Internal helper shared by readEvents, readLastEvent, and clearEvents.
  *
  * @param world - World instance
  * @param queue - Event queue metadata
@@ -250,26 +250,30 @@ function markEventsRead(world: World, queue: EventQueueMeta): void {
 }
 
 /**
- * Fetch events emitted since last call.
+ * Read events emitted since last call via callback.
  *
  * Per-system isolated: each system has independent tracking of which events
  * it has consumed. Multiple systems can consume the same events independently.
  *
  * @param world - World instance
  * @param event - Event definition
- * @returns Generator yielding event data
+ * @param callback - Called for each unread event. Return `false` to stop iteration early
  *
  * @example
  * ```typescript
- * for (const event of fetchEvents(world, DamageDealt)) {
+ * readEvents(world, DamageDealt, (event) => {
  *   applyDamage(event.target, event.amount);
- * }
+ * });
  * ```
  */
-export function* fetchEvents<S extends EventSchema>(world: World, event: Event<S>): Generator<EventData<S>> {
+export function readEvents<S extends EventSchema>(
+  world: World,
+  event: Event<S>,
+  callback: (data: EventData<S>) => unknown
+): void {
   const { systemId, tick } = world.execution;
 
-  // Outside system context: yield nothing
+  // Outside system context: no-op
   if (systemId === null) {
     return;
   }
@@ -285,19 +289,42 @@ export function* fetchEvents<S extends EventSchema>(world: World, event: Event<S
     for (let i = 0; i < prevLen; i++) {
       const entry = queue.previous[i]!;
       if (entry.tick > lastTick && entry.tick <= tick) {
-        yield entry.data;
+        if (callback(entry.data) === false) return;
       }
     }
 
     for (let i = 0; i < currLen; i++) {
       const entry = queue.current[i]!;
       if (entry.tick > lastTick && entry.tick <= tick) {
-        yield entry.data;
+        if (callback(entry.data) === false) return;
       }
     }
   } finally {
     markEventsRead(world, queue);
   }
+}
+
+/**
+ * Collect all unread events into an array.
+ *
+ * @param world - World instance
+ * @param event - Event definition
+ * @returns Array of unread event data
+ *
+ * @example
+ * ```typescript
+ * const events = collectEvents(world, DamageDealt);
+ * for (let i = 0; i < events.length; i++) {
+ *   applyDamage(events[i]!.target, events[i]!.amount);
+ * }
+ * ```
+ */
+export function collectEvents<S extends EventSchema>(world: World, event: Event<S>): EventData<S>[] {
+  const result: EventData<S>[] = [];
+  readEvents(world, event, (data) => {
+    result.push(data);
+  });
+  return result;
 }
 
 // ============================================================================
@@ -394,7 +421,7 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
 }
 
 /**
- * Fetch only the most recent event, marking all as read.
+ * Read only the most recent event, marking all as read.
  *
  * Useful when only the latest state matters (e.g., input, config changes).
  *
@@ -405,13 +432,13 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  * @example
  * ```typescript
  * // Only care about the latest input state
- * const input = fetchLastEvent(world, InputChanged);
+ * const input = readLastEvent(world, InputChanged);
  * if (input) {
  *   updatePlayerDirection(input.direction);
  * }
  * ```
  */
-export function fetchLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined {
+export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined {
   const { systemId, tick } = world.execution;
 
   // Outside system context: always undefined

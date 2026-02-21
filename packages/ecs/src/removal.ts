@@ -34,9 +34,9 @@ const removalEvents = new Map<EntityId, Event<typeof RemovalEventSchema>>();
  * @param componentId - Component to track removals for
  * @returns Event that fires when the component is removed from any entity
  * @example
- * for (const { entity } of fetchEvents(world, removed(Health))) {
+ * readEvents(world, removed(Health), ({ entity }) => {
  *   playDeathEffect(entity);
- * }
+ * });
  */
 export function removed(componentId: EntityId): Event<typeof RemovalEventSchema> {
   let event = removalEvents.get(componentId);

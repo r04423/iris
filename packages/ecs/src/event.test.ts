@@ -1,6 +1,15 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { clearEvents, countEvents, defineEvent, emitEvent, fetchEvents, fetchLastEvent, hasEvents } from "./event.js";
+import {
+  clearEvents,
+  collectEvents,
+  countEvents,
+  defineEvent,
+  emitEvent,
+  hasEvents,
+  readEvents,
+  readLastEvent,
+} from "./event.js";
 import { addSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -108,21 +117,21 @@ describe("Event", () => {
   });
 
   // ============================================================================
-  // Event Fetch Tests
+  // Event Read Tests
   // ============================================================================
 
-  describe("Event Fetching", () => {
-    it("fetches emitted events in system context", async () => {
+  describe("Event Reading", () => {
+    it("reads emitted events in system context", async () => {
       const world = createWorld();
-      const Event = defineEvent("FetchBasic", {
+      const Event = defineEvent("ReadBasic", {
         value: Type.i32(),
       });
       const results: number[] = [];
 
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           results.push(e.value);
-        }
+        });
       });
 
       emitEvent(world, Event, { value: 42 });
@@ -132,17 +141,17 @@ describe("Event", () => {
       assert.strictEqual(results[0], 42);
     });
 
-    it("fetches multiple events in order", async () => {
+    it("reads multiple events in order", async () => {
       const world = createWorld();
-      const Event = defineEvent("FetchMultiple", {
+      const Event = defineEvent("ReadMultiple", {
         value: Type.i32(),
       });
       const results: number[] = [];
 
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           results.push(e.value);
-        }
+        });
       });
 
       emitEvent(world, Event, { value: 1 });
@@ -154,21 +163,21 @@ describe("Event", () => {
       assert.deepStrictEqual(results, [1, 2, 3]);
     });
 
-    it("marks events as read after fetch and second fetch sees nothing", async () => {
+    it("marks events as read after read and second read sees nothing", async () => {
       const world = createWorld();
-      const Event = defineEvent("FetchMarksRead");
+      const Event = defineEvent("ReadMarksRead");
       let firstCount = 0;
       let secondCount = 0;
 
       addSystem(world, function reader() {
-        // First fetch sees events
-        for (const _ of fetchEvents(world, Event)) {
+        // First read sees events
+        readEvents(world, Event, () => {
           firstCount++;
-        }
-        // Second fetch (same tick) sees nothing - already read
-        for (const _ of fetchEvents(world, Event)) {
+        });
+        // Second read (same tick) sees nothing - already read
+        readEvents(world, Event, () => {
           secondCount++;
-        }
+        });
       });
 
       emitEvent(world, Event);
@@ -178,15 +187,15 @@ describe("Event", () => {
       assert.strictEqual(secondCount, 0);
     });
 
-    it("fetches tag events with undefined data", async () => {
+    it("reads tag events with undefined data", async () => {
       const world = createWorld();
-      const TagEvent = defineEvent("FetchTag");
+      const TagEvent = defineEvent("ReadTag");
       const results: unknown[] = [];
 
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, TagEvent)) {
+        readEvents(world, TagEvent, (e) => {
           results.push(e);
-        }
+        });
       });
 
       emitEvent(world, TagEvent);
@@ -198,17 +207,17 @@ describe("Event", () => {
   });
 
   // ============================================================================
-  // fetchLastEvent Tests
+  // readLastEvent Tests
   // ============================================================================
 
-  describe("fetchLastEvent", () => {
+  describe("readLastEvent", () => {
     it("returns undefined when no events in system context", async () => {
       const world = createWorld();
       const Event = defineEvent("LastEmpty");
       let result: unknown = "sentinel";
 
       addSystem(world, function reader() {
-        result = fetchLastEvent(world, Event);
+        result = readLastEvent(world, Event);
       });
 
       await runOnce(world);
@@ -224,7 +233,7 @@ describe("Event", () => {
       let result: { value: number } | undefined;
 
       addSystem(world, function reader() {
-        result = fetchLastEvent(world, Event);
+        result = readLastEvent(world, Event);
       });
 
       emitEvent(world, Event, { value: 1 });
@@ -243,7 +252,7 @@ describe("Event", () => {
       let count = 0;
 
       addSystem(world, function reader() {
-        fetchLastEvent(world, Event);
+        readLastEvent(world, Event);
         count = countEvents(world, Event);
       });
 
@@ -340,21 +349,21 @@ describe("Event", () => {
     it("countEvents does not mark events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("CountNoMark");
-      let fetchCount = 0;
+      let readCount = 0;
 
       addSystem(world, function checker() {
         countEvents(world, Event);
         countEvents(world, Event);
-        for (const _ of fetchEvents(world, Event)) {
-          fetchCount++;
-        }
+        readEvents(world, Event, () => {
+          readCount++;
+        });
       });
 
       emitEvent(world, Event);
       emitEvent(world, Event);
       await runOnce(world);
 
-      assert.strictEqual(fetchCount, 2);
+      assert.strictEqual(readCount, 2);
     });
   });
 
@@ -401,15 +410,15 @@ describe("Event", () => {
       const system2Results: number[] = [];
 
       addSystem(world, function system1() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           system1Results.push(e.value);
-        }
+        });
       });
 
       addSystem(world, function system2() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           system2Results.push(e.value);
-        }
+        });
       });
 
       // Emit event before execution
@@ -428,7 +437,7 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Same-System Multiple Calls", () => {
-    it("lastTick updates after first fetch", async () => {
+    it("lastTick updates after first read", async () => {
       const world = createWorld();
       const Event = defineEvent("LastTickUpdate");
 
@@ -436,14 +445,14 @@ describe("Event", () => {
         const queue = world.events.byId.get(Event.id);
         assert.ok(queue);
 
-        // Before fetch, lastTick for this system should be 0 (unset)
+        // Before read, lastTick for this system should be 0 (unset)
         const beforeTick = queue.lastTick.get("checker") ?? 0;
 
-        for (const _ of fetchEvents(world, Event)) {
+        readEvents(world, Event, () => {
           // consume
-        }
+        });
 
-        // After fetch, lastTick should be current tick
+        // After read, lastTick should be current tick
         const afterTick = queue.lastTick.get("checker");
         assert.strictEqual(afterTick, world.execution.tick);
         assert.notStrictEqual(beforeTick, afterTick);
@@ -464,19 +473,19 @@ describe("Event", () => {
 
       // Emitter sees the original event but not the one it emits mid-iteration
       addSystem(world, function emitter() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           emitterSeen.push(e.value);
           emitEvent(world, Event, { value: e.value + 10 });
-        }
+        });
       });
 
       // Reader (later system) sees the mid-iteration event on the same schedule
       addSystem(
         world,
         function reader() {
-          for (const e of fetchEvents(world, Event)) {
+          readEvents(world, Event, (e) => {
             readerSeen.push(e.value);
-          }
+          });
         },
         { after: "emitter" }
       );
@@ -500,14 +509,20 @@ describe("Event", () => {
 
       emitEvent(world, Event, { value: 42 });
 
-      // fetchEvents yields nothing
-      assert.strictEqual([...fetchEvents(world, Event)].length, 0);
+      // readEvents invokes nothing
+      let readCount = 0;
+      readEvents(world, Event, () => {
+        readCount++;
+      });
+      assert.strictEqual(readCount, 0);
+      // collectEvents returns empty
+      assert.strictEqual(collectEvents(world, Event).length, 0);
       // hasEvents returns false
       assert.strictEqual(hasEvents(world, Event), false);
       // countEvents returns 0
       assert.strictEqual(countEvents(world, Event), 0);
-      // fetchLastEvent returns undefined
-      assert.strictEqual(fetchLastEvent(world, Event), undefined);
+      // readLastEvent returns undefined
+      assert.strictEqual(readLastEvent(world, Event), undefined);
       // clearEvents is a no-op (should not throw)
       clearEvents(world, Event);
     });
@@ -518,7 +533,7 @@ describe("Event", () => {
       let result: number | undefined;
 
       addSystem(world, function reader() {
-        const e = fetchLastEvent(world, Event);
+        const e = readLastEvent(world, Event);
         if (e) result = e.value;
       });
 
@@ -538,45 +553,46 @@ describe("Event", () => {
     it("handles empty event queue gracefully in system", async () => {
       const world = createWorld();
       const Event = defineEvent("EmptyQueue");
-      let fetchCount = 0;
+      let readCount = 0;
       let has = true;
       let count = -1;
       let last: unknown = "sentinel";
 
       addSystem(world, function checker() {
-        for (const _ of fetchEvents(world, Event)) {
-          fetchCount++;
-        }
+        readEvents(world, Event, () => {
+          readCount++;
+        });
         has = hasEvents(world, Event);
         count = countEvents(world, Event);
-        last = fetchLastEvent(world, Event);
+        last = readLastEvent(world, Event);
       });
 
       await runOnce(world);
 
-      assert.strictEqual(fetchCount, 0);
+      assert.strictEqual(readCount, 0);
       assert.strictEqual(has, false);
       assert.strictEqual(count, 0);
       assert.strictEqual(last, undefined);
     });
 
-    it("generator cleanup runs on early break", async () => {
+    it("early exit marks events as read", async () => {
       const world = createWorld();
-      const Event = defineEvent("EarlyBreak", {
+      const Event = defineEvent("EarlyExit", {
         value: Type.i32(),
       });
-      let secondFetchCount = 0;
+      let secondReadCount = 0;
 
       addSystem(world, function reader() {
-        // Break early after first event
-        for (const e of fetchEvents(world, Event)) {
-          if (e.value === 1) break;
-        }
+        // Exit early after first event
+        readEvents(world, Event, (e) => {
+          if (e.value === 1) return false;
+          return;
+        });
 
         // lastTick should still be updated (finally block runs)
-        for (const _ of fetchEvents(world, Event)) {
-          secondFetchCount++;
-        }
+        readEvents(world, Event, () => {
+          secondReadCount++;
+        });
       });
 
       emitEvent(world, Event, { value: 1 });
@@ -584,7 +600,7 @@ describe("Event", () => {
       emitEvent(world, Event, { value: 3 });
       await runOnce(world);
 
-      assert.strictEqual(secondFetchCount, 0);
+      assert.strictEqual(secondReadCount, 0);
     });
 
     it("different event types are independent", async () => {
@@ -600,10 +616,10 @@ describe("Event", () => {
         count1 = countEvents(world, Event1);
         count2 = countEvents(world, Event2);
 
-        // Fetch Event1 only
-        for (const _ of fetchEvents(world, Event1)) {
+        // Read Event1 only
+        readEvents(world, Event1, () => {
           // consume
-        }
+        });
 
         // Event2 should still be available
         count1After = countEvents(world, Event1);
@@ -670,12 +686,12 @@ describe("Event", () => {
       addSystem(
         world,
         function uiSystem() {
-          for (const e of fetchEvents(world, PlayerSpawned)) {
+          readEvents(world, PlayerSpawned, (e) => {
             spawnedPlayers.push(e.entity);
-          }
-          for (const e of fetchEvents(world, PlayerDamaged)) {
+          });
+          readEvents(world, PlayerDamaged, (e) => {
             damageLog.push({ entity: e.entity, amount: e.amount });
-          }
+          });
         },
         { after: "combatSystem" }
       );
@@ -686,12 +702,12 @@ describe("Event", () => {
       addSystem(
         world,
         function audioSystem() {
-          for (const _ of fetchEvents(world, PlayerSpawned)) {
+          readEvents(world, PlayerSpawned, () => {
             audioSpawnCount++;
-          }
-          for (const _ of fetchEvents(world, PlayerDamaged)) {
+          });
+          readEvents(world, PlayerDamaged, () => {
             audioDamageCount++;
-          }
+          });
         },
         { after: "combatSystem" }
       );
@@ -724,9 +740,9 @@ describe("Event", () => {
       const seen: number[] = [];
 
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           seen.push(e.value);
-        }
+        });
       });
 
       // First frame: no events
@@ -749,9 +765,9 @@ describe("Event", () => {
 
       // Reader runs first
       addSystem(world, function reader() {
-        for (const e of fetchEvents(world, Event)) {
+        readEvents(world, Event, (e) => {
           readerSeen.push(e.value);
-        }
+        });
       });
 
       // Writer runs second
