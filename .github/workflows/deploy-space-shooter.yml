@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm --filter iris-space-shooter build
+        run: pnpm --filter iris-ecs build && pnpm --filter iris-space-shooter build
 
       - name: Prepare Pages directory
         run: |
