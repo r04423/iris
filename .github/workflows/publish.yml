@@ -40,6 +40,9 @@ jobs:
       - name: Validate
         run: pnpm run validate
 
+      - name: Test
+        run: pnpm run test
+
       - name: Build
         run: pnpm run build -F iris-ecs
 
