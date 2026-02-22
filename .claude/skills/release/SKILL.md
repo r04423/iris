@@ -19,7 +19,7 @@ Bump the version of iris-ecs, commit, tag, and push to trigger the publish workf
    ```
    git add packages/ecs/package.json
    git commit -m "Release v<new-version>"
-   git tag v<new-version>
+   git tag -a v<new-version> -m "v<new-version>"
    git push origin main --follow-tags
    ```
 5. Confirm the tag was pushed and the publish workflow will be triggered

@@ -23,14 +23,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm run build
+
       - name: Validate
         run: pnpm run validate
 
       - name: Test
         run: pnpm run test
-
-      - name: Build
-        run: pnpm run build -F iris-ecs
 
       - name: Publish
         run: pnpm publish -F iris-ecs --provenance --no-git-checks
