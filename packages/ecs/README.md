@@ -37,6 +37,7 @@ import {
   createWorld,
   createEntity,
   defineComponent,
+  defineSystem,
   defineTag,
   addComponent,
   getComponentValue,
@@ -45,7 +46,7 @@ import {
   addSystem,
   runOnce,
   Type,
-} from "iris-ecs"; 
+} from "iris-ecs";
 
 // Define components
 const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
@@ -60,18 +61,20 @@ addComponent(world, player, Position, { x: 0, y: 0 });
 addComponent(world, player, Velocity, { x: 1, y: 0 });
 addComponent(world, player, Player);
 
-// Define a system
-function movementSystem(world) {
-  queryEntities(world, [Position, Velocity], (e) => {
-    const px = getComponentValue(world, e, Position, "x");
-    const py = getComponentValue(world, e, Position, "y");
-    const vx = getComponentValue(world, e, Velocity, "x");
-    const vy = getComponentValue(world, e, Velocity, "y");
+// Define a system -- init runs once, tick runs every frame
+const movementSystem = defineSystem("movementSystem", (world) => {
+  return () => {
+    queryEntities(world, [Position, Velocity], (e) => {
+      const px = getComponentValue(world, e, Position, "x");
+      const py = getComponentValue(world, e, Position, "y");
+      const vx = getComponentValue(world, e, Velocity, "x");
+      const vy = getComponentValue(world, e, Velocity, "y");
 
-    setComponentValue(world, e, Position, "x", px + vx);
-    setComponentValue(world, e, Position, "y", py + vy);
-  });
-}
+      setComponentValue(world, e, Position, "x", px + vx);
+      setComponentValue(world, e, Position, "y", py + vy);
+    });
+  };
+});
 
 // Register and run
 addSystem(world, movementSystem);
@@ -409,33 +412,42 @@ queryEntities(world, [Position, Velocity, not(Frozen), not(Disabled)], (entity) 
 
 #### Filters and Archetypes (Under the Hood)
 
-Queries match archetypes where all required components are present and no excluded components exist. Matched archetypes are cached and auto-update when new archetypes are created.
+Queries match archetypes where all required components are present and no excluded components exist. Matched archetypes are cached and auto-update when archetypes are created or destroyed.
 
 ### Systems
 
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
+Use `defineSystem()` to create systems with init / tick separation. The init function runs once at registration time -- use it to cache queries, action getters, and one-time setup. The returned tick function runs every frame. 
+
+Systems are registered with `addSystem()` and executed automatically when the world runs.
+
 ```typescript
 import {
+  defineSystem,
   addSystem,
   run,
   stop,
   queryEntities,
   getComponentValue,
   setComponentValue,
+  getResourceValue,
 } from "iris-ecs";
 
-function movementSystem(world) {
-  queryEntities(world, [Position, Velocity], (e) => {
-    const px = getComponentValue(world, e, Position, "x");
-    const py = getComponentValue(world, e, Position, "y");
-    const vx = getComponentValue(world, e, Velocity, "x");
-    const vy = getComponentValue(world, e, Velocity, "y");
+const movementSystem = defineSystem("movementSystem", (world) => {
+  // Init: runs once at addSystem() time
+  return () => {
+    // Tick: runs every frame
+    const dt = getResourceValue(world, Time, "delta") ?? 0;
 
-    setComponentValue(world, e, Position, "x", px + vx);
-    setComponentValue(world, e, Position, "y", py + vy);
-  });
-}
+    queryEntities(world, [Position, Velocity], (e) => {
+      const x = getComponentValue(world, e, Position, "x");
+      const vx = getComponentValue(world, e, Velocity, "x");
+
+      setComponentValue(world, e, Position, "x", x + vx * dt);
+    });
+  };
+});
 
 addSystem(world, movementSystem);
 run(world);
@@ -444,16 +456,34 @@ run(world);
 await stop(world);
 ```
 
-Systems are registered with `addSystem()` and executed automatically when the world runs. The system function's name becomes its identifier.
+#### Plain Function Systems
+
+For simple systems that don't need one-time setup, plain functions also work, and the function's name becomes the system identifier.
+
+```typescript
+function debugSystem(world) {
+  queryEntities(world, [Position], (e) => {
+    console.log(getComponentValue(world, e, Position, "x"));
+  });
+}
+
+addSystem(world, debugSystem);
+```
 
 #### Ordering Constraints
 
 Control execution order with `before` and `after` options:
 
 ```typescript
-function inputSystem(world) { /* read input */ }
-function physicsSystem(world) { /* simulate physics */ }
-function renderSystem(world) { /* draw frame */ }
+const inputSystem = defineSystem("inputSystem", (world) => {
+  return () => { /* read input */ };
+});
+const physicsSystem = defineSystem("physicsSystem", (world) => {
+  return () => { /* simulate physics */ };
+});
+const renderSystem = defineSystem("renderSystem", (world) => {
+  return () => { /* draw frame */ };
+});
 
 addSystem(world, inputSystem);
 addSystem(world, physicsSystem, { after: "inputSystem" });
@@ -463,7 +493,7 @@ addSystem(world, renderSystem, { after: "physicsSystem" });
 
 Without constraints, systems run in registration order. Use arrays for multiple constraints: `{ after: ["inputSystem", "audioSystem"] }`.
 
-💡 **Tip:** The system function's name becomes its identifier. Use named functions, not arrow functions, for systems you need to reference in ordering constraints.
+`defineSystem` factory can be registered multiple times with different names via the `name` option: `addSystem(world, movementSystem, { name: "lateMovement" })`.
 
 #### Schedules
 
@@ -533,10 +563,12 @@ await runOnce(world); // one frame
 Systems can be async. Both `run()` and `runOnce()` handle sync and async systems transparently:
 
 ```typescript
-async function loadAssetsSystem(world) {
-  const textures = await fetch("/assets/textures.json");
-  // ...
-}
+const loadAssetsSystem = defineSystem("loadAssetsSystem", (world) => {
+  return async () => {
+    const textures = await fetch("/assets/textures.json");
+    // ...
+  };
+});
 
 addSystem(world, loadAssetsSystem, { schedule: Startup });
 ```
