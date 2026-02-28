@@ -250,6 +250,38 @@ function markEventsRead(world: World, queue: EventQueueMeta): void {
 }
 
 /**
+ * Core event iteration over a resolved queue.
+ *
+ * Iterates both buffers (previous then current) forward with tick filtering.
+ * Snapshots buffer lengths so events emitted during iteration are not visible.
+ *
+ * @internal
+ */
+function iterateEventQueue<S extends EventSchema>(
+  queue: EventQueueMeta<S>,
+  lastTick: number,
+  tick: number,
+  callback: (data: EventData<S>) => unknown
+): void {
+  const prevLen = queue.previous.length;
+  const currLen = queue.current.length;
+
+  for (let i = 0; i < prevLen; i++) {
+    const entry = queue.previous[i]!;
+    if (entry.tick > lastTick && entry.tick <= tick) {
+      if (callback(entry.data) === false) return;
+    }
+  }
+
+  for (let i = 0; i < currLen; i++) {
+    const entry = queue.current[i]!;
+    if (entry.tick > lastTick && entry.tick <= tick) {
+      if (callback(entry.data) === false) return;
+    }
+  }
+}
+
+/**
  * Read events emitted since last call via callback.
  *
  * Per-system isolated: each system has independent tracking of which events
@@ -282,23 +314,7 @@ export function readEvents<S extends EventSchema>(
   const lastTick = queue.lastTick.get(systemId) ?? 0;
 
   try {
-    // Snapshot lengths so events emitted during iteration are not visible in this pass
-    const prevLen = queue.previous.length;
-    const currLen = queue.current.length;
-
-    for (let i = 0; i < prevLen; i++) {
-      const entry = queue.previous[i]!;
-      if (entry.tick > lastTick && entry.tick <= tick) {
-        if (callback(entry.data) === false) return;
-      }
-    }
-
-    for (let i = 0; i < currLen; i++) {
-      const entry = queue.current[i]!;
-      if (entry.tick > lastTick && entry.tick <= tick) {
-        if (callback(entry.data) === false) return;
-      }
-    }
+    iterateEventQueue(queue, lastTick, tick, callback);
   } finally {
     markEventsRead(world, queue);
   }
@@ -358,21 +374,14 @@ export function hasEvents<S extends EventSchema>(world: World, event: Event<S>):
   const queue = ensureEventQueue(world, event);
   const lastTick = queue.lastTick.get(systemId) ?? 0;
 
-  for (let i = 0; i < queue.previous.length; i++) {
-    const entry = queue.previous[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
-      return true;
-    }
-  }
+  let found = false;
 
-  for (let i = 0; i < queue.current.length; i++) {
-    const entry = queue.current[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
-      return true;
-    }
-  }
+  iterateEventQueue(queue, lastTick, tick, () => {
+    found = true;
+    return false;
+  });
 
-  return false;
+  return found;
 }
 
 /**
@@ -403,19 +412,9 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
 
   let count = 0;
 
-  for (let i = 0; i < queue.previous.length; i++) {
-    const entry = queue.previous[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
-      count++;
-    }
-  }
-
-  for (let i = 0; i < queue.current.length; i++) {
-    const entry = queue.current[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
-      count++;
-    }
-  }
+  iterateEventQueue(queue, lastTick, tick, () => {
+    count++;
+  });
 
   return count;
 }
