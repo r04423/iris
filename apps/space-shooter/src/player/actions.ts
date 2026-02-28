@@ -4,7 +4,6 @@ import {
   createEntity,
   defineActions,
   type Entity,
-  type EntityId,
   queryFirstEntity,
   setName,
   type World,
@@ -17,6 +16,7 @@ import { IsPlayer } from "./components.js";
 export const playerActions = defineActions((world: World) => ({
   spawnPlayer(x = 0, y = 0): Entity {
     const entity = createEntity(world);
+
     setName(world, entity, "Player");
     addComponent(world, entity, IsPlayer);
     addComponent(world, entity, Transform, { x, y, rotation: 0 });
@@ -32,11 +32,12 @@ export const playerActions = defineActions((world: World) => ({
     });
     addComponent(world, entity, Input, { thrust: 0, turn: 0, fire: 0 });
     addComponent(world, entity, ShootCooldown, { cooldown: 0.08, timer: 0, canShoot: true });
+
     return entity;
   },
 
-  getPlayer(): EntityId | undefined {
-    return queryFirstEntity(world, [IsPlayer]);
+  getPlayer() {
+    return queryFirstEntity(world, [IsPlayer, Transform]);
   },
 
   getPlayerCount(): number {

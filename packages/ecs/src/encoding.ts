@@ -73,6 +73,11 @@ declare const PAIR_BRAND: unique symbol;
 declare const SCHEMA_BRAND: unique symbol;
 
 /**
+ * Component presence brand for type-safe narrowing.
+ */
+declare const HAS_COMPONENT_BRAND: unique symbol;
+
+/**
  * Entity ID (branded type).
  *
  * Nominal type preventing accidental mixing of entities with raw numbers.
@@ -129,6 +134,13 @@ export type RelationTargetId = Entity | Tag | Component | Relation;
  * Used in function signatures to accept entities, tags, data components, relations, and pairs.
  */
 export type EntityId = Entity | Tag | Component | Relation | Pair;
+
+/**
+ * Entity ID narrowed to guarantee presence of specific components.
+ */
+export type EntityWith<C extends EntityId> = EntityId & {
+  readonly [HAS_COMPONENT_BRAND]?: (c: C) => void;
+};
 
 // ============================================================================
 // Common Bit Positions

@@ -1,20 +1,20 @@
-import { defineActions, type EntityId, getComponentValue, setComponentValue, type World } from "iris-ecs";
+import { defineActions, type EntityWith, getComponentValue, setComponentValue, type World } from "iris-ecs";
 import { Input } from "./components.js";
 
 export const inputActions = defineActions((world: World) => ({
-  getInputThrust(entity: EntityId): number {
-    return getComponentValue(world, entity, Input, "thrust") ?? 0;
+  getInputThrust(entity: EntityWith<typeof Input>): number {
+    return getComponentValue(world, entity, Input, "thrust");
   },
 
-  getInputTurn(entity: EntityId): number {
-    return getComponentValue(world, entity, Input, "turn") ?? 0;
+  getInputTurn(entity: EntityWith<typeof Input>): number {
+    return getComponentValue(world, entity, Input, "turn");
   },
 
-  getInputFire(entity: EntityId): number {
-    return getComponentValue(world, entity, Input, "fire") ?? 0;
+  getInputFire(entity: EntityWith<typeof Input>): number {
+    return getComponentValue(world, entity, Input, "fire");
   },
 
-  setInput(entity: EntityId, thrust: number, turn: number, fire: number): void {
+  setInput(entity: EntityWith<typeof Input>, thrust: number, turn: number, fire: number): void {
     setComponentValue(world, entity, Input, "thrust", thrust);
     setComponentValue(world, entity, Input, "turn", turn);
     setComponentValue(world, entity, Input, "fire", fire);

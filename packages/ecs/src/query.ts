@@ -1,4 +1,4 @@
-import type { EntityId } from "./encoding.js";
+import type { EntityId, EntityWith } from "./encoding.js";
 import { assert, InvalidArgument } from "./error.js";
 import type { FilterMeta } from "./filters.js";
 import { ensureFilter } from "./filters.js";
@@ -9,11 +9,16 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
+ * Phantom brand for carrying guaranteed-present component types on QueryMeta.
+ */
+declare const QUERY_COMPONENTS_BRAND: unique symbol;
+
+/**
  * Query metadata for registry caching.
  *
  * Stores required and excluded components with reference to underlying filter.
  */
-export type QueryMeta = {
+export type QueryMeta<C extends EntityId = EntityId> = {
   /**
    * Required components.
    */
@@ -43,6 +48,11 @@ export type QueryMeta = {
    * Per-system execution ticks for change detection: systemId -> tick.
    */
   lastTick: Map<string, number>;
+
+  /**
+   * Phantom field carrying guaranteed-present component types via contravariance.
+   */
+  readonly [QUERY_COMPONENTS_BRAND]?: (c: C) => void;
 };
 
 // ============================================================================
@@ -50,9 +60,9 @@ export type QueryMeta = {
 // ============================================================================
 
 export type ModifierType = "not" | "added" | "changed";
-export type NotModifier = { type: "not"; componentId: EntityId };
-export type AddedModifier = { type: "added"; componentId: EntityId };
-export type ChangedModifier = { type: "changed"; componentId: EntityId };
+export type NotModifier<C extends EntityId = EntityId> = { type: "not"; componentId: C };
+export type AddedModifier<C extends EntityId = EntityId> = { type: "added"; componentId: C };
+export type ChangedModifier<C extends EntityId = EntityId> = { type: "changed"; componentId: C };
 export type QueryModifier = NotModifier | AddedModifier | ChangedModifier;
 
 /**
@@ -66,7 +76,7 @@ export type QueryModifier = NotModifier | AddedModifier | ChangedModifier;
  * queryEntities(world, [Position, not(Dead)], (entity) => { ... });
  * ```
  */
-export function not(componentId: EntityId): NotModifier {
+export function not<C extends EntityId>(componentId: C): NotModifier<C> {
   return { type: "not", componentId };
 }
 
@@ -81,7 +91,7 @@ export function not(componentId: EntityId): NotModifier {
  * @example
  * queryEntities(world, [added(Enemy)], (entity) => { ... });
  */
-export function added(componentId: EntityId): AddedModifier {
+export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
   return { type: "added", componentId };
 }
 
@@ -96,9 +106,24 @@ export function added(componentId: EntityId): AddedModifier {
  * @example
  * queryEntities(world, [changed(Health)], (entity) => { ... });
  */
-export function changed(componentId: EntityId): ChangedModifier {
+export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> {
   return { type: "changed", componentId };
 }
+
+/**
+ * Extract union of guaranteed-present component IDs from query terms tuple.
+ */
+export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...infer Tail]
+  ? Head extends NotModifier
+    ? ExtractIncluded<Tail>
+    : Head extends AddedModifier<infer C>
+      ? C | ExtractIncluded<Tail>
+      : Head extends ChangedModifier<infer C>
+        ? C | ExtractIncluded<Tail>
+        : Head extends EntityId
+          ? Head | ExtractIncluded<Tail>
+          : ExtractIncluded<Tail>
+  : never;
 
 /**
  * Check if argument is a query modifier (not, added, changed) vs plain component ID.
@@ -147,7 +172,10 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
  * @example
  * const query = ensureQuery(world, Position, Velocity, not(Dead));
  */
-export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]): QueryMeta {
+export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  ...terms: [...T]
+): QueryMeta<ExtractIncluded<T>> {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
@@ -196,7 +224,7 @@ export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]
     world.queries.byId.set(queryId, queryMeta);
   }
 
-  return queryMeta;
+  return queryMeta as QueryMeta<ExtractIncluded<T>>;
 }
 
 // ============================================================================
@@ -298,7 +326,7 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
     return termsOrQuery;
   }
 
-  return ensureQuery(world, ...termsOrQuery);
+  return ensureQuery(world, ...termsOrQuery) as QueryMeta;
 }
 
 // ============================================================================
@@ -332,6 +360,18 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
  * });
  * ```
  */
+export function queryEntities<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  terms: [...T],
+  callback: (entity: EntityWith<ExtractIncluded<T>>) => unknown
+): void;
+
+export function queryEntities<C extends EntityId>(
+  world: World,
+  query: QueryMeta<C>,
+  callback: (entity: EntityWith<C>) => unknown
+): void;
+
 export function queryEntities(
   world: World,
   termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
@@ -353,10 +393,17 @@ export function queryEntities(
  * ```typescript
  * const player = queryFirstEntity(world, [Player, not(Dead)]);
  * if (player !== undefined) {
- *   const health = getComponentValue(world, player, Health, "value");
+ *   const health = getComponentValue(world, player, Health, "value"); // narrowed
  * }
  * ```
  */
+export function queryFirstEntity<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  terms: [...T]
+): EntityWith<ExtractIncluded<T>> | undefined;
+
+export function queryFirstEntity<C extends EntityId>(world: World, query: QueryMeta<C>): EntityWith<C> | undefined;
+
 export function queryFirstEntity(
   world: World,
   termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta
@@ -387,6 +434,13 @@ export function queryFirstEntity(
  * sorted.sort((a, b) => getComponentValue(world, a, Position, "x")! - getComponentValue(world, b, Position, "x")!);
  * ```
  */
+export function collectEntities<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  terms: [...T]
+): EntityWith<ExtractIncluded<T>>[];
+
+export function collectEntities<C extends EntityId>(world: World, query: QueryMeta<C>): EntityWith<C>[];
+
 export function collectEntities(world: World, termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta): EntityId[] {
   const result: EntityId[] = [];
 

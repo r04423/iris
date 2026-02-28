@@ -5,6 +5,7 @@ import {
   destroyEntity,
   type Entity,
   type EntityId,
+  type EntityWith,
   getComponentValue,
   hasComponent,
   pair,
@@ -24,6 +25,7 @@ export const combatActions = defineActions((world: World) => ({
 
   spawnBullet(x: number, y: number, dx: number, dy: number, firedBy?: Entity): Entity {
     const entity = createEntity(world);
+
     addComponent(world, entity, IsBullet);
     addComponent(world, entity, Transform, { x, y, rotation: Math.atan2(dy, dx) });
     addComponent(world, entity, Bullet, {
@@ -45,23 +47,25 @@ export const combatActions = defineActions((world: World) => ({
     destroyEntity(world, entity);
   },
 
-  getBulletDirection(entity: EntityId): [number, number] {
-    const dx = getComponentValue(world, entity, Bullet, "dx") ?? 0;
-    const dy = getComponentValue(world, entity, Bullet, "dy") ?? 1;
+  getBulletDirection(entity: EntityWith<typeof Bullet>): [number, number] {
+    const dx = getComponentValue(world, entity, Bullet, "dx");
+    const dy = getComponentValue(world, entity, Bullet, "dy");
+
     return [dx, dy];
   },
 
-  getBulletSpeed(entity: EntityId): number {
-    return getComponentValue(world, entity, Bullet, "speed") ?? 60;
+  getBulletSpeed(entity: EntityWith<typeof Bullet>): number {
+    return getComponentValue(world, entity, Bullet, "speed");
   },
 
-  getBulletLifetime(entity: EntityId): [number, number] {
-    const lifetime = getComponentValue(world, entity, Bullet, "lifetime") ?? 2;
-    const timeAlive = getComponentValue(world, entity, Bullet, "timeAlive") ?? 0;
+  getBulletLifetime(entity: EntityWith<typeof Bullet>): [number, number] {
+    const lifetime = getComponentValue(world, entity, Bullet, "lifetime");
+    const timeAlive = getComponentValue(world, entity, Bullet, "timeAlive");
+
     return [lifetime, timeAlive];
   },
 
-  setBulletTimeAlive(entity: EntityId, timeAlive: number): void {
+  setBulletTimeAlive(entity: EntityWith<typeof Bullet>, timeAlive: number): void {
     setComponentValue(world, entity, Bullet, "timeAlive", timeAlive);
   },
 
@@ -69,17 +73,18 @@ export const combatActions = defineActions((world: World) => ({
   // Shoot cooldown
   // ===========================================================================
 
-  canShoot(entity: EntityId): boolean {
-    return getComponentValue(world, entity, ShootCooldown, "canShoot") ?? true;
+  canShoot(entity: EntityWith<typeof ShootCooldown>): boolean {
+    return getComponentValue(world, entity, ShootCooldown, "canShoot");
   },
 
-  getShootCooldownState(entity: EntityId): [number, number] {
-    const cooldown = getComponentValue(world, entity, ShootCooldown, "cooldown") ?? 0.08;
-    const timer = getComponentValue(world, entity, ShootCooldown, "timer") ?? 0;
+  getShootCooldownState(entity: EntityWith<typeof ShootCooldown>): [number, number] {
+    const cooldown = getComponentValue(world, entity, ShootCooldown, "cooldown");
+    const timer = getComponentValue(world, entity, ShootCooldown, "timer");
+
     return [cooldown, timer];
   },
 
-  setShootCooldownState(entity: EntityId, canShoot: boolean, timer: number): void {
+  setShootCooldownState(entity: EntityWith<typeof ShootCooldown>, canShoot: boolean, timer: number): void {
     setComponentValue(world, entity, ShootCooldown, "canShoot", canShoot);
     setComponentValue(world, entity, ShootCooldown, "timer", timer);
   },
@@ -103,13 +108,14 @@ export const combatActions = defineActions((world: World) => ({
     }
   },
 
-  getShieldProgress(entity: EntityId): [number, number] {
-    const duration = getComponentValue(world, entity, ShieldVisibility, "duration") ?? 1400;
-    const current = getComponentValue(world, entity, ShieldVisibility, "current") ?? 0;
+  getShieldProgress(entity: EntityWith<typeof ShieldVisibility>): [number, number] {
+    const duration = getComponentValue(world, entity, ShieldVisibility, "duration");
+    const current = getComponentValue(world, entity, ShieldVisibility, "current");
+
     return [duration, current];
   },
 
-  setShieldCurrent(entity: EntityId, current: number): void {
+  setShieldCurrent(entity: EntityWith<typeof ShieldVisibility>, current: number): void {
     setComponentValue(world, entity, ShieldVisibility, "current", current);
   },
 

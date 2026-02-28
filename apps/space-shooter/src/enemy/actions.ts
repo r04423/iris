@@ -6,6 +6,7 @@ import {
   destroyEntity,
   type Entity,
   type EntityId,
+  type EntityWith,
   getComponentValue,
   pair,
   setComponentValue,
@@ -86,34 +87,35 @@ export const enemyActions = defineActions((world: World) => {
       destroyEntity(world, entity);
     },
 
-    getExplosionProgress(entity: EntityId): [number, number] {
-      const duration = getComponentValue(world, entity, Explosion, "duration") ?? 500;
-      const current = getComponentValue(world, entity, Explosion, "current") ?? 0;
+    getExplosionProgress(entity: EntityWith<typeof Explosion>): [number, number] {
+      const duration = getComponentValue(world, entity, Explosion, "duration");
+      const current = getComponentValue(world, entity, Explosion, "current");
+
       return [duration, current];
     },
 
-    setExplosionCurrent(entity: EntityId, current: number): void {
+    setExplosionCurrent(entity: EntityWith<typeof Explosion>, current: number): void {
       setComponentValue(world, entity, Explosion, "current", current);
     },
 
-    getExplosionRotationOffset(entity: EntityId): number {
-      return getComponentValue(world, entity, Explosion, "rotationOffset") ?? 0;
+    getExplosionRotationOffset(entity: EntityWith<typeof Explosion>): number {
+      return getComponentValue(world, entity, Explosion, "rotationOffset");
     },
 
-    getExplosionMaxRadius(entity: EntityId): number {
-      return getComponentValue(world, entity, Explosion, "maxRadius") ?? 30;
+    getExplosionMaxRadius(entity: EntityWith<typeof Explosion>): number {
+      return getComponentValue(world, entity, Explosion, "maxRadius");
     },
 
     // =========================================================================
     // Component reads
     // =========================================================================
 
-    getAutoRotateSpeed(entity: EntityId): number {
-      return getComponentValue(world, entity, AutoRotate, "speed") ?? 1;
+    getAutoRotateSpeed(entity: EntityWith<typeof AutoRotate>): number {
+      return getComponentValue(world, entity, AutoRotate, "speed");
     },
 
-    getAvoidanceRange(entity: EntityId): number {
-      return getComponentValue(world, entity, Avoidance, "range") ?? 1.5;
+    getAvoidanceRange(entity: EntityWith<typeof Avoidance>): number {
+      return getComponentValue(world, entity, Avoidance, "range");
     },
   };
 });

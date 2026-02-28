@@ -1,5 +1,13 @@
-import type { World } from "iris-ecs";
-import { addResource, emitEvent, getResourceValue, queryEntities, readEvents } from "iris-ecs";
+import {
+  addResource,
+  defineSystem,
+  emitEvent,
+  ensureQuery,
+  getResourceValue,
+  queryEntities,
+  readEvents,
+  type World,
+} from "iris-ecs";
 import { IsPlayer } from "../player/components.js";
 import { movementActions, transformActions } from "../shared/actions.js";
 import { Movement, Time, Transform } from "../shared/components.js";
@@ -44,99 +52,113 @@ export function initInput(world: World): void {
 // Drains input events into persistent state. readEvents picks up between-frame
 // DOM events because emitEvent timestamps them with the current tick and
 // readEvents scans (lastTick, tick].
-export function readInput(world: World): void {
-  const state = getResourceValue(world, InputState, "state")!;
+export const readInput = defineSystem("readInput", (world) => {
+  return () => {
+    const state = getResourceValue(world, InputState, "state")!;
 
-  readEvents(world, KeyDown, (data) => {
-    state.keys.add(data.key);
-  });
-  readEvents(world, KeyUp, (data) => {
-    state.keys.delete(data.key);
-  });
-  readEvents(world, MouseButtonDown, () => {
-    state.mouseButton = true;
-  });
-  readEvents(world, MouseButtonUp, () => {
-    state.mouseButton = false;
-  });
-}
+    readEvents(world, KeyDown, (data) => {
+      state.keys.add(data.key);
+    });
+    readEvents(world, KeyUp, (data) => {
+      state.keys.delete(data.key);
+    });
+    readEvents(world, MouseButtonDown, () => {
+      state.mouseButton = true;
+    });
+    readEvents(world, MouseButtonUp, () => {
+      state.mouseButton = false;
+    });
+  };
+});
 
 // Maps InputState -> per-entity Input component so downstream systems
 // can read simple scalar fields instead of querying raw key state.
-export function writeInput(world: World): void {
-  const state = getResourceValue(world, InputState, "state")!;
+export const writeInput = defineSystem("writeInput", (world) => {
+  const players = ensureQuery(world, IsPlayer, Input);
 
   const { setInput } = inputActions(world);
 
-  queryEntities(world, [IsPlayer, Input], (entity) => {
-    const thrust =
-      (state.keys.has("w") || state.keys.has("arrowup") ? 1 : 0) -
-      (state.keys.has("s") || state.keys.has("arrowdown") ? 1 : 0);
-    const turn =
-      (state.keys.has("d") || state.keys.has("arrowright") ? 1 : 0) -
-      (state.keys.has("a") || state.keys.has("arrowleft") ? 1 : 0);
-    const fire = state.keys.has(" ") || state.mouseButton ? 1 : 0;
+  return () => {
+    const state = getResourceValue(world, InputState, "state")!;
 
-    setInput(entity, thrust, turn, fire);
-  });
-}
+    queryEntities(world, players, (entity) => {
+      const thrust =
+        (state.keys.has("w") || state.keys.has("arrowup") ? 1 : 0) -
+        (state.keys.has("s") || state.keys.has("arrowdown") ? 1 : 0);
+      const turn =
+        (state.keys.has("d") || state.keys.has("arrowright") ? 1 : 0) -
+        (state.keys.has("a") || state.keys.has("arrowleft") ? 1 : 0);
+      const fire = state.keys.has(" ") || state.mouseButton ? 1 : 0;
+
+      setInput(entity, thrust, turn, fire);
+    });
+  };
+});
 
 // ============================================================================
 // Update
 // ============================================================================
 
-export function applyInput(world: World): void {
-  const delta = getResourceValue(world, Time, "delta") ?? 0;
+export const applyInput = defineSystem("applyInput", (world) => {
+  const players = ensureQuery(world, IsPlayer, Input, Movement, Transform);
 
   const { getRotation, setRotation } = transformActions(world);
   const { getVelocity, setVelocity, getRotationSpeed, getThrust, getMaxSpeed } = movementActions(world);
   const { getInputThrust, getInputTurn } = inputActions(world);
 
-  queryEntities(world, [IsPlayer, Input, Movement, Transform], (entity) => {
-    const thrustInput = getInputThrust(entity);
-    const turnInput = getInputTurn(entity);
+  return () => {
+    const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    const rotationSpeed = getRotationSpeed(entity);
-    const rotation = getRotation(entity);
-    const newRotation = rotation + turnInput * rotationSpeed * delta;
-    setRotation(entity, newRotation);
+    queryEntities(world, players, (entity) => {
+      const thrustInput = getInputThrust(entity);
+      const turnInput = getInputTurn(entity);
 
-    if (thrustInput !== 0) {
-      const thrust = getThrust(entity);
-      const maxSpeed = getMaxSpeed(entity);
+      const rotationSpeed = getRotationSpeed(entity);
+      const rotation = getRotation(entity);
+      const newRotation = rotation + turnInput * rotationSpeed * delta;
+      setRotation(entity, newRotation);
 
-      const dirX = Math.sin(newRotation);
-      const dirY = Math.cos(newRotation);
+      if (thrustInput !== 0) {
+        const thrust = getThrust(entity);
+        const maxSpeed = getMaxSpeed(entity);
 
-      let [vx, vy] = getVelocity(entity);
+        const dirX = Math.sin(newRotation);
+        const dirY = Math.cos(newRotation);
 
-      vx += dirX * thrustInput * thrust * delta;
-      vy += dirY * thrustInput * thrust * delta;
+        let [vx, vy] = getVelocity(entity);
 
-      const speed = Math.sqrt(vx * vx + vy * vy);
-      if (speed > maxSpeed) {
-        const scale = maxSpeed / speed;
-        vx *= scale;
-        vy *= scale;
+        vx += dirX * thrustInput * thrust * delta;
+        vy += dirY * thrustInput * thrust * delta;
+
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed > maxSpeed) {
+          const scale = maxSpeed / speed;
+          vx *= scale;
+          vy *= scale;
+        }
+
+        setVelocity(entity, vx, vy);
       }
+    });
+  };
+});
 
-      setVelocity(entity, vx, vy);
-    }
-  });
-}
+export const dampPlayerMovement = defineSystem("dampPlayerMovement", (world) => {
+  const entities = ensureQuery(world, Movement, Input);
 
-export function dampPlayerMovement(world: World): void {
   const { getVelocity, setVelocity, getDamping } = movementActions(world);
   const { getInputThrust } = inputActions(world);
 
-  queryEntities(world, [Movement, Input], (entity) => {
-    const thrustInput = getInputThrust(entity);
+  return () => {
+    queryEntities(world, entities, (entity) => {
+      const thrustInput = getInputThrust(entity);
 
-    if (thrustInput === 0) {
-      const damping = getDamping(entity);
-      const [vx, vy] = getVelocity(entity);
+      if (thrustInput === 0) {
+        const damping = getDamping(entity);
+        const [vx, vy] = getVelocity(entity);
 
-      setVelocity(entity, vx * damping, vy * damping);
-    }
-  });
-}
+        setVelocity(entity, vx * damping, vy * damping);
+      }
+    });
+  };
+});

@@ -1,5 +1,5 @@
 import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype } from "./archetype.js";
-import type { Component, Entity, EntityId, Pair, Relation, Tag } from "./encoding.js";
+import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, isPair } from "./encoding.js";
 import { ensureEntity, moveEntityToArchetype } from "./entity.js";
 import { fireObserverEvent } from "./observer.js";
@@ -183,7 +183,11 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
  * hasComponent(world, entity, tag);  // true
  * ```
  */
-export function hasComponent(world: World, entityId: EntityId, componentId: EntityId): boolean {
+export function hasComponent<C extends EntityId>(
+  world: World,
+  entityId: EntityId,
+  componentId: C
+): entityId is EntityWith<C> {
   const meta = ensureEntity(world, entityId);
 
   return meta.archetype.typesSet.has(componentId);
@@ -196,7 +200,7 @@ export function hasComponent(world: World, entityId: EntityId, componentId: Enti
  * @param entityId - Entity to query
  * @param componentId - Data component
  * @param fieldName - Field name
- * @returns Field value or undefined if component/field not present
+ * @returns Field value, or undefined if component/field not present (unnarrowed path)
  *
  * @example
  * ```typescript
@@ -204,6 +208,27 @@ export function hasComponent(world: World, entityId: EntityId, componentId: Enti
  * const x = getComponentValue(world, entity, Position, 'x');
  * ```
  */
+export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityWith<Component<S>>,
+  componentId: Component<S>,
+  fieldName: K
+): InferSchema<S[K]>;
+
+export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityWith<Pair<Relation<S>>>,
+  componentId: Pair<Relation<S>>,
+  fieldName: K
+): InferSchema<S[K]>;
+
+export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>,
+  fieldName: K
+): InferSchema<S[K]> | undefined;
+
 export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,
@@ -240,6 +265,30 @@ export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
  * setComponentValue(world, entity, Position, 'x', 10.0);
  * ```
  */
+export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityWith<Component<S>>,
+  componentId: Component<S>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityWith<Pair<Relation<S>>>,
+  componentId: Pair<Relation<S>>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
 export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,

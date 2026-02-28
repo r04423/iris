@@ -349,6 +349,148 @@ describe("Filters", () => {
   });
 
   // ============================================================================
+  // Filter Dispatch (filter created before archetype)
+  // ============================================================================
+
+  describe("Filter Dispatch", () => {
+    it("matches archetype created after filter registration", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+
+      // Filter exists before any matching archetype
+      const filter = ensureFilter(world, { include: [A, B], exclude: [] });
+      assert.strictEqual(filter.archetypes.length, 0);
+
+      // Archetype created later, observer must pick it up
+      const archetype = createAndRegisterArchetype(world, [A, B], new Map());
+
+      assert.strictEqual(filter.archetypes.length, 1);
+      assert.strictEqual(filter.archetypes[0], archetype);
+    });
+
+    it("matches archetype with superset of filter types", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+      const D = createEntity(world);
+      const E = createEntity(world);
+
+      // Filter only requires [A, B]
+      const filter = ensureFilter(world, { include: [A, B], exclude: [] });
+
+      // Archetype has [A, B, C, D, E], filter stored under one type must still match
+      const archetype = createAndRegisterArchetype(world, [A, B, C, D, E], new Map());
+
+      assert.strictEqual(filter.archetypes.length, 1);
+      assert.strictEqual(filter.archetypes[0], archetype);
+    });
+
+    it("handles multiple filters with overlapping include types", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+
+      const filterAB = ensureFilter(world, { include: [A, B], exclude: [] });
+      const filterAC = ensureFilter(world, { include: [A, C], exclude: [] });
+      const filterBC = ensureFilter(world, { include: [B, C], exclude: [] });
+
+      // Archetype matches all three filters
+      const archetype = createAndRegisterArchetype(world, [A, B, C], new Map());
+
+      assert.strictEqual(filterAB.archetypes.length, 1);
+      assert.strictEqual(filterAC.archetypes.length, 1);
+      assert.strictEqual(filterBC.archetypes.length, 1);
+      assert.strictEqual(filterAB.archetypes[0], archetype);
+      assert.strictEqual(filterAC.archetypes[0], archetype);
+      assert.strictEqual(filterBC.archetypes[0], archetype);
+    });
+
+    it("only updates matching filters when archetype is created", () => {
+      const world = createWorld();
+
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+
+      const filterAB = ensureFilter(world, { include: [A, B], exclude: [] });
+      const filterC = ensureFilter(world, { include: [C], exclude: [] });
+
+      // Archetype {A, B} matches filterAB but not filterC
+      createAndRegisterArchetype(world, [A, B], new Map());
+
+      assert.strictEqual(filterAB.archetypes.length, 1);
+      assert.strictEqual(filterC.archetypes.length, 0);
+    });
+
+    it("handles filter registered under rare type when common type has many filters", () => {
+      const world = createWorld();
+      const Common = createEntity(world);
+      const Rare = createEntity(world);
+
+      // Create many filters that include Common to make it "popular"
+      const extras: EntityId[] = [];
+
+      for (let i = 0; i < 10; i++) {
+        const extra = createEntity(world);
+        extras.push(extra);
+        ensureFilter(world, { include: [Common, extra], exclude: [] });
+      }
+
+      // This filter should be registered under Rare (fewer filters)
+      const filter = ensureFilter(world, { include: [Common, Rare], exclude: [] });
+
+      // Create archetype that matches
+      const archetype = createAndRegisterArchetype(
+        world,
+        [Common, Rare, ...extras.slice(0, 2)].sort((a, b) => a - b) as EntityId[],
+        new Map()
+      );
+
+      assert.ok(filter.archetypes.includes(archetype));
+    });
+
+    it("respects exclude terms during dispatch", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const Excluded = createEntity(world);
+
+      const filter = ensureFilter(world, { include: [A, B], exclude: [Excluded] });
+
+      // Archetype with excluded type should not match
+      createAndRegisterArchetype(world, [A, B, Excluded], new Map());
+      assert.strictEqual(filter.archetypes.length, 0);
+
+      // Archetype without excluded type should match
+      const good = createAndRegisterArchetype(world, [A, B], new Map());
+      assert.strictEqual(filter.archetypes.length, 1);
+      assert.strictEqual(filter.archetypes[0], good);
+    });
+
+    it("handles filter created between archetype creations", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+
+      // First archetype exists before filter
+      const arch1 = createAndRegisterArchetype(world, [A, B], new Map());
+
+      const filter = ensureFilter(world, { include: [A, B], exclude: [] });
+      assert.strictEqual(filter.archetypes.length, 1);
+      assert.strictEqual(filter.archetypes[0], arch1);
+
+      // Second archetype created after filter
+      const arch2 = createAndRegisterArchetype(world, [A, B, C], new Map());
+      assert.strictEqual(filter.archetypes.length, 2);
+      assert.ok(filter.archetypes.includes(arch2));
+    });
+  });
+
+  // ============================================================================
   // Filter Lifecycle (Persistent)
   // ============================================================================
 

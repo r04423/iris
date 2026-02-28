@@ -163,85 +163,87 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
 // ============================================================================
 
 /**
- * Registers a filter in the reverse index (byType) for each included type.
+ * Registers a filter in the reverse index (byType) under exactly one type.
+ *
+ * Picks the included type with the fewest registered filters to keep per-type
+ * lists short.
  * @internal
  */
 function registerFilterInIndex(world: World, filter: FilterMeta): void {
   const types = filter.terms.include;
 
-  for (let i = 0; i < types.length; i++) {
+  if (types.length === 0) {
+    return;
+  }
+
+  // Pick the type with the fewest existing filters for load balancing
+  let bestTypeId = types[0]!;
+  let minCount = world.filters.byType.get(bestTypeId)?.length ?? 0;
+
+  for (let i = 1; i < types.length; i++) {
     const typeId = types[i]!;
-    let filters = world.filters.byType.get(typeId);
+    const count = world.filters.byType.get(typeId)?.length ?? 0;
 
-    if (!filters) {
-      filters = [];
-      world.filters.byType.set(typeId, filters);
-    }
-
-    filters.push(filter);
-  }
-}
-
-/**
- * Finds the smallest set of filters that could match an archetype by looking up
- * each archetype type in the reverse index and returning the shortest list.
- * @internal
- */
-function findRarestFilters(world: World, archetype: Archetype): FilterMeta[] | undefined {
-  let rarestFilters: FilterMeta[] | undefined;
-  let minCount = Infinity;
-
-  for (let i = 0; i < archetype.types.length; i++) {
-    const filters = world.filters.byType.get(archetype.types[i]!);
-
-    if (!filters || filters.length === 0) {
-      continue;
-    }
-
-    if (filters.length < minCount) {
-      rarestFilters = filters;
-      minCount = filters.length;
+    if (count < minCount) {
+      bestTypeId = typeId;
+      minCount = count;
     }
   }
 
-  return rarestFilters;
+  let filters = world.filters.byType.get(bestTypeId);
+
+  if (!filters) {
+    filters = [];
+    world.filters.byType.set(bestTypeId, filters);
+  }
+
+  filters.push(filter);
 }
 
 /**
  * Initializes centralized filter dispatch by registering one archetypeCreated
  * and one archetypeDestroyed observer callback. Called once from createWorld.
+ *
+ * Each filter is stored in byType under exactly one of its included types
+ * (see registerFilterInIndex). The dispatch iterates ALL types in the new
+ * archetype, so it is guaranteed to find every filter whose included types
+ * are a subset of the archetype's types, each filter is visited exactly once.
  * @internal
  */
 export function initFilterDispatch(world: World): void {
   registerObserverCallback(world, "archetypeCreated", (archetype) => {
-    const filters = findRarestFilters(world, archetype);
+    for (let i = 0; i < archetype.types.length; i++) {
+      const filters = world.filters.byType.get(archetype.types[i]!);
 
-    if (!filters) {
-      return;
-    }
+      if (!filters) {
+        continue;
+      }
 
-    for (let i = 0; i < filters.length; i++) {
-      const filter = filters[i]!;
+      for (let j = 0; j < filters.length; j++) {
+        const filter = filters[j]!;
 
-      if (matchesFilterTerms(archetype, filter.terms)) {
-        filter.archetypes.push(archetype);
+        if (matchesFilterTerms(archetype, filter.terms)) {
+          filter.archetypes.push(archetype);
+        }
       }
     }
   });
 
   registerObserverCallback(world, "archetypeDestroyed", (archetype) => {
-    const filters = findRarestFilters(world, archetype);
+    for (let i = 0; i < archetype.types.length; i++) {
+      const filters = world.filters.byType.get(archetype.types[i]!);
 
-    if (!filters) {
-      return;
-    }
+      if (!filters) {
+        continue;
+      }
 
-    for (let i = 0; i < filters.length; i++) {
-      const filter = filters[i]!;
-      const idx = filter.archetypes.indexOf(archetype);
+      for (let j = 0; j < filters.length; j++) {
+        const filter = filters[j]!;
+        const idx = filter.archetypes.indexOf(archetype);
 
-      if (idx !== -1) {
-        filter.archetypes.splice(idx, 1);
+        if (idx !== -1) {
+          filter.archetypes.splice(idx, 1);
+        }
       }
     }
   });

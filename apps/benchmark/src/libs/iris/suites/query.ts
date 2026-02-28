@@ -1,4 +1,4 @@
-import { ensureQuery, type QueryMeta, queryEntities, type World } from "iris-ecs";
+import { type Component, ensureQuery, type QueryMeta, queryEntities, type World } from "iris-ecs";
 import type { BenchmarkDef, PresetName } from "../../../types.js";
 import { GENERATED_COMPONENTS } from "../fixtures.js";
 
@@ -13,7 +13,7 @@ const narrowPresets: PresetName[] = ["small", "medium", "large"];
 // World extension for cached query state
 // ============================================================================
 
-type QueryPoolWorld = World & { __queryMeta: QueryMeta; __sink: number };
+type QueryPoolWorld = World & { __queryMeta: QueryMeta<Component>; __sink: number };
 
 // ============================================================================
 // Shorthand alias
@@ -25,7 +25,7 @@ const C = GENERATED_COMPONENTS;
 // Helpers
 // ============================================================================
 
-function countMatches(world: World, meta: QueryMeta): number {
+function countMatches(world: World, meta: QueryMeta<Component>): number {
   let count = 0;
   queryEntities(world, meta, () => {
     count++;
