@@ -254,14 +254,31 @@ export function destroyQuery(world: World, queryMeta: QueryMeta): void {
  */
 function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (entity: EntityId) => unknown): void {
   const hasChangeModifiers = queryMeta.added.length > 0 || queryMeta.changed.length > 0;
-  const { systemId, tick } = world.execution;
 
-  // Change detection requires system context, no meaningful tick tracking otherwise
-  if (hasChangeModifiers && systemId === null) {
+  // Fast path: no change modifiers
+  if (!hasChangeModifiers) {
+    const archetypes = queryMeta.filter.archetypes;
+
+    for (let a = 0; a < archetypes.length; a++) {
+      const entities = archetypes[a]!.entities;
+      for (let i = entities.length - 1; i >= 0; i--) {
+        if (callback(entities[i]!) === false) {
+          return;
+        }
+      }
+    }
+
     return;
   }
 
-  const lastTick = hasChangeModifiers ? (queryMeta.lastTick.get(systemId!) ?? 0) : 0;
+  // Slow path: change detection requires system context
+  const { systemId, tick } = world.execution;
+
+  if (systemId === null) {
+    return;
+  }
+
+  const lastTick = queryMeta.lastTick.get(systemId) ?? 0;
   const archetypes = queryMeta.filter.archetypes;
 
   // Pre-allocated arrays reused across archetypes to avoid allocation in hot loop
@@ -313,11 +330,9 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
       }
     }
   } finally {
-    if (hasChangeModifiers) {
-      // Update lastTick after iteration completes or on early exit, this ensures
-      // subsequent iterations only see changes since this execution
-      queryMeta.lastTick.set(systemId!, tick);
-    }
+    // Update lastTick after iteration completes or on early exit, this ensures
+    // subsequent iterations only see changes since this execution
+    queryMeta.lastTick.set(systemId!, tick);
   }
 }
 
