@@ -101,6 +101,29 @@ export const Last = defineSchedule("Last");
 export type SystemRunner = (world: World) => void | Promise<void>;
 
 /**
+ * System tick function returned by a SystemFactory's init.
+ *
+ * Runs every frame. The world is captured in the init closure scope,
+ * not passed as a parameter.
+ */
+export type SystemTick = () => void | Promise<void>;
+
+/**
+ * System factory with init/tick separation.
+ *
+ * Created via `defineSystem()`. The init function runs once at registration
+ * time (`addSystem`), the returned tick function runs every frame.
+ */
+export type SystemFactory = {
+  /** @internal Runtime brand for discriminating SystemFactory from SystemRunner. */
+  readonly __systemFactory: true;
+  /** System name for scheduling constraints and execution context. */
+  readonly name: string;
+  /** Init function. Receives world, returns tick function. */
+  readonly init: (world: World) => SystemTick;
+};
+
+/**
  * Options for system registration.
  */
 export type SystemOptions = {
@@ -162,19 +185,33 @@ export type SystemMeta = {
 /**
  * Registers a system in the world for later scheduling.
  *
+ * Accepts either a `SystemRunner` function or a `SystemFactory` created by
+ * `defineSystem()`. When a factory is passed, its init function runs
+ * immediately and the returned tick function is registered as the runner.
+ *
  * @param world - World instance
- * @param runner - System function (must be named unless name option provided)
+ * @param system - System function or factory (must be named unless name option provided)
  * @param options - Registration options (name, schedule, before, after)
  *
  * @example
  * ```typescript
  * addSystem(world, physicsSystem);
  * addSystem(world, renderSystem, { schedule: PostUpdate, after: "physicsSystem" });
+ * addSystem(world, movementFactory); // SystemFactory from defineSystem()
  * ```
  */
-export function addSystem(world: World, runner: SystemRunner, options?: SystemOptions): void {
-  // Derive system name from function name or explicit option
-  const name = options?.name ?? runner.name;
+export function addSystem(world: World, system: SystemRunner | SystemFactory, options?: SystemOptions): void {
+  let runner: SystemRunner;
+  let name: string;
+
+  if (isSystemFactory(system)) {
+    const tick = system.init(world);
+    runner = tick;
+    name = options?.name ?? system.name;
+  } else {
+    runner = system;
+    name = options?.name ?? system.name;
+  }
 
   assert(name && name !== "anonymous", InvalidArgument, { expected: "named system function or name option" });
   assert(!world.systems.byId.has(name), Duplicate, { resource: "System", id: name });
@@ -192,6 +229,54 @@ export function addSystem(world: World, runner: SystemRunner, options?: SystemOp
   });
 
   world.schedules.dirty = true;
+}
+
+// ============================================================================
+// System Factory
+// ============================================================================
+
+/**
+ * Define a system with separate init and tick phases.
+ *
+ * The init function runs once when the system is registered via `addSystem()`.
+ * Use it to cache query references, action getters, and other one-time setup.
+ * The returned tick function runs every frame during schedule execution.
+ *
+ * Local state can be declared as variables in the init closure — use it for
+ * system-internal bookkeeping (frame counters, cooldowns, cached computations).
+ * Use resources for state other systems need to read, components for per-entity state.
+ *
+ * @param name - System name
+ * @param init - Init function that receives the world and returns a tick function
+ * @returns SystemFactory to pass to `addSystem()`
+ *
+ * @example
+ * ```typescript
+ * const movementSystem = defineSystem("movementSystem", (world) => {
+ *   // Init: runs once at addSystem() time
+ *   const movers = ensureQuery(world, Position, Velocity);
+ *
+ *   // Tick: runs every frame
+ *   return () => {
+ *     const dt = getResourceValue(world, Time, "delta") ?? 0;
+ *     queryEntities(world, movers, (entity) => {
+ *       const x = getComponentValue(world, entity, Position, "x")!;
+ *       const vx = getComponentValue(world, entity, Velocity, "vx")!;
+ *       setComponentValue(world, entity, Position, "x", x + vx * dt);
+ *     });
+ *   };
+ * });
+ *
+ * addSystem(world, movementSystem);
+ * addSystem(world, movementSystem, { schedule: PostUpdate, name: "lateMovement" });
+ * ```
+ */
+export function defineSystem(name: string, init: (world: World) => SystemTick): SystemFactory {
+  return { __systemFactory: true, name, init };
+}
+
+function isSystemFactory(system: SystemRunner | SystemFactory): system is SystemFactory {
+  return typeof system === "object" && system !== null && "__systemFactory" in system;
 }
 
 // ============================================================================

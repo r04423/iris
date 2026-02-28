@@ -1,9 +1,15 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { addComponent, getComponentValue } from "./component.js";
+import { createEntity } from "./entity.js";
 import { Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
+import { ensureQuery, queryEntities } from "./query.js";
+import { defineComponent } from "./registry.js";
+import { addResource, getResourceValue } from "./resource.js";
 import {
   addSystem,
   defineSchedule,
+  defineSystem,
   First,
   insertScheduleAfter,
   insertScheduleBefore,
@@ -16,6 +22,7 @@ import {
   stop,
   Update,
 } from "./scheduler.js";
+import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
 describe("Scheduler", () => {
@@ -665,6 +672,282 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.deepStrictEqual(calls, ["first", "second"]);
+    });
+  });
+
+  describe("defineSystem", () => {
+    it("init runs at addSystem time, not at runOnce time", () => {
+      const world = createWorld();
+      let initCount = 0;
+
+      const factory = defineSystem("testSystem", () => {
+        initCount++;
+        return () => {};
+      });
+
+      assert.strictEqual(initCount, 0);
+      addSystem(world, factory);
+      assert.strictEqual(initCount, 1);
+    });
+
+    it("tick runs every frame", async () => {
+      const world = createWorld();
+      let tickCount = 0;
+
+      const factory = defineSystem("testSystem", () => {
+        return () => {
+          tickCount++;
+        };
+      });
+
+      addSystem(world, factory);
+
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.strictEqual(tickCount, 3);
+    });
+
+    it("init runs once, tick runs many", async () => {
+      const world = createWorld();
+      let initCount = 0;
+      let tickCount = 0;
+
+      const factory = defineSystem("testSystem", () => {
+        initCount++;
+        return () => {
+          tickCount++;
+        };
+      });
+
+      addSystem(world, factory);
+
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.strictEqual(initCount, 1);
+      assert.strictEqual(tickCount, 3);
+    });
+
+    it("captures world in closure for resource access", async () => {
+      const world = createWorld();
+      const Time = defineComponent("Time", { delta: Type.f32() });
+      addResource(world, Time, { delta: 16 });
+
+      let captured = 0;
+
+      const factory = defineSystem("testSystem", (w) => {
+        return () => {
+          captured = getResourceValue(w, Time, "delta")!;
+        };
+      });
+
+      addSystem(world, factory);
+      await runOnce(world);
+
+      assert.strictEqual(captured, 16);
+    });
+
+    it("query caching in init works with tick iteration", async () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { x: Type.f32() });
+      const found: number[] = [];
+
+      const factory = defineSystem("testSystem", (w) => {
+        const q = ensureQuery(w, Position);
+        return () => {
+          queryEntities(w, q, (entity) => {
+            found.push(getComponentValue(w, entity, Position, "x")!);
+          });
+        };
+      });
+
+      addSystem(world, factory);
+
+      const e = createEntity(world);
+      addComponent(world, e, Position, { x: 42 });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(found, [42]);
+    });
+
+    it("system name comes from defineSystem", () => {
+      const world = createWorld();
+
+      const factory = defineSystem("mySystem", () => {
+        return () => {};
+      });
+
+      addSystem(world, factory);
+
+      assert.strictEqual(world.systems.byId.has("mySystem"), true);
+    });
+
+    it("options.name overrides factory name", () => {
+      const world = createWorld();
+
+      const factory = defineSystem("originalName", () => {
+        return () => {};
+      });
+
+      addSystem(world, factory, { name: "customName" });
+
+      assert.strictEqual(world.systems.byId.has("customName"), true);
+      assert.strictEqual(world.systems.byId.has("originalName"), false);
+    });
+
+    it("schedule option works", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
+
+      const factory = defineSystem("firstSys", () => {
+        return () => {
+          calls.push("first");
+        };
+      });
+
+      addSystem(world, factory, { schedule: First });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.indexOf("first") < calls.indexOf("update"), true);
+    });
+
+    it("before/after constraints work", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(world, function render() {
+        calls.push("render");
+      });
+
+      const factory = defineSystem("physics", () => {
+        return () => {
+          calls.push("physics");
+        };
+      });
+
+      addSystem(world, factory, { before: "render" });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["physics", "render"]);
+    });
+
+    it("awaits async tick functions", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const factory = defineSystem("asyncSys", () => {
+        return async () => {
+          await Promise.resolve();
+          calls.push("async");
+        };
+      });
+
+      addSystem(world, function syncSys() {
+        calls.push("sync");
+      });
+
+      addSystem(world, factory, { before: "syncSys" });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["async", "sync"]);
+    });
+
+    it("sets execution context correctly during tick", async () => {
+      const world = createWorld();
+      let capturedSchedule: string | null = null;
+      let capturedSystem: string | null = null;
+
+      const factory = defineSystem("capture", () => {
+        return () => {
+          capturedSchedule = world.execution.scheduleLabel;
+          capturedSystem = world.execution.systemId;
+        };
+      });
+
+      addSystem(world, factory);
+
+      await runOnce(world);
+
+      assert.strictEqual(capturedSchedule, Update);
+      assert.strictEqual(capturedSystem, "capture");
+    });
+
+    it("plain SystemRunner and SystemFactory coexist in same schedule", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(world, function plain() {
+        calls.push("plain");
+      });
+
+      const factory = defineSystem("factory", () => {
+        return () => {
+          calls.push("factory");
+        };
+      });
+
+      addSystem(world, factory, { after: "plain" });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["plain", "factory"]);
+    });
+
+    it("throws Duplicate for same factory name registered twice", () => {
+      const world = createWorld();
+
+      const factory = defineSystem("dupe", () => {
+        return () => {};
+      });
+
+      addSystem(world, factory);
+
+      assert.throws(() => addSystem(world, factory), Duplicate);
+    });
+
+    it("allows same factory registered with different names", () => {
+      const world = createWorld();
+
+      const factory = defineSystem("original", () => {
+        return () => {};
+      });
+
+      addSystem(world, factory, { name: "instance1" });
+      addSystem(world, factory, { name: "instance2" });
+
+      assert.strictEqual(world.systems.byId.size, 2);
+    });
+
+    it("local state persists across ticks", async () => {
+      const world = createWorld();
+      const values: number[] = [];
+
+      const factory = defineSystem("counter", () => {
+        let count = 0;
+        return () => {
+          count++;
+          values.push(count);
+        };
+      });
+
+      addSystem(world, factory);
+
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual(values, [1, 2, 3]);
     });
   });
 });

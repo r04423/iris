@@ -81,6 +81,7 @@ export {
 export {
   addSystem,
   defineSchedule,
+  defineSystem,
   First,
   insertScheduleAfter,
   insertScheduleBefore,
@@ -105,7 +106,7 @@ export type { Event, EventSchema } from "./event.js";
 export type { FilterTerms } from "./filters.js";
 export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observer.js";
 export type { AddedModifier, ChangedModifier, ModifierType, NotModifier, QueryMeta, QueryModifier } from "./query.js";
-export type { ScheduleLabel, SystemMeta, SystemOptions, SystemRunner } from "./scheduler.js";
+export type { ScheduleLabel, SystemFactory, SystemMeta, SystemOptions, SystemRunner, SystemTick } from "./scheduler.js";
 export type { InferSchemaRecord, Schema, SchemaRecord } from "./schema.js";
 export type { World } from "./world.js";
 
