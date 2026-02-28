@@ -1,9 +1,12 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { createAndRegisterArchetype, destroyArchetype } from "./archetype.js";
+import { addComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
-import { createEntity } from "./entity.js";
+import { createEntity, destroyEntity } from "./entity.js";
 import { ensureFilter, findMatchingArchetypes, hashFilterTerms, matchesFilterTerms } from "./filters.js";
+import { defineRelation } from "./registry.js";
+import { pair } from "./relation.js";
 import { createWorld } from "./world.js";
 
 describe("Filters", () => {
@@ -346,68 +349,74 @@ describe("Filters", () => {
   });
 
   // ============================================================================
-  // Filter Lifecycle and Cleanup
+  // Filter Lifecycle (Persistent)
   // ============================================================================
 
   describe("Filter Lifecycle", () => {
-    it("removes filter from registry when last archetype is destroyed", () => {
+    it("persists filter when all matching archetypes are destroyed", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
       const archetype = createAndRegisterArchetype(world, [Position], new Map());
 
       const terms = { include: [Position], exclude: [] };
-      ensureFilter(world, terms);
+      const filterMeta = ensureFilter(world, terms);
 
       assert.strictEqual(world.filters.byId.size, 1);
 
-      // Destroy last matching archetype
       destroyArchetype(world, archetype);
 
-      // Filter should be automatically removed
-      assert.strictEqual(world.filters.byId.size, 0);
+      // Filter persists with empty archetype list
+      assert.strictEqual(world.filters.byId.size, 1);
+      assert.strictEqual(filterMeta.archetypes.length, 0);
     });
 
-    it("unregisters observer callbacks when filter is removed", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const archetype = createAndRegisterArchetype(world, [Position], new Map());
-
-      const terms = { include: [Position], exclude: [] };
-      ensureFilter(world, terms);
-
-      const destroyedCallbackCount = world.observers.archetypeDestroyed.callbacks.length;
-
-      // Destroy last archetype, triggering filter cleanup
-      destroyArchetype(world, archetype);
-
-      // Only destruction callback registered, should be unregistered
-      assert.strictEqual(world.observers.archetypeDestroyed.callbacks.length, destroyedCallbackCount - 1);
-    });
-
-    it("recreates filter after cleanup", () => {
+    it("re-matches when new archetype appears after all were destroyed", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
       const archetype1 = createAndRegisterArchetype(world, [Position], new Map());
 
       const terms = { include: [Position], exclude: [] };
-      const filterMeta1 = ensureFilter(world, terms);
+      const filterMeta = ensureFilter(world, terms);
 
-      // Destroy archetype, cleaning up filter
       destroyArchetype(world, archetype1);
-      assert.strictEqual(world.filters.byId.size, 0);
+      assert.strictEqual(filterMeta.archetypes.length, 0);
 
-      // Create new archetype
+      // Create new archetype, same filter instance should re-match
       const archetype2 = createAndRegisterArchetype(world, [Position], new Map());
 
-      // Filter should be recreated
-      const filterMeta2 = ensureFilter(world, terms);
+      assert.strictEqual(filterMeta.archetypes.length, 1);
+      assert.strictEqual(filterMeta.archetypes[0], archetype2);
+    });
 
-      assert.notStrictEqual(filterMeta1, filterMeta2);
-      assert.strictEqual(filterMeta2.archetypes.length, 1);
-      assert.strictEqual(filterMeta2.archetypes[0], archetype2);
+    it("re-matches after pair target destroyed and re-established", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOf");
+
+      const parent = createEntity(world);
+      const child = createEntity(world);
+      addComponent(world, child, pair(ChildOf, parent));
+
+      const pairType = pair(ChildOf, parent);
+      const filter = ensureFilter(world, { include: [pairType], exclude: [] });
+
+      assert.ok(filter.archetypes.length > 0);
+
+      // Destroy parent cascades: removes pair from child, destroys pair archetypes
+      destroyEntity(world, parent);
+      assert.strictEqual(filter.archetypes.length, 0);
+
+      // New parent recycles same raw ID, pair encodes identically
+      const newParent = createEntity(world);
+      assert.notStrictEqual(newParent, parent);
+      assert.strictEqual(pair(ChildOf, newParent), pairType);
+
+      const newChild = createEntity(world);
+      addComponent(world, newChild, pair(ChildOf, newParent));
+
+      // Same filter instance re-matches the new archetype
+      assert.ok(filter.archetypes.length > 0);
     });
   });
 });

@@ -10,7 +10,6 @@ import {
   added,
   changed,
   collectEntities,
-  destroyQuery,
   ensureQuery,
   hashQuery,
   not,
@@ -515,7 +514,6 @@ describe("Query", () => {
       assert.deepStrictEqual(query.include, [Position]);
       assert.deepStrictEqual(query.exclude, []);
       assert.ok(query.filter);
-      assert.ok(query.onFilterDestroy);
     });
 
     it("reuses cached query on subsequent calls", () => {
@@ -559,146 +557,52 @@ describe("Query", () => {
     });
   });
 
-  describe("Query Observer Registration", () => {
-    it("registers observer callback for filter destruction", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      ensureQuery(world, Position);
-
-      const callbacks = world.observers.filterDestroyed.callbacks;
-      assert.strictEqual(callbacks.length, 1);
-    });
-
-    it("callback references correct filter", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, Position);
-
-      assert.strictEqual(query.onFilterDestroy.length, 1);
-    });
-
-    it("multiple queries register separate callbacks", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      ensureQuery(world, Position);
-      ensureQuery(world, Velocity);
-
-      const callbacks = world.observers.filterDestroyed.callbacks;
-      assert.strictEqual(callbacks.length, 2);
-    });
-  });
-
-  describe("Query Self-Cleanup", () => {
-    it("removes query when filter is destroyed", () => {
+  describe("Query Persistence", () => {
+    it("survives target entity destruction", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
       const entity = createEntity(world);
       addComponent(world, entity, Position);
 
-      ensureQuery(world, Position);
+      const query = ensureQuery(world, Position);
 
       assert.strictEqual(world.queries.byId.size, 1);
 
       destroyEntity(world, Position);
 
-      assert.strictEqual(world.queries.byId.size, 0);
-    });
-
-    it("unregisters callback during self-cleanup", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const entity = createEntity(world);
-      addComponent(world, entity, Position);
-
-      ensureQuery(world, Position);
-
-      const callbacksBefore = world.observers.filterDestroyed.callbacks.length;
-
-      destroyEntity(world, Position);
-
-      const callbacksAfter = world.observers.filterDestroyed.callbacks.length;
-
-      assert.strictEqual(callbacksBefore, 1);
-      assert.strictEqual(callbacksAfter, 0);
-    });
-
-    it("only removes matching query on filter destruction", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      const entity1 = createEntity(world);
-      addComponent(world, entity1, Position);
-
-      const entity2 = createEntity(world);
-      addComponent(world, entity2, Velocity);
-
-      ensureQuery(world, Position);
-      ensureQuery(world, Velocity);
-
-      assert.strictEqual(world.queries.byId.size, 2);
-
-      destroyEntity(world, Position);
-
+      // Query persists, it just has zero matching archetypes
       assert.strictEqual(world.queries.byId.size, 1);
+      assert.strictEqual(query.filter.archetypes.length, 0);
     });
-  });
 
-  describe("Manual Query Destruction", () => {
-    it("removes query from registry", () => {
+    it("re-matches after new pair target established", () => {
       const world = createWorld();
-      const Position = createEntity(world);
+      const ChildOf = defineRelation("ChildOf");
 
-      const query = ensureQuery(world, Position);
+      const parent1 = createEntity(world);
+      const child1 = createEntity(world);
+      addComponent(world, child1, pair(ChildOf, parent1));
 
+      const query = ensureQuery(world, pair(ChildOf, parent1));
+
+      // Verify child1 matches
+      const initial = collectEntities(world, query);
+      assert.strictEqual(initial.length, 1);
+      assert.strictEqual(initial[0], child1);
+
+      // Destroy child, entity removed, but query persists
+      destroyEntity(world, child1);
       assert.strictEqual(world.queries.byId.size, 1);
+      assert.strictEqual(collectEntities(world, query).length, 0);
 
-      destroyQuery(world, query);
+      // Add new child with same pair, query re-matches
+      const child2 = createEntity(world);
+      addComponent(world, child2, pair(ChildOf, parent1));
 
-      assert.strictEqual(world.queries.byId.size, 0);
-    });
-
-    it("unregisters observer callback", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, Position);
-
-      assert.strictEqual(world.observers.filterDestroyed.callbacks.length, 1);
-
-      destroyQuery(world, query);
-
-      assert.strictEqual(world.observers.filterDestroyed.callbacks.length, 0);
-    });
-
-    it("does not affect underlying filter", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, Position);
-      const filterId = hashFilterTerms({ include: [Position], exclude: [] });
-
-      destroyQuery(world, query);
-
-      assert.ok(world.filters.byId.get(filterId));
-    });
-
-    it("handles destruction of non-existent query gracefully", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, Position);
-
-      destroyQuery(world, query);
-      destroyQuery(world, query);
-
-      assert.strictEqual(world.queries.byId.size, 0);
+      const results = collectEntities(world, query);
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0], child2);
     });
   });
 
@@ -725,20 +629,6 @@ describe("Query", () => {
 
       assert.notStrictEqual(queryA.filter, queryB.filter);
       assert.strictEqual(world.filters.byId.size, 2);
-    });
-
-    it("multiple queries referencing same filter stay valid after one query destroyed", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      const queryA = ensureQuery(world, Position, Velocity);
-      const queryB = ensureQuery(world, Position, Velocity);
-
-      destroyQuery(world, queryA);
-
-      assert.ok(world.filters.byId.size > 0);
-      assert.ok(queryB.filter);
     });
   });
 

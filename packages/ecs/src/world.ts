@@ -5,9 +5,10 @@ import type { Component, EntityId, Relation, Tag } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
 import type { EventId, EventQueueMeta } from "./event.js";
 import type { FilterMeta } from "./filters.js";
+import { initFilterDispatch } from "./filters.js";
 import { initNameSystem } from "./name.js";
 import type { EventType, ObserverMeta } from "./observer.js";
-import { fireObserverEvent, unregisterObserverCallback } from "./observer.js";
+import { fireObserverEvent } from "./observer.js";
 import type { QueryMeta } from "./query.js";
 import type { ComponentMeta } from "./registry.js";
 import { COMPONENT_REGISTRY } from "./registry.js";
@@ -84,6 +85,11 @@ export type World = {
      * Filter metadata lookup (filter hash -> metadata).
      */
     byId: Map<string, FilterMeta>;
+
+    /**
+     * Reverse index: type ID -> filters that include it.
+     */
+    byType: Map<EntityId, FilterMeta[]>;
   };
 
   /**
@@ -229,6 +235,7 @@ export function createWorld(): World {
     },
     filters: {
       byId: new Map(),
+      byType: new Map(),
     },
     queries: {
       byId: new Map(),
@@ -261,7 +268,6 @@ export function createWorld(): World {
       archetypeCreated: { callbacks: [] },
       archetypeDestroyed: { callbacks: [] },
       filterCreated: { callbacks: [] },
-      filterDestroyed: { callbacks: [] },
       entityCreated: { callbacks: [] },
       entityDestroyed: { callbacks: [] },
       componentAdded: { callbacks: [] },
@@ -271,6 +277,7 @@ export function createWorld(): World {
     },
   };
 
+  initFilterDispatch(world);
   registerArchetype(world, root);
 
   initNameSystem(world);
@@ -296,17 +303,11 @@ export function createWorld(): World {
  * ```
  */
 export function resetWorld(world: World): void {
-  // 1. Clear filters (unregister observer callbacks)
-  for (const filter of world.filters.byId.values()) {
-    unregisterObserverCallback(world, "archetypeCreated", filter.onArchetypeCreate);
-    unregisterObserverCallback(world, "archetypeDestroyed", filter.onArchetypeDelete);
-  }
+  // 1. Clear filters and reverse index
   world.filters.byId.clear();
+  world.filters.byType.clear();
 
-  // 2. Clear queries (unregister observer callbacks)
-  for (const query of world.queries.byId.values()) {
-    unregisterObserverCallback(world, "filterDestroyed", query.onFilterDestroy);
-  }
+  // 2. Clear queries
   world.queries.byId.clear();
 
   // 3. Clear archetypes (break circular refs via edges)

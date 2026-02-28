@@ -67,7 +67,6 @@ export {
   added,
   changed,
   collectEntities,
-  destroyQuery,
   ensureQuery,
   not,
   queryEntities,

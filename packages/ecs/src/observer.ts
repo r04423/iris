@@ -16,7 +16,6 @@ export type EventPayloads = {
   archetypeCreated: [archetype: Archetype];
   archetypeDestroyed: [archetype: Archetype];
   filterCreated: [filter: FilterMeta];
-  filterDestroyed: [filter: FilterMeta];
   entityCreated: [entityId: Entity];
   entityDestroyed: [entityId: EntityId];
   componentAdded: [componentId: EntityId, entityId: EntityId];

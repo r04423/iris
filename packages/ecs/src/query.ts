@@ -2,8 +2,6 @@ import type { EntityId } from "./encoding.js";
 import { assert, InvalidArgument } from "./error.js";
 import type { FilterMeta } from "./filters.js";
 import { ensureFilter } from "./filters.js";
-import type { Observer } from "./observer.js";
-import { registerObserverCallback, unregisterObserverCallback } from "./observer.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -30,11 +28,6 @@ export type QueryMeta = {
    * Direct reference to underlying filter.
    */
   filter: FilterMeta;
-
-  /**
-   * Observer callback for filter destruction.
-   */
-  onFilterDestroy: Observer<"filterDestroyed">;
 
   /**
    * Components with added() modifier.
@@ -196,53 +189,14 @@ export function ensureQuery(world: World, ...terms: (EntityId | QueryModifier)[]
       exclude,
       added,
       changed,
-
       filter: filterMeta,
-
       lastTick: new Map(),
-
-      // Callback to clean up query when its underlying filter is destroyed
-      onFilterDestroy: (destroyedFilter) => {
-        if (destroyedFilter !== filterMeta) {
-          return;
-        }
-
-        // Self-cleanup: unregister callback and remove from registry
-        unregisterObserverCallback(world, "filterDestroyed", queryMeta!.onFilterDestroy);
-        world.queries.byId.delete(queryId);
-      },
     };
 
     world.queries.byId.set(queryId, queryMeta);
-
-    // Register for filter destruction events to enable automatic cleanup
-    registerObserverCallback(world, "filterDestroyed", queryMeta.onFilterDestroy);
   }
 
   return queryMeta;
-}
-
-/**
- * Destroy query and clean up associated resources.
- *
- * Unregisters observer callbacks and removes from query registry.
- *
- * @param world - World instance
- * @param queryMeta - Query metadata to destroy
- *
- * @example
- * ```typescript
- * const query = ensureQuery(world, Position);
- * // ... use query ...
- * destroyQuery(world, query);
- * ```
- */
-export function destroyQuery(world: World, queryMeta: QueryMeta): void {
-  const queryId = hashQuery(queryMeta.include, queryMeta.exclude, queryMeta.added, queryMeta.changed);
-
-  unregisterObserverCallback(world, "filterDestroyed", queryMeta.onFilterDestroy);
-
-  world.queries.byId.delete(queryId);
 }
 
 // ============================================================================

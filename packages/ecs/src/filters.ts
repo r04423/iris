@@ -1,8 +1,7 @@
 import type { Archetype } from "./archetype.js";
 import type { EntityId } from "./encoding.js";
 import { ensureEntity } from "./entity.js";
-import type { Observer } from "./observer.js";
-import { fireObserverEvent, registerObserverCallback, unregisterObserverCallback } from "./observer.js";
+import { fireObserverEvent, registerObserverCallback } from "./observer.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -28,7 +27,7 @@ export type FilterTerms = {
 /**
  * Filter metadata for registry caching.
  *
- * Stores filter terms, matched archetypes, and observer callbacks.
+ * Stores filter terms and matched archetypes.
  */
 export type FilterMeta = {
   /**
@@ -39,14 +38,6 @@ export type FilterMeta = {
    * Matched archetypes (cached result of findMatchingArchetypes).
    */
   archetypes: Archetype[];
-  /**
-   * Observer callback for archetype creation.
-   */
-  onArchetypeCreate: Observer<"archetypeCreated">;
-  /**
-   * Observer callback for archetype destruction.
-   */
-  onArchetypeDelete: Observer<"archetypeDestroyed">;
 };
 
 // ============================================================================
@@ -168,30 +159,104 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
 }
 
 // ============================================================================
+// Reverse Filter Index
+// ============================================================================
+
+/**
+ * Registers a filter in the reverse index (byType) for each included type.
+ * @internal
+ */
+function registerFilterInIndex(world: World, filter: FilterMeta): void {
+  const types = filter.terms.include;
+
+  for (let i = 0; i < types.length; i++) {
+    const typeId = types[i]!;
+    let filters = world.filters.byType.get(typeId);
+
+    if (!filters) {
+      filters = [];
+      world.filters.byType.set(typeId, filters);
+    }
+
+    filters.push(filter);
+  }
+}
+
+/**
+ * Finds the smallest set of filters that could match an archetype by looking up
+ * each archetype type in the reverse index and returning the shortest list.
+ * @internal
+ */
+function findRarestFilters(world: World, archetype: Archetype): FilterMeta[] | undefined {
+  let rarestFilters: FilterMeta[] | undefined;
+  let minCount = Infinity;
+
+  for (let i = 0; i < archetype.types.length; i++) {
+    const filters = world.filters.byType.get(archetype.types[i]!);
+
+    if (!filters || filters.length === 0) {
+      continue;
+    }
+
+    if (filters.length < minCount) {
+      rarestFilters = filters;
+      minCount = filters.length;
+    }
+  }
+
+  return rarestFilters;
+}
+
+/**
+ * Initializes centralized filter dispatch by registering one archetypeCreated
+ * and one archetypeDestroyed observer callback. Called once from createWorld.
+ * @internal
+ */
+export function initFilterDispatch(world: World): void {
+  registerObserverCallback(world, "archetypeCreated", (archetype) => {
+    const filters = findRarestFilters(world, archetype);
+
+    if (!filters) {
+      return;
+    }
+
+    for (let i = 0; i < filters.length; i++) {
+      const filter = filters[i]!;
+
+      if (matchesFilterTerms(archetype, filter.terms)) {
+        filter.archetypes.push(archetype);
+      }
+    }
+  });
+
+  registerObserverCallback(world, "archetypeDestroyed", (archetype) => {
+    const filters = findRarestFilters(world, archetype);
+
+    if (!filters) {
+      return;
+    }
+
+    for (let i = 0; i < filters.length; i++) {
+      const filter = filters[i]!;
+      const idx = filter.archetypes.indexOf(archetype);
+
+      if (idx !== -1) {
+        filter.archetypes.splice(idx, 1);
+      }
+    }
+  });
+}
+
+// ============================================================================
 // Filter Registry
 // ============================================================================
 
 /**
- * Destroys a filter and cleans up its observer callbacks.
- * Called when a filter's archetype cache becomes empty.
- */
-function destroyFilter(world: World, filterId: string): void {
-  const filter = world.filters.byId.get(filterId)!;
-
-  // Unregister callbacks to prevent memory leaks and stale references
-  unregisterObserverCallback(world, "archetypeCreated", filter.onArchetypeCreate);
-  unregisterObserverCallback(world, "archetypeDestroyed", filter.onArchetypeDelete);
-
-  fireObserverEvent(world, "filterDestroyed", filter);
-  world.filters.byId.delete(filterId);
-}
-
-/**
- * Gets or creates a filter with observer-based cache invalidation.
+ * Gets or creates a filter with reverse-index-based cache invalidation.
  *
- * Filters are cached by their terms hash. When created, observers are registered
- * to automatically update the cached archetype list as archetypes are created
- * or destroyed.
+ * Filters are cached by their terms hash. When created, the filter is registered
+ * in the reverse type index so that centralized archetype dispatch can keep the
+ * cached archetype list in sync.
  *
  * @param world - World instance containing filter registry
  * @param terms - Filter terms defining which archetypes to match
@@ -209,38 +274,14 @@ export function ensureFilter(world: World, terms: FilterTerms): FilterMeta {
   let filterMeta = world.filters.byId.get(filterId);
 
   if (!filterMeta) {
-    // Create new filter with observer callbacks that close over terms and filterMeta
     filterMeta = {
       terms,
       archetypes: findMatchingArchetypes(world, terms),
-
-      // Called when a new archetype is created - add to cache if it matches
-      onArchetypeCreate: (archetype) => {
-        if (!matchesFilterTerms(archetype, terms)) {
-          return;
-        }
-        filterMeta!.archetypes.push(archetype);
-      },
-
-      // Called when an archetype is destroyed - remove from cache, cleanup if empty
-      onArchetypeDelete: (archetype) => {
-        const idx = filterMeta!.archetypes.indexOf(archetype);
-        if (idx !== -1) {
-          filterMeta!.archetypes.splice(idx, 1);
-        }
-
-        // Auto-cleanup: destroy filter when it has no matching archetypes
-        if (filterMeta!.archetypes.length === 0) {
-          destroyFilter(world, filterId);
-        }
-      },
     };
 
     world.filters.byId.set(filterId, filterMeta);
 
-    // Register observers to keep archetype cache in sync
-    registerObserverCallback(world, "archetypeCreated", filterMeta.onArchetypeCreate);
-    registerObserverCallback(world, "archetypeDestroyed", filterMeta.onArchetypeDelete);
+    registerFilterInIndex(world, filterMeta);
     fireObserverEvent(world, "filterCreated", filterMeta);
   }
 
