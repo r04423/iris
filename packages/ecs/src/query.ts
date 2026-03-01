@@ -52,7 +52,7 @@ export type QueryMeta<C extends EntityId = EntityId> = {
   /**
    * Phantom field carrying guaranteed-present component types via contravariance.
    */
-  readonly [QUERY_COMPONENTS_BRAND]?: (c: C) => void;
+  readonly [QUERY_COMPONENTS_BRAND]: (c: C) => void;
 };
 
 // ============================================================================
@@ -219,7 +219,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
       changed,
       filter: filterMeta,
       lastTick: new Map(),
-    };
+    } as QueryMeta;
 
     world.queries.byId.set(queryId, queryMeta);
   }
@@ -375,7 +375,8 @@ export function queryEntities<C extends EntityId>(
 export function queryEntities(
   world: World,
   termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
-  callback: (entity: EntityId) => unknown
+  // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
+  callback: (entity: any) => unknown
 ): void {
   queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), callback);
 }

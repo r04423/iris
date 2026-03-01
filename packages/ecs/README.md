@@ -39,6 +39,7 @@ import {
   defineComponent,
   defineSystem,
   defineTag,
+  ensureQuery,
   addComponent,
   getComponentValue,
   setComponentValue,
@@ -63,8 +64,12 @@ addComponent(world, player, Player);
 
 // Define a system -- init runs once, tick runs every frame
 const movementSystem = defineSystem("movementSystem", (world) => {
+  // Init: cache queries once
+  const movers = ensureQuery(world, Position, Velocity);
+
   return () => {
-    queryEntities(world, [Position, Velocity], (e) => {
+    // Tick: runs every frame
+    queryEntities(world, movers, (e) => {
       const px = getComponentValue(world, e, Position, "x");
       const py = getComponentValue(world, e, Position, "y");
       const vx = getComponentValue(world, e, Velocity, "x");
@@ -380,7 +385,7 @@ Adding or removing a component moves an entity to a different archetype. This is
 A **Query** fetches entities that match a set of component constraints. Use `queryEntities()` to iterate matches, `queryFirstEntity()` for singletons, or `collectEntities()` for array results.
 
 ```typescript
-import { queryEntities, queryFirstEntity, not } from "iris-ecs";
+import { queryEntities, queryFirstEntity, ensureQuery, not } from "iris-ecs";
 
 // Iterate all entities with Position and Velocity
 queryEntities(world, [Position, Velocity], (entity) => {
@@ -392,7 +397,21 @@ queryEntities(world, [Position, Velocity], (entity) => {
 const player = queryFirstEntity(world, [Player, not(Dead)]);
 ```
 
-💡 **Tip:** Queries are cached internally -- the same component set returns the same cached query.
+Inline terms (arrays) work anywhere, but in systems it's advised to pre-build queries with `ensureQuery()` during init:
+
+```typescript
+const mySystem = defineSystem("mySystem", (world) => {
+  const movers = ensureQuery(world, Position, Velocity);
+
+  return () => {
+    queryEntities(world, movers, (entity) => {
+      // ...
+    });
+  };
+});
+```
+
+💡 **Tip:** Queries are cached internally -- the same component set returns the same cached query. `ensureQuery()` in init makes the caching explicit and avoids array allocation on every frame.
 
 #### Exclusion Filters
 
@@ -418,13 +437,14 @@ Queries match archetypes where all required components are present and no exclud
 
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
-Use `defineSystem()` to create systems with init / tick separation. The init function runs once at registration time -- use it to cache queries, action getters, and one-time setup. The returned tick function runs every frame. 
+Use `defineSystem()` to create systems with init / tick separation. The init function runs once at registration time -- use it to cache queries with `ensureQuery()`, cache action getters, and perform one-time setup. The returned tick function runs every frame.
 
 Systems are registered with `addSystem()` and executed automatically when the world runs.
 
 ```typescript
 import {
   defineSystem,
+  ensureQuery,
   addSystem,
   run,
   stop,
@@ -435,12 +455,14 @@ import {
 } from "iris-ecs";
 
 const movementSystem = defineSystem("movementSystem", (world) => {
-  // Init: runs once at addSystem() time
+  // Init: cache queries and action getters once
+  const movers = ensureQuery(world, Position, Velocity);
+
   return () => {
     // Tick: runs every frame
     const dt = getResourceValue(world, Time, "delta") ?? 0;
 
-    queryEntities(world, [Position, Velocity], (e) => {
+    queryEntities(world, movers, (e) => {
       const x = getComponentValue(world, e, Position, "x");
       const vx = getComponentValue(world, e, Velocity, "x");
 
@@ -595,13 +617,17 @@ const spawnActions = defineActions((world) => ({
   },
 }));
 
-// In a system or anywhere with world access
-const spawn = spawnActions(world);
-const player = spawn.player(0, 0);
-const enemy = spawn.enemy(100, 50);
+// Cache the action getter in a system's init, then call in tick
+const waveSystem = defineSystem("waveSystem", (world) => {
+  const spawn = spawnActions(world);
+
+  return () => {
+    spawn.enemy(Math.random() * 100, 0);
+  };
+});
 ```
 
-Actions are initialized lazily and cached per world -- calling `spawnActions(world)` multiple times returns the same object.
+Actions are initialized lazily and cached per world -- calling `spawnActions(world)` multiple times returns the same object. Cache the getter in your system's init to avoid repeated lookups in the tick function.
 
 💡 **Tip:** Use actions to organize spawn helpers, update functions, or any reusable world operations.
 
@@ -692,26 +718,47 @@ Events use double-buffered storage. Buffers rotate automatically at the end of e
 
 ```typescript
 import {
+  defineSystem,
+  ensureQuery,
   queryEntities,
+  readEvents,
   added,
   changed,
   removed,
-  readEvents,
+  not,
 } from "iris-ecs";
 
-// Entities where Position was added this tick
-queryEntities(world, [added(Position)], (entity) => {
-  initializePhysicsBody(entity);
+const physicsSetupSystem = defineSystem("physicsSetupSystem", (world) => {
+  const newBodies = ensureQuery(world, added(Position));
+
+  return () => {
+    // Entities where Position was added since this system's last run
+    queryEntities(world, newBodies, (entity) => {
+      initializePhysicsBody(entity);
+    });
+  };
 });
 
-// Entities where Health was modified (added OR value changed)
-queryEntities(world, [changed(Health)], (entity) => {
-  updateHealthBar(entity);
+const healthBarSystem = defineSystem("healthBarSystem", (world) => {
+  const damaged = ensureQuery(world, changed(Health));
+
+  return () => {
+    // Entities where Health was modified (added OR value changed)
+    queryEntities(world, damaged, (entity) => {
+      updateHealthBar(entity);
+    });
+  };
 });
 
-// Combine with regular filters
-queryEntities(world, [Player, changed(Position), not(Dead)], (e) => {
-  updatePlayerOnMinimap(e);
+const minimapSystem = defineSystem("minimapSystem", (world) => {
+  // Combine change detection with regular filters
+  const movedPlayers = ensureQuery(world, Player, changed(Position), not(Dead));
+
+  return () => {
+    queryEntities(world, movedPlayers, (e) => {
+      updatePlayerOnMinimap(e);
+    });
+  };
 });
 ```
 

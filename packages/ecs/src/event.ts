@@ -75,7 +75,7 @@ export type Event<S extends EventSchema = EventSchema> = {
  * Event narrowed to guarantee presence of unread data for current system context.
  */
 export type PendingEvent<E extends Event> = E & {
-  readonly [HAS_EVENTS_BRAND]?: (e: E) => void;
+  readonly [HAS_EVENTS_BRAND]: (e: E) => void;
 };
 
 /**

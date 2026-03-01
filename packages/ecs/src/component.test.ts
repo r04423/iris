@@ -647,8 +647,8 @@ describe("Component", () => {
       const results = collectEntities(world, [Flying]);
 
       assert.strictEqual(results.length, 2);
-      assert.ok(results.includes(e1));
-      assert.ok(results.includes(e3));
+      assert.ok(results.some((r) => r === e1));
+      assert.ok(results.some((r) => r === e3));
     });
   });
 
@@ -833,7 +833,7 @@ describe("Component", () => {
       const results = collectEntities(world, [Alive, Position]);
 
       assert.strictEqual(results.length, 1);
-      assert.ok(results.includes(e1));
+      assert.ok(results.some((r) => r === e1));
     });
 
     it("removes tags and components independently", () => {

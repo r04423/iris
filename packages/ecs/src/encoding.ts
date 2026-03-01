@@ -139,7 +139,7 @@ export type EntityId = Entity | Tag | Component | Relation | Pair;
  * Entity ID narrowed to guarantee presence of specific components.
  */
 export type EntityWith<C extends EntityId> = EntityId & {
-  readonly [HAS_COMPONENT_BRAND]?: (c: C) => void;
+  readonly [HAS_COMPONENT_BRAND]: (c: C) => void;
 };
 
 // ============================================================================

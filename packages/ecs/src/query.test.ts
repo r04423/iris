@@ -172,9 +172,9 @@ describe("Query", () => {
       const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 3);
-      assert.ok(entities.includes(entity1));
-      assert.ok(entities.includes(entity2));
-      assert.ok(entities.includes(entity3));
+      assert.ok(entities.some((e) => e === entity1));
+      assert.ok(entities.some((e) => e === entity2));
+      assert.ok(entities.some((e) => e === entity3));
     });
 
     it("fetches entities across multiple archetypes", () => {
@@ -195,8 +195,8 @@ describe("Query", () => {
       const entities = collectEntities(world, [Position]);
 
       assert.strictEqual(entities.length, 2);
-      assert.ok(entities.includes(entity1));
-      assert.ok(entities.includes(entity2));
+      assert.ok(entities.some((e) => e === entity1));
+      assert.ok(entities.some((e) => e === entity2));
     });
 
     it("iterates in reverse order (backward iteration)", () => {
@@ -745,8 +745,8 @@ describe("Query", () => {
       const entities = collectEntities(world, query);
 
       assert.strictEqual(entities.length, 2);
-      assert.ok(entities.includes(entity1));
-      assert.ok(entities.includes(entity2));
+      assert.ok(entities.some((e) => e === entity1));
+      assert.ok(entities.some((e) => e === entity2));
     });
 
     it("returns empty for query with no matching entities", () => {
@@ -796,9 +796,9 @@ describe("Query", () => {
         const entities = collectEntities(world, [pair(ChildOf, parent)]);
 
         assert.strictEqual(entities.length, 2);
-        assert.ok(entities.includes(child1));
-        assert.ok(entities.includes(child2));
-        assert.ok(!entities.includes(other));
+        assert.ok(entities.some((e) => e === child1));
+        assert.ok(entities.some((e) => e === child2));
+        assert.ok(!entities.some((e) => e === other));
       });
 
       it("distinguishes between different targets", () => {
@@ -852,9 +852,9 @@ describe("Query", () => {
         const entities = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
         assert.strictEqual(entities.length, 3);
-        assert.ok(entities.includes(child1));
-        assert.ok(entities.includes(child2));
-        assert.ok(entities.includes(child3));
+        assert.ok(entities.some((e) => e === child1));
+        assert.ok(entities.some((e) => e === child2));
+        assert.ok(entities.some((e) => e === child3));
       });
 
       it("excludes entities without the relation", () => {
@@ -907,8 +907,8 @@ describe("Query", () => {
         const entities = collectEntities(world, [pair(Wildcard, target)]);
 
         assert.strictEqual(entities.length, 2);
-        assert.ok(entities.includes(entity1));
-        assert.ok(entities.includes(entity2));
+        assert.ok(entities.some((e) => e === entity1));
+        assert.ok(entities.some((e) => e === entity2));
       });
 
       it("excludes entities targeting different entity", () => {
@@ -1134,14 +1134,14 @@ describe("Query", () => {
         // Direct children of root
         const rootChildren = collectEntities(world, [pair(ChildOf, root)]);
         assert.strictEqual(rootChildren.length, 2);
-        assert.ok(rootChildren.includes(branch1));
-        assert.ok(rootChildren.includes(branch2));
+        assert.ok(rootChildren.some((e) => e === branch1));
+        assert.ok(rootChildren.some((e) => e === branch2));
 
         // Direct children of branch1
         const branch1Children = collectEntities(world, [pair(ChildOf, branch1)]);
         assert.strictEqual(branch1Children.length, 2);
-        assert.ok(branch1Children.includes(leaf1));
-        assert.ok(branch1Children.includes(leaf2));
+        assert.ok(branch1Children.some((e) => e === leaf1));
+        assert.ok(branch1Children.some((e) => e === leaf2));
       });
 
       it("inventory: find all containers", () => {
@@ -1161,8 +1161,8 @@ describe("Query", () => {
         const containers = collectEntities(world, [pair(Contains, Wildcard)]);
 
         assert.strictEqual(containers.length, 2);
-        assert.ok(containers.includes(chest));
-        assert.ok(containers.includes(bag));
+        assert.ok(containers.some((e) => e === chest));
+        assert.ok(containers.some((e) => e === bag));
       });
 
       it("reverse lookup: find all relationships to an entity", () => {
@@ -1184,9 +1184,9 @@ describe("Query", () => {
         const related = collectEntities(world, [pair(Wildcard, target)]);
 
         assert.strictEqual(related.length, 3);
-        assert.ok(related.includes(entity1));
-        assert.ok(related.includes(entity2));
-        assert.ok(related.includes(entity3));
+        assert.ok(related.some((e) => e === entity1));
+        assert.ok(related.some((e) => e === entity2));
+        assert.ok(related.some((e) => e === entity3));
       });
     });
 

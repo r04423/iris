@@ -199,5 +199,5 @@ export function lookupByName<C extends EntityId[]>(
     }
   }
 
-  return entityId;
+  return entityId as EntityWith<C[number]>;
 }
