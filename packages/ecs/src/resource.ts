@@ -3,6 +3,26 @@ import type { Component, EntityId } from "./encoding.js";
 import type { InferSchema, InferSchemaRecord, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
+// ============================================================================
+// World Resource Narrowing
+// ============================================================================
+
+/**
+ * Resource presence brand for type-safe world narrowing.
+ */
+declare const HAS_RESOURCE_BRAND: unique symbol;
+
+/**
+ * World narrowed to guarantee presence of a specific resource.
+ */
+export type WorldWithResource<C extends Component> = World & {
+  readonly [HAS_RESOURCE_BRAND]?: (c: C) => void;
+};
+
+// ============================================================================
+// Resource Operations
+// ============================================================================
+
 /**
  * Adds a global resource (singleton) to the world using the component-on-self pattern.
  *
@@ -53,10 +73,18 @@ export function removeResource(world: World, component: EntityId): void {
  * @example
  * ```typescript
  * if (hasResource(world, Time)) {
- *   // Time resource is available
+ *   // world narrowed to WorldWithResource<typeof Time>
+ *   const dt = getResourceValue(world, Time, "delta"); // non-null
  * }
  * ```
  */
+export function hasResource<S extends SchemaRecord>(
+  world: World,
+  component: Component<S>
+): world is WorldWithResource<Component<S>>;
+
+export function hasResource(world: World, component: EntityId): boolean;
+
 export function hasResource(world: World, component: EntityId): boolean {
   return hasComponent(world, component, component);
 }
@@ -67,13 +95,28 @@ export function hasResource(world: World, component: EntityId): boolean {
  * @param world - World instance
  * @param component - Component definition
  * @param key - Field name to retrieve
- * @returns The field value, or undefined if the resource is not present
+ * @returns The field value (non-null if narrowed), or undefined if not present
  *
  * @example
  * ```typescript
- * const dt = getResourceValue(world, Time, "delta");
+ * if (hasResource(world, Time)) {
+ *   const dt = getResourceValue(world, Time, "delta"); // number
+ * }
+ * const current = getResourceValue(world, Time, "current"); // number | undefined
  * ```
  */
+export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
+  world: WorldWithResource<Component<S>>,
+  component: Component<S>,
+  key: K
+): InferSchema<S[K]>;
+
+export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
+  world: World,
+  component: Component<S>,
+  key: K
+): InferSchema<S[K]> | undefined;
+
 export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   component: Component<S>,

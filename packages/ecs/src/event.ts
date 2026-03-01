@@ -15,6 +15,11 @@ declare const EVENT_BRAND: unique symbol;
  */
 declare const EVENT_SCHEMA_BRAND: unique symbol;
 
+/**
+ * Event presence brand for type-safe world narrowing.
+ */
+declare const HAS_EVENTS_BRAND: unique symbol;
+
 // ============================================================================
 // Event Types
 // ============================================================================
@@ -64,6 +69,13 @@ export type Event<S extends EventSchema = EventSchema> = {
    * Field schemas for event data (empty for tag events).
    */
   readonly schema: S;
+};
+
+/**
+ * World narrowed to guarantee presence of unread events for a specific event type.
+ */
+export type WorldWithEvents<E extends Event> = World & {
+  readonly [HAS_EVENTS_BRAND]?: (e: E) => void;
 };
 
 /**
@@ -359,11 +371,12 @@ export function collectEvents<S extends EventSchema>(world: World, event: Event<
  * @example
  * ```typescript
  * if (hasEvents(world, DamageDealt)) {
- *   // Process damage events
+ *   // world narrowed to WorldWithEvents<typeof DamageDealt>
+ *   const last = readLastEvent(world, DamageDealt); // non-null
  * }
  * ```
  */
-export function hasEvents<S extends EventSchema>(world: World, event: Event<S>): boolean {
+export function hasEvents<S extends EventSchema>(world: World, event: Event<S>): world is WorldWithEvents<Event<S>> {
   const { systemId, tick } = world.execution;
 
   // Outside system context: always false
@@ -426,7 +439,7 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  *
  * @param world - World instance
  * @param event - Event definition
- * @returns Most recent event data, or undefined if no unread events
+ * @returns Most recent event data (non-null if narrowed), or undefined if no unread events
  *
  * @example
  * ```typescript
@@ -437,6 +450,10 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  * }
  * ```
  */
+export function readLastEvent<S extends EventSchema>(world: WorldWithEvents<Event<S>>, event: Event<S>): EventData<S>;
+
+export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined;
+
 export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined {
   const { systemId, tick } = world.execution;
 
