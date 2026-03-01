@@ -135,13 +135,6 @@ export type Pair<R extends Relation = Relation> = number & {
 };
 
 /**
- * Valid targets for relations.
- *
- * Pairs cannot target other pairs to prevent encoding issues.
- */
-export type RelationTargetId = Entity | Tag | Component | Relation;
-
-/**
  * Entity or Component ID (union type).
  *
  * Used in function signatures to accept entities, tags, data components, relations, and pairs.
@@ -257,7 +250,7 @@ export function encodeRelation<S extends Record<string, Schema> = Record<string,
  * @param target - Target ID (entity, tag, component, or relation)
  * @returns Encoded pair ID
  */
-export function encodePair<R extends Relation>(relation: R, target: RelationTargetId): Pair<R> {
+export function encodePair<R extends Relation>(relation: R, target: EntityId): Pair<R> {
   const relationRawId = extractId(relation);
   const targetType = extractType(target);
   const targetRawId = extractId(target);

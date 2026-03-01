@@ -1,5 +1,5 @@
 import { hasComponent } from "./component.js";
-import type { EntityId, Pair, Relation, RelationTargetId } from "./encoding.js";
+import type { EntityId, Pair, Relation } from "./encoding.js";
 import {
   COMPONENT_TYPE,
   ENTITY_TYPE,
@@ -36,7 +36,7 @@ import type { World } from "./world.js";
  * const childOf = pair(ChildOf, parent);
  * addComponent(world, child, childOf);
  */
-export function pair<R extends Relation>(relation: R, target: RelationTargetId): Pair<R> {
+export function pair<R extends Relation>(relation: R, target: EntityId): Pair<R> {
   return encodePair(relation, target);
 }
 
@@ -67,7 +67,7 @@ export function getPairRelation<R extends Relation>(pairId: Pair<R>): R {
  * @example
  * const target = getPairTarget(world, pair(ChildOf, parent)); // parent
  */
-export function getPairTarget(world: World, pairId: Pair): RelationTargetId {
+export function getPairTarget(world: World, pairId: Pair): EntityId {
   const targetRawId = extractPairTargetId(pairId);
   const targetType = extractPairTargetType(pairId);
 
@@ -111,13 +111,13 @@ export function getPairTarget(world: World, pairId: Pair): RelationTargetId {
  * @example
  * const parents = getRelationTargets(world, child, ChildOf);
  */
-export function getRelationTargets(world: World, entityId: EntityId, relation: Relation): RelationTargetId[] {
+export function getRelationTargets(world: World, entityId: EntityId, relation: Relation): EntityId[] {
   const meta = ensureEntity(world, entityId);
 
   const relationRawId = extractId(relation);
   const relationWildcardPair = encodePair(relation, Wildcard);
 
-  const targets: RelationTargetId[] = [];
+  const targets: EntityId[] = [];
 
   for (const typeId of meta.archetype.types) {
     if (!isPair(typeId)) {

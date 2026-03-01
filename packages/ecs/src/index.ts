@@ -107,7 +107,6 @@ export type {
   EntityWith,
   Pair,
   Relation,
-  RelationTargetId,
   Tag,
 } from "./encoding.js";
 export type { Event, EventSchema, PendingEvent } from "./event.js";
