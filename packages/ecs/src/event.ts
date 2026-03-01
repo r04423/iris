@@ -16,7 +16,7 @@ declare const EVENT_BRAND: unique symbol;
 declare const EVENT_SCHEMA_BRAND: unique symbol;
 
 /**
- * Event presence brand for type-safe world narrowing.
+ * Event presence brand for type-safe event narrowing.
  */
 declare const HAS_EVENTS_BRAND: unique symbol;
 
@@ -72,9 +72,9 @@ export type Event<S extends EventSchema = EventSchema> = {
 };
 
 /**
- * World narrowed to guarantee presence of unread events for a specific event type.
+ * Event narrowed to guarantee presence of unread data for current system context.
  */
-export type WorldWithEvents<E extends Event> = World & {
+export type PendingEvent<E extends Event> = E & {
   readonly [HAS_EVENTS_BRAND]?: (e: E) => void;
 };
 
@@ -371,12 +371,15 @@ export function collectEvents<S extends EventSchema>(world: World, event: Event<
  * @example
  * ```typescript
  * if (hasEvents(world, DamageDealt)) {
- *   // world narrowed to WorldWithEvents<typeof DamageDealt>
+ *   // DamageDealt narrowed to PendingEvent<typeof DamageDealt>
  *   const last = readLastEvent(world, DamageDealt); // non-null
  * }
  * ```
  */
-export function hasEvents<S extends EventSchema>(world: World, event: Event<S>): world is WorldWithEvents<Event<S>> {
+export function hasEvents<S extends EventSchema>(
+  world: World,
+  event: Event<S>
+): event is Event<S> & PendingEvent<Event<S>> {
   const { systemId, tick } = world.execution;
 
   // Outside system context: always false
@@ -450,7 +453,7 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  * }
  * ```
  */
-export function readLastEvent<S extends EventSchema>(world: WorldWithEvents<Event<S>>, event: Event<S>): EventData<S>;
+export function readLastEvent<S extends EventSchema>(world: World, event: PendingEvent<Event<S>>): EventData<S>;
 
 export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined;
 

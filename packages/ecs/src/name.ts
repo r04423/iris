@@ -1,5 +1,5 @@
 import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
-import type { EntityId } from "./encoding.js";
+import type { EntityId, EntityWith } from "./encoding.js";
 import { assert, Duplicate, InvalidArgument } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent } from "./registry.js";
@@ -181,7 +181,11 @@ export function removeName(world: World, entityId: EntityId): void {
  * const player = lookupByName(world, "player-1", Position, Health);
  * ```
  */
-export function lookupByName(world: World, name: string, ...components: EntityId[]): EntityId | undefined {
+export function lookupByName<C extends EntityId[]>(
+  world: World,
+  name: string,
+  ...components: C
+): EntityWith<C[number]> | undefined {
   const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
   const entityId = nameToEntity.get(name);
 

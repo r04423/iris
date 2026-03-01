@@ -1,23 +1,7 @@
 import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
-import type { Component, EntityId } from "./encoding.js";
+import type { Component, EntityId, EntityWith } from "./encoding.js";
 import type { InferSchema, InferSchemaRecord, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
-
-// ============================================================================
-// World Resource Narrowing
-// ============================================================================
-
-/**
- * Resource presence brand for type-safe world narrowing.
- */
-declare const HAS_RESOURCE_BRAND: unique symbol;
-
-/**
- * World narrowed to guarantee presence of a specific resource.
- */
-export type WorldWithResource<C extends Component> = World & {
-  readonly [HAS_RESOURCE_BRAND]?: (c: C) => void;
-};
 
 // ============================================================================
 // Resource Operations
@@ -68,12 +52,12 @@ export function removeResource(world: World, component: EntityId): void {
  *
  * @param world - World instance
  * @param component - Component definition (acting as resource handle)
- * @returns True if the resource exists, false otherwise
+ * @returns True if the resource exists, narrowing the component for non-null access
  *
  * @example
  * ```typescript
  * if (hasResource(world, Time)) {
- *   // world narrowed to WorldWithResource<typeof Time>
+ *   // Time narrowed to Component<S> & EntityWith<Component<S>>
  *   const dt = getResourceValue(world, Time, "delta"); // non-null
  * }
  * ```
@@ -81,7 +65,7 @@ export function removeResource(world: World, component: EntityId): void {
 export function hasResource<S extends SchemaRecord>(
   world: World,
   component: Component<S>
-): world is WorldWithResource<Component<S>>;
+): component is Component<S> & EntityWith<Component<S>>;
 
 export function hasResource(world: World, component: EntityId): boolean;
 
@@ -93,7 +77,7 @@ export function hasResource(world: World, component: EntityId): boolean {
  * Gets the value of a specific field on a global resource.
  *
  * @param world - World instance
- * @param component - Component definition
+ * @param component - Component definition (narrowed via hasResource for non-null access)
  * @param key - Field name to retrieve
  * @returns The field value (non-null if narrowed), or undefined if not present
  *
@@ -106,8 +90,8 @@ export function hasResource(world: World, component: EntityId): boolean {
  * ```
  */
 export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
-  world: WorldWithResource<Component<S>>,
-  component: Component<S>,
+  world: World,
+  component: Component<S> & EntityWith<Component<S>>,
   key: K
 ): InferSchema<S[K]>;
 
