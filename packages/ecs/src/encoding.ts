@@ -73,6 +73,16 @@ declare const PAIR_BRAND: unique symbol;
 declare const SCHEMA_BRAND: unique symbol;
 
 /**
+ * Name brand for nominal uniqueness across same-shaped definitions.
+ */
+declare const NAME_BRAND: unique symbol;
+
+/**
+ * Pair relation brand for preserving relation identity in pairs.
+ */
+declare const PAIR_RELATION_BRAND: unique symbol;
+
+/**
  * Component presence brand for type-safe narrowing.
  */
 declare const HAS_COMPONENT_BRAND: unique symbol;
@@ -89,16 +99,17 @@ export type Entity = number & { [ENTITY_BRAND]: true };
  *
  * Nominal type for component tags defined via defineTag().
  */
-export type Tag = number & { [TAG_BRAND]: true };
+export type Tag<N extends string = string> = number & { [TAG_BRAND]: true; [NAME_BRAND]: N };
 
 /**
  * Component ID (branded type).
  *
  * Nominal type for data components with field schemas.
  */
-export type Component<S extends SchemaRecord = SchemaRecord> = number & {
+export type Component<S extends SchemaRecord = SchemaRecord, N extends string = string> = number & {
   [COMPONENT_BRAND]: true;
   [SCHEMA_BRAND]: S;
+  [NAME_BRAND]: N;
 };
 
 /**
@@ -106,19 +117,21 @@ export type Component<S extends SchemaRecord = SchemaRecord> = number & {
  *
  * Nominal type for relations with optional schema for pair data.
  */
-export type Relation<S extends SchemaRecord = SchemaRecord> = number & {
+export type Relation<S extends SchemaRecord = SchemaRecord, N extends string = string> = number & {
   [RELATION_BRAND]: true;
   [SCHEMA_BRAND]: S;
+  [NAME_BRAND]: N;
 };
 
 /**
  * Pair ID (branded type).
  *
- * Nominal type for relation-target pairs. Inherits schema from relation.
+ * Nominal type for relation-target pairs. Inherits schema and identity from relation.
  */
 export type Pair<R extends Relation = Relation> = number & {
   [PAIR_BRAND]: true;
   [SCHEMA_BRAND]: R extends Relation<infer S> ? S : never;
+  [PAIR_RELATION_BRAND]: R;
 };
 
 /**

@@ -62,10 +62,10 @@ export function removeResource(world: World, component: EntityId): void {
  * }
  * ```
  */
-export function hasResource<S extends SchemaRecord>(
+export function hasResource<S extends SchemaRecord, N extends string>(
   world: World,
-  component: Component<S>
-): component is Component<S> & EntityWith<Component<S>>;
+  component: Component<S, N>
+): component is Component<S, N> & EntityWith<Component<S, N>>;
 
 export function hasResource(world: World, component: EntityId): boolean;
 
@@ -89,9 +89,9 @@ export function hasResource(world: World, component: EntityId): boolean {
  * const current = getResourceValue(world, Time, "current"); // number | undefined
  * ```
  */
-export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
+export function getResourceValue<S extends SchemaRecord, N extends string, K extends keyof S>(
   world: World,
-  component: Component<S> & EntityWith<Component<S>>,
+  component: Component<S, N> & EntityWith<Component<S, N>>,
   key: K
 ): InferSchema<S[K]>;
 

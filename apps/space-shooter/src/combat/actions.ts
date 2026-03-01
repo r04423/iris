@@ -13,6 +13,7 @@ import {
   setComponentValue,
   type World,
 } from "iris-ecs";
+import type { IsPlayer } from "../player/components.js";
 import { Transform } from "../shared/components.js";
 import { FiredBy } from "../shared/relations.js";
 import { between } from "../utils/between.js";
@@ -93,7 +94,7 @@ export const combatActions = defineActions((world: World) => ({
   // Shield
   // ===========================================================================
 
-  activateShield(entity: EntityId, duration: number): void {
+  activateShield(entity: EntityWith<typeof IsPlayer>, duration: number): void {
     if (!hasComponent(world, entity, ShieldVisibility)) {
       addComponent(world, entity, ShieldVisibility, { duration, current: 0 });
     } else {

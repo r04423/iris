@@ -109,7 +109,7 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
  * const Player = defineTag("Player");
  * addTag(world, entity, Player);
  */
-export function defineTag(name: string): Tag {
+export function defineTag<N extends string>(name: N): Tag<N> {
   const rawId = COMPONENT_REGISTRY.nextTagId;
 
   assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Tag", max: ID_MASK_20 });
@@ -123,7 +123,7 @@ export function defineTag(name: string): Tag {
 
   COMPONENT_REGISTRY.nextTagId++;
 
-  return tagId;
+  return tagId as Tag<N>;
 }
 
 // ============================================================================
@@ -140,7 +140,7 @@ export function defineTag(name: string): Tag {
  * const Position = defineComponent("Position", { x: Type.f32, y: Type.f32 });
  * set(world, entity, Position, { x: 10, y: 20 });
  */
-export function defineComponent<S extends SchemaRecord>(name: string, schema: S): Component<S> {
+export function defineComponent<N extends string, S extends SchemaRecord>(name: N, schema: S): Component<S, N> {
   const rawId = COMPONENT_REGISTRY.nextComponentId;
 
   assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Component", max: ID_MASK_20 });
@@ -154,7 +154,7 @@ export function defineComponent<S extends SchemaRecord>(name: string, schema: S)
 
   COMPONENT_REGISTRY.nextComponentId++;
 
-  return componentId;
+  return componentId as Component<S, N>;
 }
 
 // ============================================================================
@@ -171,10 +171,10 @@ export function defineComponent<S extends SchemaRecord>(name: string, schema: S)
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
  * addPair(world, child, ChildOf, parent);
  */
-export function defineRelation<S extends SchemaRecord = Record<string, never>>(
-  name: string,
+export function defineRelation<N extends string, S extends SchemaRecord = Record<string, never>>(
+  name: N,
   options?: RelationOptions<S>
-): Relation<S> {
+): Relation<S, N> {
   const rawId = COMPONENT_REGISTRY.nextRelationId;
 
   assert(rawId <= ID_MASK_8, LimitExceeded, { resource: "Relation", max: ID_MASK_8 });
@@ -190,7 +190,7 @@ export function defineRelation<S extends SchemaRecord = Record<string, never>>(
 
   COMPONENT_REGISTRY.nextRelationId++;
 
-  return relationId;
+  return relationId as Relation<S, N>;
 }
 
 // ============================================================================

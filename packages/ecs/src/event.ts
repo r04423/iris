@@ -16,6 +16,11 @@ declare const EVENT_BRAND: unique symbol;
 declare const EVENT_SCHEMA_BRAND: unique symbol;
 
 /**
+ * Event name brand for nominal uniqueness across same-shaped events.
+ */
+declare const EVENT_NAME_BRAND: unique symbol;
+
+/**
  * Event presence brand for type-safe event narrowing.
  */
 declare const HAS_EVENTS_BRAND: unique symbol;
@@ -46,25 +51,27 @@ export type EventData<T extends EventSchema> = keyof T extends never
  *
  * Nominal type for events defined via defineEvent().
  */
-export type EventId<S extends EventSchema = EventSchema> = number & {
+export type EventId<S extends EventSchema = EventSchema, N extends string = string> = number & {
   [EVENT_BRAND]: true;
   [EVENT_SCHEMA_BRAND]: S;
+  [EVENT_NAME_BRAND]: N;
 };
 
 /**
  * Event definition.
  *
  * Global event definition with schema for type-safe event data.
+ * The name literal `N` ensures events with identical schemas are distinct types.
  */
-export type Event<S extends EventSchema = EventSchema> = {
+export type Event<S extends EventSchema = EventSchema, N extends string = string> = {
   /**
    * Unique event ID.
    */
-  readonly id: EventId<S>;
+  readonly id: EventId<S, N>;
   /**
    * Event name (user-defined).
    */
-  readonly name: string;
+  readonly name: N;
   /**
    * Field schemas for event data (empty for tag events).
    */
@@ -174,10 +181,13 @@ const EVENT_REGISTRY: EventRegistry = {
  * emit(world, DamageDealt, { target: enemy, amount: 25 });
  * ```
  */
-export function defineEvent<S extends EventSchema = Record<never, never>>(name: string, schema?: S): Event<S> {
-  const id = EVENT_REGISTRY.nextId++ as EventId<S>;
+export function defineEvent<N extends string, S extends EventSchema = Record<never, never>>(
+  name: N,
+  schema?: S
+): Event<S, N> {
+  const id = EVENT_REGISTRY.nextId++ as EventId<S, N>;
 
-  const event: Event<S> = {
+  const event: Event<S, N> = {
     id,
     name,
     schema: schema ?? ({} as S),
