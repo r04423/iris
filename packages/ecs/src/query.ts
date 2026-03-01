@@ -162,7 +162,7 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
 // ============================================================================
 
 /**
- * Ensure query exists in registry, creating if necessary.
+ * Cache a query in the registry, creating if necessary.
  *
  * @param world - World instance
  * @param terms - Components and modifiers
@@ -170,7 +170,7 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
  * @throws {InvalidArgument} If no included components (query must match something)
  *
  * @example
- * const query = ensureQuery(world, Position, Velocity, not(Dead));
+ * const query = cacheQuery(world, Position, Velocity, not(Dead));
  */
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
@@ -351,7 +351,7 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
  * });
  *
  * // With pre-built query
- * const q = ensureQuery(world, Position, Velocity);
+ * const q = cacheQuery(world, Position, Velocity);
  * queryEntities(world, q, (entity) => { ... });
  *
  * // Early exit

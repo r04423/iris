@@ -1,4 +1,4 @@
-import { type Component, ensureQuery, type QueryMeta, queryEntities, type World } from "iris-ecs";
+import { type Component, cacheQuery, type QueryMeta, queryEntities, type World } from "iris-ecs";
 import type { BenchmarkDef, PresetName } from "../../../types.js";
 import { GENERATED_COMPONENTS } from "../fixtures.js";
 
@@ -47,7 +47,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = ensureQuery(world, C[0]!);
+        w.__queryMeta = cacheQuery(world, C[0]!);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -67,7 +67,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = ensureQuery(world, C[0]!, C[1]!);
+        w.__queryMeta = cacheQuery(world, C[0]!, C[1]!);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -87,7 +87,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = ensureQuery(world, C[10]!);
+        w.__queryMeta = cacheQuery(world, C[10]!);
         w.__sink = 0;
       },
       fn(world: World) {

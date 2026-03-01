@@ -319,14 +319,14 @@ export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
 }
 
 /**
- * Emit component changed event without setting a value.
+ * Mark a component as changed without setting a value.
  *
  * @param world - World instance
  * @param entityId - Entity with the component
  * @param componentId - Component that was changed
  *
  * @example
- * emitComponentChanged(world, entity, Position);  // Notify change tracking
+ * markComponentChanged(world, entity, Position);  // Notify change tracking
  */
 export function emitComponentChanged(world: World, entityId: EntityId, componentId: EntityId): void {
   const { archetype, row } = ensureEntity(world, entityId);

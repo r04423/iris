@@ -1,8 +1,8 @@
 import {
   addResource,
+  cacheQuery,
   defineSystem,
   emitEvent,
-  ensureQuery,
   getResourceValue,
   queryEntities,
   readEvents,
@@ -74,7 +74,7 @@ export const readInput = defineSystem("readInput", (world) => {
 // Maps InputState -> per-entity Input component so downstream systems
 // can read simple scalar fields instead of querying raw key state.
 export const writeInput = defineSystem("writeInput", (world) => {
-  const players = ensureQuery(world, IsPlayer, Input);
+  const players = cacheQuery(world, IsPlayer, Input);
 
   const { setInput } = inputActions(world);
 
@@ -100,7 +100,7 @@ export const writeInput = defineSystem("writeInput", (world) => {
 // ============================================================================
 
 export const applyInput = defineSystem("applyInput", (world) => {
-  const players = ensureQuery(world, IsPlayer, Input, Movement, Transform);
+  const players = cacheQuery(world, IsPlayer, Input, Movement, Transform);
 
   const { getRotation, setRotation } = transformActions(world);
   const { getVelocity, setVelocity, getRotationSpeed, getThrust, getMaxSpeed } = movementActions(world);
@@ -144,7 +144,7 @@ export const applyInput = defineSystem("applyInput", (world) => {
 });
 
 export const dampPlayerMovement = defineSystem("dampPlayerMovement", (world) => {
-  const entities = ensureQuery(world, Movement, Input);
+  const entities = cacheQuery(world, Movement, Input);
 
   const { getVelocity, setVelocity, getDamping } = movementActions(world);
   const { getInputThrust } = inputActions(world);

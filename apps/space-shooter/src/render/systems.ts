@@ -1,5 +1,5 @@
 import type { World } from "iris-ecs";
-import { addResource, defineSystem, ensureQuery, getResourceValue, queryEntities } from "iris-ecs";
+import { addResource, cacheQuery, defineSystem, getResourceValue, queryEntities } from "iris-ecs";
 import { combatActions } from "../combat/actions.js";
 import { Bullet, CombatConfig, IsBullet } from "../combat/components.js";
 import { enemyActions } from "../enemy/actions.js";
@@ -28,10 +28,10 @@ export function initRenderer(world: World): void {
 // Thin bridge: queries ECS for entity data, passes plain values to GameRenderer.
 // Draw order matters -- enemies first, then bullets, explosions, player on top.
 export const render = defineSystem("render", (world) => {
-  const enemyQuery = ensureQuery(world, IsEnemy, Transform, Visual);
-  const bulletQuery = ensureQuery(world, IsBullet, Bullet, Transform);
-  const explosionQuery = ensureQuery(world, IsExplosion, Transform, Explosion);
-  const playerQuery = ensureQuery(world, IsPlayer, Transform, Movement);
+  const enemyQuery = cacheQuery(world, IsEnemy, Transform, Visual);
+  const bulletQuery = cacheQuery(world, IsBullet, Bullet, Transform);
+  const explosionQuery = cacheQuery(world, IsExplosion, Transform, Explosion);
+  const playerQuery = cacheQuery(world, IsPlayer, Transform, Movement);
 
   const { getPosition, getRotation } = transformActions(world);
   const { getVelocity } = movementActions(world);

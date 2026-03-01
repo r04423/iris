@@ -254,7 +254,7 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
  * ```typescript
  * const movementSystem = defineSystem("movementSystem", (world) => {
  *   // Init: runs once at addSystem() time
- *   const movers = ensureQuery(world, Position, Velocity);
+ *   const movers = cacheQuery(world, Position, Velocity);
  *
  *   // Tick: runs every frame
  *   return () => {

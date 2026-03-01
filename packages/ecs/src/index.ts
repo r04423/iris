@@ -22,7 +22,7 @@ export { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 
 export {
   addComponent,
-  emitComponentChanged,
+  emitComponentChanged as markComponentChanged,
   getComponentValue,
   hasComponent,
   removeComponent,
@@ -67,7 +67,7 @@ export {
   added,
   changed,
   collectEntities,
-  ensureQuery,
+  ensureQuery as cacheQuery,
   not,
   queryEntities,
   queryFirstEntity,
