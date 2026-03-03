@@ -10,6 +10,7 @@ import {
   Startup,
   Update,
 } from "iris-ecs";
+import { attachDevTools } from "iris-inspect";
 import { Combat } from "./combat/schedule.js";
 import {
   handlePlayerHit,
@@ -84,5 +85,7 @@ addSystem(world, tickExplosion, { schedule: PostUpdate });
 
 // Last: rendering
 addSystem(world, render, { schedule: Last });
+
+attachDevTools(world);
 
 run(world);

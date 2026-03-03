@@ -163,3 +163,18 @@ export { Type } from "./schema.js";
 // ============================================================================
 
 export { defineActions } from "./actions.js";
+
+// ============================================================================
+// Entity Encoding Utilities
+// ============================================================================
+
+export {
+  COMPONENT_TYPE,
+  ENTITY_TYPE,
+  encodeEntity,
+  extractId,
+  extractType,
+  isPair,
+  RELATIONSHIP_TYPE,
+  TAG_TYPE,
+} from "./encoding.js";

@@ -1,0 +1,45 @@
+{
+  "name": "iris-inspect",
+  "version": "0.0.8",
+  "private": true,
+  "type": "module",
+  "description": "DevTools panel for Iris ECS",
+  "main": "./dist/iris-inspect.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/iris-inspect.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "test": "tsx --test 'src/__tests__/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "iris-ecs": "workspace:*"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "iris-ecs": "workspace:*",
+    "radix-ui": "^1.4.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.0-beta",
+    "vite": "^6.0.0",
+    "vite-plugin-dts": "^4.0.0",
+    "zustand": "^5.0.0"
+  }
+}
