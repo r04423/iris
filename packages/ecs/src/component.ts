@@ -161,10 +161,10 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
     }
   }
 
-  // Fire before move so observers can access component data
-  fireObserverEvent(world, "componentRemoved", componentId, entityId);
-
   moveEntityToArchetype(world, meta, toArchetype);
+
+  // Fire after move so observers see the entity's new archetype
+  fireObserverEvent(world, "componentRemoved", componentId, entityId);
 }
 
 /**
