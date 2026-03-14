@@ -1,5 +1,6 @@
 import { assert, Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
 import { flushEvents } from "./event.js";
+import { fireObserverEvent } from "./observer.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -493,10 +494,17 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
   // Track execution context for systems that need to know their environment
   world.execution.scheduleLabel = scheduleLabel;
 
+  const scheduleStart = performance.now();
+  fireObserverEvent(world, "scheduleStarted", scheduleLabel);
+
   try {
     for (const systemId of order) {
       world.execution.tick++;
       world.execution.systemId = systemId;
+
+      const systemStart = performance.now();
+      fireObserverEvent(world, "systemStarted", systemId, scheduleLabel);
+
       const meta = world.systems.byId.get(systemId)!;
       const result = meta.runner(world);
 
@@ -504,11 +512,15 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
       if (result instanceof Promise) {
         await result;
       }
+
+      fireObserverEvent(world, "systemFinished", systemId, scheduleLabel, performance.now() - systemStart);
     }
   } finally {
     world.execution.tick++;
     world.execution.scheduleLabel = null;
     world.execution.systemId = null;
+
+    fireObserverEvent(world, "scheduleFinished", scheduleLabel, performance.now() - scheduleStart);
   }
 }
 

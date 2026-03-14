@@ -1,6 +1,7 @@
 import type { Archetype } from "./archetype.js";
 import type { Entity, EntityId } from "./encoding.js";
 import type { FilterMeta } from "./filters.js";
+import type { ScheduleLabel } from "./scheduler.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -22,6 +23,10 @@ export type EventPayloads = {
   componentRemoved: [componentId: EntityId, entityId: EntityId];
   componentChanged: [componentId: EntityId, entityId: EntityId];
   worldReset: [world: World];
+  scheduleStarted: [scheduleLabel: ScheduleLabel];
+  scheduleFinished: [scheduleLabel: ScheduleLabel, duration: number];
+  systemStarted: [systemId: string, scheduleLabel: ScheduleLabel];
+  systemFinished: [systemId: string, scheduleLabel: ScheduleLabel, duration: number];
 };
 
 /**

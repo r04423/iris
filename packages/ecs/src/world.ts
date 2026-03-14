@@ -274,6 +274,10 @@ export function createWorld(): World {
       componentRemoved: { callbacks: [] },
       componentChanged: { callbacks: [] },
       worldReset: { callbacks: [] },
+      scheduleStarted: { callbacks: [] },
+      scheduleFinished: { callbacks: [] },
+      systemStarted: { callbacks: [] },
+      systemFinished: { callbacks: [] },
     },
   };
 

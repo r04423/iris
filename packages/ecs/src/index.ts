@@ -33,7 +33,7 @@ export {
 // Registry Operations
 // ============================================================================
 
-export { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+export { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
 
 // ============================================================================
 // Relation Operations
@@ -173,6 +173,7 @@ export {
   ENTITY_TYPE,
   encodeEntity,
   extractId,
+  extractMeta,
   extractType,
   isPair,
   RELATIONSHIP_TYPE,

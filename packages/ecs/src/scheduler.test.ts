@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import { addComponent, getComponentValue } from "./component.js";
 import { createEntity } from "./entity.js";
 import { Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
+import { registerObserverCallback } from "./observer.js";
 import { ensureQuery, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue } from "./resource.js";
+import type { ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
   defineSchedule,
@@ -948,6 +950,170 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.deepStrictEqual(values, [1, 2, 3]);
+    });
+  });
+
+  describe("Schedule Instrumentation", () => {
+    it("fires scheduleStarted before system execution", async () => {
+      const world = createWorld();
+      const events: ScheduleLabel[] = [];
+
+      registerObserverCallback(world, "scheduleStarted", (label) => {
+        events.push(label);
+      });
+
+      addSystem(world, function noop() {});
+
+      await runOnce(world);
+
+      // Update schedule has a system so it fires; empty schedules do not fire
+      assert.strictEqual(events.includes(Update), true);
+    });
+
+    it("fires scheduleFinished after all systems complete", async () => {
+      const world = createWorld();
+      const events: { label: ScheduleLabel; duration: number }[] = [];
+
+      registerObserverCallback(world, "scheduleFinished", (label, duration) => {
+        events.push({ label, duration });
+      });
+
+      addSystem(world, function noop() {});
+
+      await runOnce(world);
+
+      const updateEvent = events.find((e) => e.label === Update);
+      assert.notStrictEqual(updateEvent, undefined);
+      assert.strictEqual(typeof updateEvent!.duration, "number");
+      assert.strictEqual(updateEvent!.duration >= 0, true);
+    });
+
+    it("fires systemStarted and systemFinished around each system", async () => {
+      const world = createWorld();
+      const started: { systemId: string; schedule: ScheduleLabel }[] = [];
+      const finished: { systemId: string; schedule: ScheduleLabel; duration: number }[] = [];
+
+      registerObserverCallback(world, "systemStarted", (systemId, schedule) => {
+        started.push({ systemId, schedule });
+      });
+
+      registerObserverCallback(world, "systemFinished", (systemId, schedule, duration) => {
+        finished.push({ systemId, schedule, duration });
+      });
+
+      addSystem(world, function alpha() {});
+      addSystem(world, function beta() {});
+
+      await runOnce(world);
+
+      // Both systems should have started and finished
+      assert.strictEqual(
+        started.some((e) => e.systemId === "alpha"),
+        true
+      );
+      assert.strictEqual(
+        started.some((e) => e.systemId === "beta"),
+        true
+      );
+      assert.strictEqual(
+        finished.some((e) => e.systemId === "alpha"),
+        true
+      );
+      assert.strictEqual(
+        finished.some((e) => e.systemId === "beta"),
+        true
+      );
+
+      // Both ran in Update schedule
+      assert.strictEqual(started.find((e) => e.systemId === "alpha")!.schedule, Update);
+      assert.strictEqual(finished.find((e) => e.systemId === "beta")!.schedule, Update);
+    });
+
+    it("systemFinished carries duration in milliseconds", async () => {
+      const world = createWorld();
+      let capturedDuration = -1;
+
+      registerObserverCallback(world, "systemFinished", (_systemId, _schedule, duration) => {
+        capturedDuration = duration;
+      });
+
+      addSystem(world, function work() {
+        // Burn a tiny amount of time
+        let sum = 0;
+        for (let i = 0; i < 1000; i++) sum += i;
+        void sum;
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(capturedDuration >= 0, true);
+    });
+
+    it("system events fire in correct order relative to execution", async () => {
+      const world = createWorld();
+      const log: string[] = [];
+
+      registerObserverCallback(world, "scheduleStarted", () => {
+        log.push("schedule-start");
+      });
+      registerObserverCallback(world, "systemStarted", (systemId) => {
+        log.push(`system-start:${systemId}`);
+      });
+      registerObserverCallback(world, "systemFinished", (systemId) => {
+        log.push(`system-end:${systemId}`);
+      });
+      registerObserverCallback(world, "scheduleFinished", () => {
+        log.push("schedule-end");
+      });
+
+      addSystem(world, function mySystem() {
+        log.push("run:mySystem");
+      });
+
+      await runOnce(world);
+
+      // Filter to only Update schedule events (skip Startup and empty schedules)
+      const updateIdx = log.indexOf("system-start:mySystem");
+      assert.notStrictEqual(updateIdx, -1);
+
+      // system-start comes before run, run comes before system-end
+      const runIdx = log.indexOf("run:mySystem");
+      const endIdx = log.indexOf("system-end:mySystem");
+      assert.strictEqual(updateIdx < runIdx, true);
+      assert.strictEqual(runIdx < endIdx, true);
+    });
+
+    it("empty schedules do not fire events", async () => {
+      const world = createWorld();
+      const events: ScheduleLabel[] = [];
+
+      registerObserverCallback(world, "scheduleStarted", (label) => {
+        events.push(label);
+      });
+
+      // No systems registered
+      await runOnce(world);
+
+      // Empty schedules should not fire events
+      assert.strictEqual(events.length, 0);
+    });
+
+    it("async system duration includes await time", async () => {
+      const world = createWorld();
+      let capturedDuration = -1;
+
+      registerObserverCallback(world, "systemFinished", (_systemId, _schedule, duration) => {
+        capturedDuration = duration;
+      });
+
+      addSystem(world, async function asyncWork() {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+
+      await runOnce(world);
+
+      // Duration should include the 10ms+ await
+      assert.strictEqual(capturedDuration >= 5, true);
     });
   });
 });
