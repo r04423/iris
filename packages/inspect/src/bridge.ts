@@ -95,13 +95,11 @@ export function attachBridge(world: World, store: DevToolsStore): () => void {
     }
   };
 
-  // componentRemoved fires BEFORE the archetype transition, so the entity
-  // is still in its old archetype. Subtract 1 to reflect the pending removal.
   const onComponentRemoved: Observer<"componentRemoved"> = (_componentId: EntityId, entityId: EntityId) => {
     if (!store.getState().entities.has(entityId)) return;
     const meta = world.entities.byId.get(entityId);
     if (meta) {
-      store.getState()._updateEntityComponentCount(entityId, meta.archetype.types.length - 1);
+      store.getState()._updateEntityComponentCount(entityId, meta.archetype.types.length);
     }
   };
 
