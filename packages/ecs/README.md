@@ -30,6 +30,14 @@ ECS is not a good fit for everything. Simple CRUD applications, form-heavy UIs, 
 npm install iris-ecs
 ```
 
+## AI Skills
+
+Install the [iris-ecs skill](https://skills.sh) so AI coding agents (Claude Code, Cursor, etc.) understand the iris-ecs API:
+
+```bash
+npx skills add https://github.com/r04423/iris --skill iris-ecs
+```
+
 ## Quick Start
 
 ```typescript
