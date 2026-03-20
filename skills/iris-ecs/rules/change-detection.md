@@ -33,8 +33,8 @@ const initSystem = defineSystem("initSystem", (world) => {
   return () => {
     queryEntities(world, newPositions, (entity) => {
       // Runs once per entity, in the frame Position was added
-      const x = getComponentValue(world, entity, Position, "x")!;
-      const y = getComponentValue(world, entity, Position, "y")!;
+      const x = getComponentValue(world, entity, Position, "x");
+      const y = getComponentValue(world, entity, Position, "y");
       initSpatialIndex(entity, x, y);
     });
   };
@@ -56,8 +56,8 @@ const renderSyncSystem = defineSystem("renderSyncSystem", (world) => {
   return () => {
     queryEntities(world, moved, (entity) => {
       // Runs when Position was added OR when any Position field was set
-      const x = getComponentValue(world, entity, Position, "x")!;
-      const y = getComponentValue(world, entity, Position, "y")!;
+      const x = getComponentValue(world, entity, Position, "x");
+      const y = getComponentValue(world, entity, Position, "y");
       updateRenderPosition(entity, x, y);
     });
   };

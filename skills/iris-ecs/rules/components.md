@@ -82,12 +82,12 @@ const x = getComponentValue(world, entity, Position, "x");
 
 On an unnarrowed entity (no prior `hasComponent` check), the return type is `T | undefined`. Returns `undefined` if the entity doesn't have the component.
 
-On a narrowed `EntityWith<typeof Position>`, the return type is `T` directly. Non-null assert (`!`) is safe here too if you know the component is present from query context:
+On a narrowed `EntityWith<typeof Position>`, the return type is `T` directly, no non-null assertion needed:
 
 ```typescript
 queryEntities(world, movers, (entity) => {
-  const x = getComponentValue(world, entity, Position, "x")!;
-  const vx = getComponentValue(world, entity, Velocity, "x")!;
+  const x = getComponentValue(world, entity, Position, "x");
+  const vx = getComponentValue(world, entity, Velocity, "x");
   setComponentValue(world, entity, Position, "x", x + vx);
 });
 ```

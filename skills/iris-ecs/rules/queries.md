@@ -20,8 +20,8 @@ import {
 
 ```typescript
 queryEntities(world, [Position, Velocity], (entity) => {
-  const x = getComponentValue(world, entity, Position, "x")!;
-  const vx = getComponentValue(world, entity, Velocity, "x")!;
+  const x = getComponentValue(world, entity, Position, "x");
+  const vx = getComponentValue(world, entity, Velocity, "x");
   setComponentValue(world, entity, Position, "x", x + vx);
 });
 ```
@@ -45,7 +45,7 @@ Return `false` from the callback to stop iteration:
 
 ```typescript
 queryEntities(world, [Health], (entity) => {
-  const hp = getComponentValue(world, entity, Health, "current")!;
+  const hp = getComponentValue(world, entity, Health, "current");
   if (hp <= 0) {
     firstCorpse = entity;
     return false; // stop here
@@ -66,10 +66,10 @@ queryEntities(world, [Expired], (entity) => {
 ## `queryFirstEntity` -- Single Match
 
 ```typescript
-const player = queryFirstEntity(world, [Player, not(Dead)]);
+const player = queryFirstEntity(world, [Player, Health, not(Dead)]);
 
 if (player !== undefined) {
-  const hp = getComponentValue(world, player, Health, "current")!;
+  const hp = getComponentValue(world, player, Health, "current");
 }
 ```
 
@@ -100,12 +100,12 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 
   return () => {
     queryEntities(world, movers, (entity) => {
-      const x = getComponentValue(world, entity, Position, "x")!;
-      const vx = getComponentValue(world, entity, Velocity, "x")!;
+      const x = getComponentValue(world, entity, Position, "x");
+      const vx = getComponentValue(world, entity, Velocity, "x");
       setComponentValue(world, entity, Position, "x", x + vx);
 
-      const y = getComponentValue(world, entity, Position, "y")!;
-      const vy = getComponentValue(world, entity, Velocity, "y")!;
+      const y = getComponentValue(world, entity, Position, "y");
+      const vy = getComponentValue(world, entity, Velocity, "y");
       setComponentValue(world, entity, Position, "y", y + vy);
     });
   };

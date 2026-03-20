@@ -78,7 +78,7 @@ const timeQuery = cacheQuery(world, Time);
 
 queryEntities(world, timeQuery, (entity) => {
   // entity === Time (the component ID itself)
-  const dt = getComponentValue(world, entity, Time, "delta")!;
+  const dt = getComponentValue(world, entity, Time, "delta");
 });
 ```
 

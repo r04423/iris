@@ -35,9 +35,9 @@ const movementSystem = defineSystem("movementSystem", (world) => {
   return () => {
     queryEntities(world, movers, (e) => {
       setComponentValue(world, e, Position, "x",
-        getComponentValue(world, e, Position, "x")! + getComponentValue(world, e, Velocity, "x")!);
+        getComponentValue(world, e, Position, "x") + getComponentValue(world, e, Velocity, "x"));
       setComponentValue(world, e, Position, "y",
-        getComponentValue(world, e, Position, "y")! + getComponentValue(world, e, Velocity, "y")!);
+        getComponentValue(world, e, Position, "y") + getComponentValue(world, e, Velocity, "y"));
     });
   };
 });

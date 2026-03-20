@@ -145,7 +145,7 @@ const poisonSystem = defineSystem("poisonSystem", (world) => {
   const newlyPoisoned = cacheQuery(world, added(Poisoned), Health);
   return () => {
     queryEntities(world, newlyPoisoned, (entity) => {
-      const hp = getComponentValue(world, entity, Health, "current")!;
+      const hp = getComponentValue(world, entity, Health, "current");
       setComponentValue(world, entity, Health, "current", hp - 10);
     });
   };
