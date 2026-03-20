@@ -122,7 +122,7 @@ export type {
   QueryModifier,
 } from "./query.js";
 export type { ScheduleLabel, SystemFactory, SystemMeta, SystemOptions, SystemRunner, SystemTick } from "./scheduler.js";
-export type { InferSchemaRecord, Schema, SchemaRecord } from "./schema.js";
+export type { InferSchema, InferSchemaRecord, Schema, SchemaRecord } from "./schema.js";
 export type { World } from "./world.js";
 
 // ============================================================================

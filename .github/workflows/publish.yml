@@ -32,5 +32,8 @@ jobs:
       - name: Test
         run: pnpm run test
 
-      - name: Publish
+      - name: Publish iris-ecs
         run: pnpm publish -F iris-ecs --provenance --no-git-checks
+
+      - name: Publish iris-react
+        run: pnpm publish -F iris-react --provenance --no-git-checks

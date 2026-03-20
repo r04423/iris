@@ -10,6 +10,7 @@ Libraries for building realtime applications in TypeScript.
 | Package | Description |
 |---------|-------------|
 | [`iris-ecs`](./packages/ecs) | Core ECS library |
+| [`iris-react`](./packages/react) | React bindings for Iris ECS |
 
 ## Apps
 
