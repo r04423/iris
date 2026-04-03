@@ -23,7 +23,7 @@ export function initPhysics(world: World): void {
 // Clamping before force addition lets external forces (like push) temporarily
 // exceed max speed, which feels more responsive than hard-capping after.
 export const updateMovement = defineSystem("updateMovement", (world) => {
-  const movers = cacheQuery(world, Transform, Movement);
+  const movers = cacheQuery(world, [Transform, Movement]);
 
   const { getPosition, setPosition } = transformActions(world);
   const { getVelocity, setVelocity, getForce, setForce, getMaxSpeed } = movementActions(world);
@@ -64,7 +64,7 @@ export const updateMovement = defineSystem("updateMovement", (world) => {
 });
 
 export const updateSpatialHashing = defineSystem("updateSpatialHashing", (world) => {
-  const transforms = cacheQuery(world, Transform);
+  const transforms = cacheQuery(world, [Transform]);
 
   const { getPosition } = transformActions(world);
 

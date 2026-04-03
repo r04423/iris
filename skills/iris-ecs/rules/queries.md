@@ -35,7 +35,7 @@ Accepts either an inline terms array or a pre-cached `QueryMeta` from `cacheQuer
 queryEntities(world, [Position, Velocity], (entity) => { /* ... */ });
 
 // Pre-cached -- avoids hash lookup on every call
-const movers = cacheQuery(world, Position, Velocity);
+const movers = cacheQuery(world, [Position, Velocity]);
 queryEntities(world, movers, (entity) => { /* ... */ });
 ```
 
@@ -86,8 +86,8 @@ Collects all matching entities into an array. Use when you need random access, s
 ## `cacheQuery` -- Pre-Cache for Systems
 
 ```typescript
-const movers = cacheQuery(world, Position, Velocity);
-const alive = cacheQuery(world, Health, not(Dead));
+const movers = cacheQuery(world, [Position, Velocity]);
+const alive = cacheQuery(world, [Health, not(Dead)]);
 ```
 
 Creates or retrieves cached query metadata. Same terms always return the same cached `QueryMeta` -- calling it twice with `Position, Velocity` returns the same object.
@@ -96,7 +96,7 @@ Cache queries in system init, then pass them to `queryEntities` in tick:
 
 ```typescript
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity, not(Frozen));
+  const movers = cacheQuery(world, [Position, Velocity, not(Frozen)]);
 
   return () => {
     queryEntities(world, movers, (entity) => {
@@ -112,9 +112,9 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 });
 ```
 
-A query must have at least one required (non-excluded) component. `cacheQuery(world, not(Dead))` alone throws `InvalidArgument`.
+A query must have at least one required (non-excluded) component. `cacheQuery(world, [not(Dead)])` alone throws `InvalidArgument`.
 
-Note: `cacheQuery` takes variadic args (`cacheQuery(world, A, B)`), while `queryEntities` takes an array (`queryEntities(world, [A, B], cb)`).
+All query functions accept terms as an array: `cacheQuery(world, [A, B])`, `queryEntities(world, [A, B], cb)`.
 
 ## `not()` -- Exclusion Filter
 
@@ -133,10 +133,10 @@ Tags and pairs work identically to components in queries:
 
 ```typescript
 // Tags
-const alivePlayers = cacheQuery(world, Player, not(Dead));
+const alivePlayers = cacheQuery(world, [Player, not(Dead)]);
 
 // Pairs -- specific target
-const children = cacheQuery(world, pair(ChildOf, parent));
+const children = cacheQuery(world, [pair(ChildOf, parent)]);
 
 // Pairs -- wildcard (any target for this relation)
 queryEntities(world, [pair(ChildOf, Wildcard)], (entity) => {
@@ -154,7 +154,7 @@ queryEntities(world, [pair(Wildcard, player)], (entity) => {
 ```typescript
 // WRONG: allocating an array every tick when you only need iteration
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     const entities = collectEntities(world, movers);
@@ -166,7 +166,7 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 
 // RIGHT: callback iteration -- no intermediate array, no iterator overhead
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     queryEntities(world, movers, (entity) => {
@@ -186,14 +186,14 @@ Use `collectEntities` when you genuinely need an array -- sorting results, passi
 // WRONG: re-caching a query in tick
 const movementSystem = defineSystem("movementSystem", (world) => {
   return () => {
-    const movers = cacheQuery(world, Position, Velocity); // hash lookup every frame
+    const movers = cacheQuery(world, [Position, Velocity]); // hash lookup every frame
     queryEntities(world, movers, (entity) => { /* ... */ });
   };
 });
 
 // RIGHT: cache in init, reuse in tick
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     queryEntities(world, movers, (entity) => { /* ... */ });
@@ -225,7 +225,7 @@ Tags and data-less pairs are skipped -- they produce no column parameter.
 Accepts inline terms or a pre-cached `QueryMeta`:
 
 ```typescript
-const movers = cacheQuery(world, Position, Velocity, not(Frozen));
+const movers = cacheQuery(world, [Position, Velocity, not(Frozen)]);
 
 queryColumns(world, movers, (entities, pos, vel) => {
   // pos.value is the raw Float32Array for Position

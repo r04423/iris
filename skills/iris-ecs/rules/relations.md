@@ -79,7 +79,7 @@ Returns an empty array if the entity has no pairs with that relation.
 Pairs participate in queries like any component:
 
 ```typescript
-const children = cacheQuery(world, pair(ChildOf, parent));
+const children = cacheQuery(world, [pair(ChildOf, parent)]);
 
 queryEntities(world, children, (entity) => {
   // every entity that is a child of `parent`

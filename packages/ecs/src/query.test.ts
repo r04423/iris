@@ -74,7 +74,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
       const queryId = hashQuery([Position], empty, empty, empty);
 
       assert.strictEqual(world.queries.byId.get(queryId), query);
@@ -126,7 +126,7 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Health = createEntity(world);
 
-      const query = ensureQuery(world, Position, added(Health));
+      const query = ensureQuery(world, [Position, added(Health)]);
       const queryId = hashQuery([Position], empty, [Health], empty);
 
       assert.strictEqual(world.queries.byId.get(queryId), query);
@@ -137,8 +137,8 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Health = createEntity(world);
 
-      const query1 = ensureQuery(world, Position, added(Health), changed(Position));
-      const query2 = ensureQuery(world, Position, added(Health), changed(Position));
+      const query1 = ensureQuery(world, [Position, added(Health), changed(Position)]);
+      const query2 = ensureQuery(world, [Position, added(Health), changed(Position)]);
 
       assert.strictEqual(query1, query2);
       assert.strictEqual(world.queries.byId.size, 1);
@@ -149,8 +149,8 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Health = createEntity(world);
 
-      const query1 = ensureQuery(world, Position, added(Health));
-      const query2 = ensureQuery(world, Position, changed(Health));
+      const query1 = ensureQuery(world, [Position, added(Health)]);
+      const query2 = ensureQuery(world, [Position, changed(Health)]);
 
       assert.notStrictEqual(query1, query2);
       assert.strictEqual(world.queries.byId.size, 2);
@@ -509,7 +509,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
 
       assert.ok(query);
       assert.deepStrictEqual(query.include, [Position]);
@@ -521,8 +521,8 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const query1 = ensureQuery(world, Position);
-      const query2 = ensureQuery(world, Position);
+      const query1 = ensureQuery(world, [Position]);
+      const query2 = ensureQuery(world, [Position]);
 
       assert.strictEqual(query1, query2);
       assert.strictEqual(world.queries.byId.size, 1);
@@ -533,8 +533,8 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Velocity = createEntity(world);
 
-      const queryA = ensureQuery(world, Position);
-      const queryB = ensureQuery(world, Position, Velocity);
+      const queryA = ensureQuery(world, [Position]);
+      const queryB = ensureQuery(world, [Position, Velocity]);
 
       assert.notStrictEqual(queryA, queryB);
       assert.strictEqual(world.queries.byId.size, 2);
@@ -545,7 +545,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
       const queryId = hashQuery([Position], [], [], []);
 
       assert.strictEqual(world.queries.byId.get(queryId), query);
@@ -554,7 +554,7 @@ describe("Query", () => {
     it("throws when query has no components", () => {
       const world = createWorld();
 
-      assert.throws(() => ensureQuery(world), InvalidArgument);
+      assert.throws(() => ensureQuery(world, []), InvalidArgument);
     });
   });
 
@@ -566,7 +566,7 @@ describe("Query", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
 
       assert.strictEqual(world.queries.byId.size, 1);
 
@@ -585,7 +585,7 @@ describe("Query", () => {
       const child1 = createEntity(world);
       addComponent(world, child1, pair(ChildOf, parent1));
 
-      const query = ensureQuery(world, pair(ChildOf, parent1));
+      const query = ensureQuery(world, [pair(ChildOf, parent1)]);
 
       // Verify child1 matches
       const initial = collectEntities(world, query);
@@ -613,8 +613,8 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Velocity = createEntity(world);
 
-      const queryA = ensureQuery(world, Position, Velocity);
-      const queryB = ensureQuery(world, Position, Velocity);
+      const queryA = ensureQuery(world, [Position, Velocity]);
+      const queryB = ensureQuery(world, [Position, Velocity]);
 
       assert.strictEqual(queryA.filter, queryB.filter);
       assert.strictEqual(world.filters.byId.size, 1);
@@ -625,8 +625,8 @@ describe("Query", () => {
       const Position = createEntity(world);
       const Velocity = createEntity(world);
 
-      const queryA = ensureQuery(world, Position);
-      const queryB = ensureQuery(world, Position, Velocity);
+      const queryA = ensureQuery(world, [Position]);
+      const queryB = ensureQuery(world, [Position, Velocity]);
 
       assert.notStrictEqual(queryA.filter, queryB.filter);
       assert.strictEqual(world.filters.byId.size, 2);
@@ -742,7 +742,7 @@ describe("Query", () => {
       addComponent(world, entity1, Position);
       addComponent(world, entity2, Position);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
       const entities = collectEntities(world, query);
 
       assert.strictEqual(entities.length, 2);
@@ -754,7 +754,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
       const entities = collectEntities(world, query);
 
       assert.strictEqual(entities.length, 0);
@@ -772,7 +772,7 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const query = ensureQuery(world, Position);
+      const query = ensureQuery(world, [Position]);
       const entities = collectEntities(world, query);
 
       assert.strictEqual(entities[0], entity3);
@@ -1031,8 +1031,8 @@ describe("Query", () => {
         const ChildOf = defineRelation("ChildOf");
         const parent = createEntity(world);
 
-        const query1 = ensureQuery(world, pair(ChildOf, parent));
-        const query2 = ensureQuery(world, pair(ChildOf, parent));
+        const query1 = ensureQuery(world, [pair(ChildOf, parent)]);
+        const query2 = ensureQuery(world, [pair(ChildOf, parent)]);
 
         assert.strictEqual(query1, query2);
         assert.strictEqual(world.queries.byId.size, 1);
@@ -1044,8 +1044,8 @@ describe("Query", () => {
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
 
-        const query1 = ensureQuery(world, pair(ChildOf, parent1));
-        const query2 = ensureQuery(world, pair(ChildOf, parent2));
+        const query1 = ensureQuery(world, [pair(ChildOf, parent1)]);
+        const query2 = ensureQuery(world, [pair(ChildOf, parent2)]);
 
         assert.notStrictEqual(query1, query2);
         assert.strictEqual(world.queries.byId.size, 2);
@@ -1056,8 +1056,8 @@ describe("Query", () => {
         const ChildOf = defineRelation("ChildOf");
         const parent = createEntity(world);
 
-        const query1 = ensureQuery(world, pair(ChildOf, Wildcard));
-        const query2 = ensureQuery(world, pair(Wildcard, parent));
+        const query1 = ensureQuery(world, [pair(ChildOf, Wildcard)]);
+        const query2 = ensureQuery(world, [pair(Wildcard, parent)]);
 
         assert.notStrictEqual(query1, query2);
         assert.strictEqual(world.queries.byId.size, 2);
@@ -2037,7 +2037,7 @@ describe("Query", () => {
 
         addComponent(world, e1, Position, { x: 42 });
 
-        const q = ensureQuery(world, Position);
+        const q = ensureQuery(world, [Position]);
         let called = false;
 
         queryColumns(world, q, (entities, pos) => {

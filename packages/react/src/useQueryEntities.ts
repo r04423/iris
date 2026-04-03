@@ -73,7 +73,7 @@ export function useQueryEntities<T extends (EntityId | QueryModifier)[]>(
   const query = useMemo(() => {
     dirtyRef.current = true;
 
-    return cacheQuery(world, ...terms);
+    return cacheQuery(world, terms);
   }, [world, generation, termKey]);
 
   const relevantIds = useMemo(() => {

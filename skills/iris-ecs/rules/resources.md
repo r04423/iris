@@ -74,7 +74,7 @@ Idempotent -- removing a resource that doesn't exist is a no-op.
 Resources appear in standard queries because they're stored as components on an entity:
 
 ```typescript
-const timeQuery = cacheQuery(world, Time);
+const timeQuery = cacheQuery(world, [Time]);
 
 queryEntities(world, timeQuery, (entity) => {
   // entity === Time (the component ID itself)
@@ -90,7 +90,7 @@ A typical pattern: read a resource in the tick function.
 
 ```typescript
 const physicsSystem = defineSystem("physicsSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
   return () => {
     if (!hasResource(world, Time)) return;
     const dt = getResourceValue(world, Time, "delta");

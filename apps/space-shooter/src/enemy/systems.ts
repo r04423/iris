@@ -84,7 +84,7 @@ export const spawnEnemies = defineSystem("spawnEnemies", (world) => {
 // Simple steering: dampen current velocity then accelerate toward the target.
 // The combination of damping + directional thrust produces smooth pursuit curves.
 export const followPlayer = defineSystem("followPlayer", (world) => {
-  const enemies = cacheQuery(world, IsEnemy, Transform, Movement);
+  const enemies = cacheQuery(world, [IsEnemy, Transform, Movement]);
 
   const { getPosition } = transformActions(world);
   const { getVelocity, setVelocity, getThrust, getDamping } = movementActions(world);
@@ -127,7 +127,7 @@ export const followPlayer = defineSystem("followPlayer", (world) => {
 // Flocking separation: each entity steers away from the average position of
 // its nearby neighbors. Prevents enemies from stacking on top of each other.
 export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
-  const avoiders = cacheQuery(world, Avoidance, Transform, Movement);
+  const avoiders = cacheQuery(world, [Avoidance, Transform, Movement]);
 
   const { getPosition } = transformActions(world);
   const { getVelocity, setVelocity } = movementActions(world);
@@ -193,7 +193,7 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
 });
 
 export const updateAutoRotate = defineSystem("updateAutoRotate", (world) => {
-  const rotators = cacheQuery(world, Transform, AutoRotate);
+  const rotators = cacheQuery(world, [Transform, AutoRotate]);
 
   const { getRotation, setRotation } = transformActions(world);
   const { getAutoRotateSpeed } = enemyActions(world);
@@ -221,7 +221,7 @@ export const handleEnemyKilled = defineSystem("handleEnemyKilled", (world) => {
 });
 
 export const tickExplosion = defineSystem("tickExplosion", (world) => {
-  const explosions = cacheQuery(world, IsExplosion, Explosion);
+  const explosions = cacheQuery(world, [IsExplosion, Explosion]);
 
   const { getExplosionProgress, setExplosionCurrent, despawnExplosion } = enemyActions(world);
 

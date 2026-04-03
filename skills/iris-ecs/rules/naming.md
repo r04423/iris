@@ -64,7 +64,7 @@ Returns `undefined` if no entity has that name.
 Pass components to validate their presence on the found entity:
 
 ```typescript
-const player = lookupByName(world, "player-1", Position, Health);
+const player = lookupByName(world, "player-1", [Position, Health]);
 // EntityWith<typeof Position | typeof Health> | undefined
 ```
 
@@ -101,7 +101,7 @@ const aiSystem = defineSystem("aiSystem", (world) => {
 const PlayerTag = defineTag("Player");
 
 const aiSystem = defineSystem("aiSystem", (world) => {
-  const players = cacheQuery(world, PlayerTag, Position);
+  const players = cacheQuery(world, [PlayerTag, Position]);
   return () => {
     const player = queryFirstEntity(world, players);
     if (!player) return;

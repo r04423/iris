@@ -57,7 +57,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -77,7 +77,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!, C[1]!);
+        w.__queryMeta = cacheQuery<[Component, Component]>(world, [C[0]!, C[1]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -97,7 +97,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[10]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[10]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -120,7 +120,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -142,7 +142,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!, C[1]!);
+        w.__queryMeta = cacheQuery<[Component, Component]>(world, [C[0]!, C[1]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -164,7 +164,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[10]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[10]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -189,7 +189,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
         w.__sink = 0;
       },
       fn(world: World) {
@@ -208,7 +208,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery(world, C[0]!);
+        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
         w.__sink = 0;
       },
       fn(world: World) {

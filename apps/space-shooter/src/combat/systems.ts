@@ -47,7 +47,7 @@ export function initCombat(world: World): void {
 // ============================================================================
 
 export const handleShooting = defineSystem("handleShooting", (world) => {
-  const playerQuery = cacheQuery(world, IsPlayer, Transform, ShootCooldown, Input);
+  const playerQuery = cacheQuery(world, [IsPlayer, Transform, ShootCooldown, Input]);
 
   const { getPosition, getRotation } = transformActions(world);
   const { canShoot: canShootAction, getShootCooldownState, setShootCooldownState, spawnBullet } = combatActions(world);
@@ -106,7 +106,7 @@ export const handleShooting = defineSystem("handleShooting", (world) => {
 });
 
 export const updateBullets = defineSystem("updateBullets", (world) => {
-  const bullets = cacheQuery(world, IsBullet, Bullet, Transform);
+  const bullets = cacheQuery(world, [IsBullet, Bullet, Transform]);
 
   const { getPosition, setPosition } = transformActions(world);
   const { getBulletSpeed, getBulletDirection, getBulletLifetime, setBulletTimeAlive, despawnBullet } =
@@ -136,7 +136,7 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
 // Broad phase via spatial hash, narrow phase via circle-circle distance check.
 // Emits EnemyKilled event to decouple collision detection from visual effects.
 export const updateBulletCollisions = defineSystem("updateBulletCollisions", (world) => {
-  const bullets = cacheQuery(world, IsBullet, Bullet, Transform);
+  const bullets = cacheQuery(world, [IsBullet, Bullet, Transform]);
 
   const { getPosition } = transformActions(world);
   const { despawnBullet } = combatActions(world);
@@ -194,7 +194,7 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
 // Push enemies away from the player proportional to player speed.
 // Emits PlayerHit to decouple collision physics from shield feedback.
 export const pushEnemies = defineSystem("pushEnemies", (world) => {
-  const players = cacheQuery(world, IsPlayer, Transform, Movement);
+  const players = cacheQuery(world, [IsPlayer, Transform, Movement]);
 
   const { applyForce } = physicsActions(world);
   const { getPosition } = transformActions(world);
@@ -254,7 +254,7 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
 });
 
 export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
-  const playerQuery = cacheQuery(world, IsPlayer);
+  const playerQuery = cacheQuery(world, [IsPlayer]);
 
   const { activateShield } = combatActions(world);
 
@@ -278,7 +278,7 @@ export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
 // Blinks the shield using a sine wave: visible when sin > 0, hidden otherwise.
 // The frequency controls how fast the shield flickers during its duration.
 export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world) => {
-  const shields = cacheQuery(world, ShieldVisibility);
+  const shields = cacheQuery(world, [ShieldVisibility]);
 
   const { getShieldProgress, setShieldCurrent, deactivateShield, isShieldVisible, showShield, hideShield } =
     combatActions(world);

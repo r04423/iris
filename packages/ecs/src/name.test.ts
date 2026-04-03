@@ -81,13 +81,13 @@ describe("Name", () => {
       addComponent(world, entity, Position, { x: 0, y: 0 });
 
       // Has Position but not Health
-      assert.strictEqual(lookupByName(world, "player", Position), entity);
-      assert.strictEqual(lookupByName(world, "player", Health), undefined);
-      assert.strictEqual(lookupByName(world, "player", Position, Health), undefined);
+      assert.strictEqual(lookupByName(world, "player", [Position]), entity);
+      assert.strictEqual(lookupByName(world, "player", [Health]), undefined);
+      assert.strictEqual(lookupByName(world, "player", [Position, Health]), undefined);
 
       // Add Health
       addComponent(world, entity, Health);
-      assert.strictEqual(lookupByName(world, "player", Position, Health), entity);
+      assert.strictEqual(lookupByName(world, "player", [Position, Health]), entity);
     });
 
     it("cleans up registry on entity destruction", () => {

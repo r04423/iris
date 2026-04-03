@@ -142,7 +142,7 @@ registerObserverCallback(world, "componentAdded", (componentId, entityId) => {
 
 // RIGHT: use a system with change detection
 const poisonSystem = defineSystem("poisonSystem", (world) => {
-  const newlyPoisoned = cacheQuery(world, added(Poisoned), Health);
+  const newlyPoisoned = cacheQuery(world, [added(Poisoned), Health]);
   return () => {
     queryEntities(world, newlyPoisoned, (entity) => {
       const hp = getComponentValue(world, entity, Health, "current");

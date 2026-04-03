@@ -72,7 +72,7 @@ addComponent(world, player, Player);
 // Define a system -- init runs once, tick runs every frame
 const movementSystem = defineSystem("movementSystem", (world) => {
   // Init: cache queries once
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     // Tick: runs every frame
@@ -143,7 +143,7 @@ getName(world, player);              // "player-1"
 lookupByName(world, "player-1");     // player entity
 
 // Validate components during lookup -- returns entity only if it has both
-lookupByName(world, "player-1", Position, Health);
+lookupByName(world, "player-1", [Position, Health]);
 
 removeName(world, player);
 lookupByName(world, "player-1");     // undefined
@@ -497,7 +497,7 @@ Inline terms (arrays) work anywhere, but in systems it's advised to pre-build qu
 
 ```typescript
 const mySystem = defineSystem("mySystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     queryEntities(world, movers, (entity) => {
@@ -553,7 +553,7 @@ Pre-cached queries work the same way:
 
 ```typescript
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity, not(Frozen));
+  const movers = cacheQuery(world, [Position, Velocity, not(Frozen)]);
 
   return () => {
     queryColumns(world, movers, (entities, pos, vel) => {
@@ -595,7 +595,7 @@ import {
 
 const movementSystem = defineSystem("movementSystem", (world) => {
   // Init: cache queries and action getters once
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     // Tick: runs every frame
@@ -869,7 +869,7 @@ import {
 } from "iris-ecs";
 
 const physicsSetupSystem = defineSystem("physicsSetupSystem", (world) => {
-  const newBodies = cacheQuery(world, added(Position));
+  const newBodies = cacheQuery(world, [added(Position)]);
 
   return () => {
     // Entities where Position was added since this system's last run
@@ -880,7 +880,7 @@ const physicsSetupSystem = defineSystem("physicsSetupSystem", (world) => {
 });
 
 const healthBarSystem = defineSystem("healthBarSystem", (world) => {
-  const damaged = cacheQuery(world, changed(Health));
+  const damaged = cacheQuery(world, [changed(Health)]);
 
   return () => {
     // Entities where Health was modified (added OR value changed)
@@ -892,7 +892,7 @@ const healthBarSystem = defineSystem("healthBarSystem", (world) => {
 
 const minimapSystem = defineSystem("minimapSystem", (world) => {
   // Combine change detection with regular filters
-  const movedPlayers = cacheQuery(world, Player, changed(Position), not(Dead));
+  const movedPlayers = cacheQuery(world, [Player, changed(Position), not(Dead)]);
 
   return () => {
     queryEntities(world, movedPlayers, (e) => {

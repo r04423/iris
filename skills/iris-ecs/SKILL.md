@@ -30,7 +30,7 @@ const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
 const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
 
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
     queryEntities(world, movers, (e) => {

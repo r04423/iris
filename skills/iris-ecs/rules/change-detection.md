@@ -28,7 +28,7 @@ Matches entities that gained the specified component since this system last ran.
 
 ```typescript
 const initSystem = defineSystem("initSystem", (world) => {
-  const newPositions = cacheQuery(world, Position, added(Position));
+  const newPositions = cacheQuery(world, [Position, added(Position)]);
 
   return () => {
     queryEntities(world, newPositions, (entity) => {
@@ -51,7 +51,7 @@ Matches entities whose component was modified (via `setComponentValue` or `markC
 
 ```typescript
 const renderSyncSystem = defineSystem("renderSyncSystem", (world) => {
-  const moved = cacheQuery(world, Position, changed(Position));
+  const moved = cacheQuery(world, [Position, changed(Position)]);
 
   return () => {
     queryEntities(world, moved, (entity) => {
@@ -90,7 +90,7 @@ Removal events fire for both explicit `removeComponent` calls and entity destruc
 Mix `added()`, `changed()`, and `not()` in the same query. Each modifier applies independently:
 
 ```typescript
-const movers = cacheQuery(world, Position, changed(Velocity), not(Frozen));
+const movers = cacheQuery(world, [Position, changed(Velocity), not(Frozen)]);
 // Entities that:
 //   - have Position
 //   - had Velocity added or modified since last run
@@ -100,7 +100,7 @@ const movers = cacheQuery(world, Position, changed(Velocity), not(Frozen));
 Multiple change modifiers are AND-combined — an entity must satisfy all of them:
 
 ```typescript
-const synced = cacheQuery(world, changed(Position), changed(Rotation));
+const synced = cacheQuery(world, [changed(Position), changed(Rotation)]);
 // Only entities where BOTH Position AND Rotation changed
 ```
 
@@ -125,7 +125,7 @@ console.log(newEntities.length); // always 0
 
 // RIGHT: change detection inside a system
 const spawnLogger = defineSystem("spawnLogger", (world) => {
-  const spawned = cacheQuery(world, added(Position));
+  const spawned = cacheQuery(world, [added(Position)]);
 
   return () => {
     queryEntities(world, spawned, (entity) => {
@@ -158,7 +158,7 @@ readEvents(world, removed(Health), ({ entity }) => {
 ```typescript
 // WRONG: using changed() when only first-frame setup is needed
 const initSystem = defineSystem("initSystem", (world) => {
-  const q = cacheQuery(world, changed(Position));
+  const q = cacheQuery(world, [changed(Position)]);
 
   return () => {
     queryEntities(world, q, (entity) => {
@@ -170,7 +170,7 @@ const initSystem = defineSystem("initSystem", (world) => {
 
 // RIGHT: use added() for one-time initialization
 const initSystem = defineSystem("initSystem", (world) => {
-  const q = cacheQuery(world, added(Position));
+  const q = cacheQuery(world, [added(Position)]);
 
   return () => {
     queryEntities(world, q, (entity) => {

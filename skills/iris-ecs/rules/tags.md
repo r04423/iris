@@ -50,7 +50,7 @@ if (hasComponent(world, entity, Player)) {
 import { cacheQuery, queryEntities, not } from "iris-ecs";
 
 // All alive players
-const alivePlayers = cacheQuery(world, Player, not(Dead));
+const alivePlayers = cacheQuery(world, [Player, not(Dead)]);
 
 queryEntities(world, alivePlayers, (entity) => {
   // entity has Player, does not have Dead

@@ -178,13 +178,13 @@ export function removeName(world: World, entityId: EntityId): void {
  * @example
  * ```ts
  * const player = lookupByName(world, "player-1");
- * const player = lookupByName(world, "player-1", Position, Health);
+ * const player = lookupByName(world, "player-1", [Position, Health]);
  * ```
  */
 export function lookupByName<C extends EntityId[]>(
   world: World,
   name: string,
-  ...components: C
+  components?: C
 ): EntityWith<C[number]> | undefined {
   const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
   const entityId = nameToEntity.get(name);
@@ -193,7 +193,7 @@ export function lookupByName<C extends EntityId[]>(
     return;
   }
 
-  for (const component of components) {
+  for (const component of components ?? []) {
     if (!hasComponent(world, entityId, component)) {
       return;
     }

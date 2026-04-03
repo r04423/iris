@@ -758,7 +758,7 @@ describe("Scheduler", () => {
       const found: number[] = [];
 
       const factory = defineSystem("testSystem", (w) => {
-        const q = ensureQuery(w, Position);
+        const q = ensureQuery(w, [Position]);
         return () => {
           queryEntities(w, q, (entity) => {
             found.push(getComponentValue(w, entity, Position, "x")!);

@@ -205,11 +205,11 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
  * @throws {InvalidArgument} If no included components (query must match something)
  *
  * @example
- * const query = cacheQuery(world, Position, Velocity, not(Dead));
+ * const query = cacheQuery(world, [Position, Velocity, not(Dead)]);
  */
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
-  ...terms: [...T]
+  terms: [...T]
 ): QueryMeta<ExtractIncluded<T>, T> {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
@@ -361,7 +361,7 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
     return termsOrQuery;
   }
 
-  return ensureQuery(world, ...termsOrQuery) as QueryMeta;
+  return ensureQuery(world, termsOrQuery) as QueryMeta;
 }
 
 // ============================================================================
@@ -386,7 +386,7 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
  * });
  *
  * // With pre-built query
- * const q = cacheQuery(world, Position, Velocity);
+ * const q = cacheQuery(world, [Position, Velocity]);
  * queryEntities(world, q, (entity) => { ... });
  *
  * // Early exit
@@ -520,7 +520,7 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * });
  *
  * // Pre-cached query
- * const q = cacheQuery(world, Position, Velocity, not(Dead));
+ * const q = cacheQuery(world, [Position, Velocity, not(Dead)]);
  * queryColumns(world, q, (entities, pos, vel) => { ... });
  *
  * // Mutation-safe backward iteration

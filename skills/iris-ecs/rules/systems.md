@@ -18,7 +18,7 @@ import { defineSystem, addSystem } from "iris-ecs";
 ```typescript
 const movementSystem = defineSystem("movementSystem", (world) => {
   // Init: runs once at addSystem() time
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
 
   // Tick: runs every frame
   return () => {
@@ -37,7 +37,7 @@ Init runs immediately when `addSystem` is called, not at the first frame. Use it
 
 ```typescript
 const combatSystem = defineSystem("combatSystem", (world) => {
-  const enemies = cacheQuery(world, Enemy, Health);
+  const enemies = cacheQuery(world, [Enemy, Health]);
   const spawn = spawnActions(world);
 
   return () => {
@@ -111,7 +111,7 @@ A `defineSystem` factory can be registered multiple times under different names:
 
 ```typescript
 const damageFlash = defineSystem("damageFlash", (world) => {
-  const damaged = cacheQuery(world, Sprite, added(Damaged));
+  const damaged = cacheQuery(world, [Sprite, added(Damaged)]);
   return () => {
     queryEntities(world, damaged, (entity) => {
       setComponentValue(world, entity, Sprite, "tint", 0xff0000);
@@ -177,14 +177,14 @@ Use init-closure state for data only this system needs. If other systems need to
 // WRONG: caching queries in tick (hash lookup every frame)
 const movementSystem = defineSystem("movementSystem", (world) => {
   return () => {
-    const movers = cacheQuery(world, Position, Velocity);
+    const movers = cacheQuery(world, [Position, Velocity]);
     queryEntities(world, movers, (entity) => { /* ... */ });
   };
 });
 
 // RIGHT: cache in init, reference in tick
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, Position, Velocity);
+  const movers = cacheQuery(world, [Position, Velocity]);
   return () => {
     queryEntities(world, movers, (entity) => { /* ... */ });
   };
