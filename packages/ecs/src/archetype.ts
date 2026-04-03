@@ -75,28 +75,50 @@ const TICK_SCHEMA = Type.u32();
 // ============================================================================
 
 /**
+ * Derives the stride of a column from its length and the archetype capacity.
+ * Scalar columns return 1, vector columns return their stride (e.g., 2 for vec2).
+ *
+ * @internal
+ */
+export function getColumnStride(column: Column, capacity: number): number {
+  if (Array.isArray(column)) {
+    return 1;
+  }
+
+  return column.length / capacity;
+}
+
+/**
  * Allocates a column based on schema type (TypedArray for primitives, Array for objects).
  */
 function allocateColumn(schema: Schema, capacity: number): Column {
+  // Vector columns interleave all elements per entity: [x0,y0,x1,y1,...] for stride 2
+  if (schema.kind === "vector") {
+    const TypedArrayCtor = schema.arrayConstructor as TypedArrayConstructor;
+    return new TypedArrayCtor(capacity * schema.stride!);
+  }
+
   if (schema.kind === "typed") {
     const TypedArrayCtor = schema.arrayConstructor as TypedArrayConstructor;
     return new TypedArrayCtor(capacity);
   }
+
   return [];
 }
 
 /**
  * Resizes a column to new capacity, preserving existing data. Regular arrays need no resize.
  */
-function resizeColumn(column: Column, newCapacity: number): Column {
+function resizeColumn(column: Column, oldCapacity: number, newCapacity: number): Column {
   if (Array.isArray(column)) {
     return column;
   }
 
+  const stride = getColumnStride(column, oldCapacity);
   const TypedArrayCtor = column.constructor as TypedArrayConstructor;
-  const newColumn = new TypedArrayCtor(newCapacity);
-  const copyLength = Math.min(column.length, newCapacity);
-  newColumn.set(column.subarray(0, copyLength));
+  const newColumn = new TypedArrayCtor(newCapacity * stride);
+
+  newColumn.set(column.subarray(0, column.length));
 
   return newColumn;
 }
@@ -104,11 +126,17 @@ function resizeColumn(column: Column, newCapacity: number): Column {
 /**
  * Clears a column slot (undefined for arrays, 0 for typed arrays).
  */
-function clearColumn(column: Column, index: number): void {
+function clearColumn(column: Column, index: number, capacity: number): void {
   if (Array.isArray(column)) {
     column[index] = undefined;
-  } else {
-    column[index] = 0;
+    return;
+  }
+
+  const stride = getColumnStride(column, capacity);
+  const offset = index * stride;
+
+  for (let s = 0; s < stride; s++) {
+    column[offset + s] = 0;
   }
 }
 
@@ -247,13 +275,13 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
 
   for (const fieldColumns of archetype.columns.values()) {
     for (const fieldName in fieldColumns) {
-      fieldColumns[fieldName] = resizeColumn(fieldColumns[fieldName]!, newCapacity);
+      fieldColumns[fieldName] = resizeColumn(fieldColumns[fieldName]!, archetype.capacity, newCapacity);
     }
   }
 
   for (const componentTicks of archetype.ticks.values()) {
-    componentTicks.added = resizeColumn(componentTicks.added, newCapacity) as Uint32Array;
-    componentTicks.changed = resizeColumn(componentTicks.changed, newCapacity) as Uint32Array;
+    componentTicks.added = resizeColumn(componentTicks.added, archetype.capacity, newCapacity) as Uint32Array;
+    componentTicks.changed = resizeColumn(componentTicks.changed, archetype.capacity, newCapacity) as Uint32Array;
   }
 
   archetype.capacity = newCapacity;
@@ -313,7 +341,20 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
 
     for (const fieldColumns of archetype.columns.values()) {
       for (const fieldName in fieldColumns) {
-        fieldColumns[fieldName]![row] = fieldColumns[fieldName]![lastIdx];
+        const column = fieldColumns[fieldName]!;
+        // Vector columns store `stride` contiguous elements per entity
+        const stride = getColumnStride(column, archetype.capacity);
+
+        if (stride === 1) {
+          column[row] = column[lastIdx];
+        } else {
+          const src = lastIdx * stride;
+          const dst = row * stride;
+
+          for (let s = 0; s < stride; s++) {
+            column[dst + s] = column[src + s];
+          }
+        }
       }
     }
 
@@ -327,13 +368,13 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
 
   for (const fieldColumns of archetype.columns.values()) {
     for (const fieldName in fieldColumns) {
-      clearColumn(fieldColumns[fieldName]!, lastIdx);
+      clearColumn(fieldColumns[fieldName]!, lastIdx, archetype.capacity);
     }
   }
 
   for (const componentTicks of archetype.ticks.values()) {
-    clearColumn(componentTicks.added, lastIdx);
-    clearColumn(componentTicks.changed, lastIdx);
+    clearColumn(componentTicks.added, lastIdx, archetype.capacity);
+    clearColumn(componentTicks.changed, lastIdx, archetype.capacity);
   }
 
   return swappedEntityId;
@@ -373,7 +414,21 @@ export function transferEntityToArchetypeByRow(
     if (!destFieldColumns || !sourceFieldColumns) continue;
 
     for (const fieldName in destFieldColumns) {
-      destFieldColumns[fieldName]![toRow] = sourceFieldColumns[fieldName]![fromRow];
+      const destCol = destFieldColumns[fieldName]!;
+      const srcCol = sourceFieldColumns[fieldName]!;
+      // Vector columns: copy all `stride` elements per entity
+      const stride = getColumnStride(destCol, toArchetype.capacity);
+
+      if (stride === 1) {
+        destCol[toRow] = srcCol[fromRow];
+      } else {
+        const dstOffset = toRow * stride;
+        const srcOffset = fromRow * stride;
+
+        for (let s = 0; s < stride; s++) {
+          destCol[dstOffset + s] = srcCol[srcOffset + s];
+        }
+      }
     }
   }
 

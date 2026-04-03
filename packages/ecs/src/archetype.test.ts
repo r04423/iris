@@ -15,7 +15,7 @@ import {
 import { addComponent, removeComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
-import { defineComponent } from "./registry.js";
+import { defineComponent, defineTag } from "./registry.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -1420,6 +1420,115 @@ describe("Archetype", () => {
       const metaC = world.entities.byId.get(typeC)!;
       assert.strictEqual(metaC.records.length, 1);
       assert.ok(metaC.records.includes(archBC));
+    });
+  });
+
+  // ============================================================================
+  // Vector Column Storage
+  // ============================================================================
+
+  describe("Vector Column Storage", () => {
+    it("allocates interleaved column for vector schema", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      const meta = world.entities.byId.get(entity)!;
+      const column = meta.archetype.columns.get(Position)!.value!;
+
+      // Column length should be capacity * stride
+      assert.strictEqual(column.length, meta.archetype.capacity * 2);
+    });
+
+    it("preserves vector data during archetype transition", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Tag = defineTag("Tag");
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      // Transition to new archetype
+      addComponent(world, entity, Tag);
+
+      const meta = world.entities.byId.get(entity)!;
+      const column = meta.archetype.columns.get(Position)!.value! as Float32Array;
+      const row = meta.row;
+      const stride = column.length / meta.archetype.capacity;
+
+      assert.strictEqual(column[row * stride], 10);
+      assert.strictEqual(column[row * stride + 1], 20);
+    });
+
+    it("swap-and-pop preserves vector data for swapped entity", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Tag = defineTag("Tag");
+
+      const e1 = createEntity(world);
+      const e2 = createEntity(world);
+      const e3 = createEntity(world);
+
+      addComponent(world, e1, Position, { value: [1, 2] });
+      addComponent(world, e2, Position, { value: [3, 4] });
+      addComponent(world, e3, Position, { value: [5, 6] });
+
+      // Add tag to e1 (removes from current archetype via swap-and-pop)
+      addComponent(world, e1, Tag);
+
+      // e2 should still have its original data
+      const meta2 = world.entities.byId.get(e2)!;
+      const col2 = meta2.archetype.columns.get(Position)!.value! as Float32Array;
+      const stride = col2.length / meta2.archetype.capacity;
+      assert.strictEqual(col2[meta2.row * stride], 3);
+      assert.strictEqual(col2[meta2.row * stride + 1], 4);
+
+      const meta3 = world.entities.byId.get(e3)!;
+      const col3 = meta3.archetype.columns.get(Position)!.value! as Float32Array;
+      assert.strictEqual(col3[meta3.row * stride], 5);
+      assert.strictEqual(col3[meta3.row * stride + 1], 6);
+    });
+
+    it("clears vector data on entity removal", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      const meta = world.entities.byId.get(entity)!;
+      const archetype = meta.archetype;
+      const column = archetype.columns.get(Position)!.value! as Float32Array;
+
+      removeComponent(world, entity, Position);
+
+      // Cleared slot should be zeroed
+      assert.strictEqual(column[0], 0);
+      assert.strictEqual(column[1], 0);
+    });
+
+    it("resizes vector column correctly when capacity grows", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      // Create enough entities to trigger resize (initial capacity is 16)
+      const entities: EntityId[] = [];
+      for (let i = 0; i < 20; i++) {
+        const e = createEntity(world);
+        addComponent(world, e, Position, { value: [i * 10, i * 10 + 1] });
+        entities.push(e);
+      }
+
+      // Verify all data survived the resize
+      for (let i = 0; i < 20; i++) {
+        const meta = world.entities.byId.get(entities[i]!)!;
+        const column = meta.archetype.columns.get(Position)!.value! as Float32Array;
+        const stride = column.length / meta.archetype.capacity;
+        assert.strictEqual(column[meta.row * stride], i * 10);
+        assert.strictEqual(column[meta.row * stride + 1], i * 10 + 1);
+      }
     });
   });
 });

@@ -1,8 +1,8 @@
 ---
 name: components
-description: Components -- defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged
+description: Components -- defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView
 metadata:
-  tags: component, defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged
+  tags: component, defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView, vector
 ---
 
 # Components
@@ -12,7 +12,9 @@ Components are typed data attached to entities. Each component has a schema that
 ```typescript
 import {
   defineComponent, addComponent, removeComponent, hasComponent,
-  getComponentValue, setComponentValue, markComponentChanged, Type,
+  getComponentValue, setComponentValue, markComponentChanged,
+  getComponentVectorValue, setComponentVectorValue, getComponentVectorView,
+  Type,
 } from "iris-ecs";
 ```
 
@@ -110,6 +112,44 @@ markComponentChanged(world, entity, Position);
 
 Marks a component as changed without setting a value through `setComponentValue`. Use this when you mutate component data through external means (e.g., directly writing to a TypedArray view) and need change detection to pick it up.
 
+## Vector Field Access
+
+Components with vector fields (see [schema.md](./schema.md)) use dedicated access functions instead of `getComponentValue` / `setComponentValue`. TypeScript enforces this at the type level -- scalar functions reject vector fields, and vector functions reject scalar fields.
+
+```typescript
+const Position = defineComponent("Position", { value: Type.f32(2) });
+
+addComponent(world, entity, Position, { value: [10, 20] });
+
+// Copy-based read -- returns a tuple, e.g. [number, number]
+const pos = getComponentVectorValue(world, entity, Position, "value");
+
+// Copy-based write
+setComponentVectorValue(world, entity, Position, "value", [30, 40]);
+
+// Zero-copy view -- TypedArray subarray backed by the column buffer
+const view = getComponentVectorView(world, entity, Position, "value");
+view[0] += 1.0; // direct mutation, no copy
+```
+
+`getComponentVectorView` returns a `TypedArray` subarray that shares the underlying buffer. Mutations are immediate. **Views are invalidated if the archetype resizes** (when new entities are added and capacity grows). Use views within a system tick; do not cache across frames. Call `markComponentChanged` after mutating a view if change detection needs to pick it up.
+
+Components can mix scalar and vector fields:
+
+```typescript
+const Particle = defineComponent("Particle", {
+  position: Type.f32(3),
+  mass: Type.f32(),
+});
+
+addComponent(world, entity, Particle, { position: [0, 0, 0], mass: 1.0 });
+
+const mass = getComponentValue(world, entity, Particle, "mass");            // number
+const pos = getComponentVectorValue(world, entity, Particle, "position");   // [number, number, number]
+```
+
+All three vector functions support `EntityWith<>` narrowing via `hasComponent`, matching the scalar API pattern.
+
 ## When to Use Components vs. Tags
 
 - Need to store even one field -- **Component** (`Health`, `Position`, `Sprite`)
@@ -170,9 +210,14 @@ const Position = defineComponent("Position", {
   x: Type.f32(),
   y: Type.f32(),
 });
+
+// ALSO RIGHT: vector field stores x,y interleaved in one column
+const Position = defineComponent("Position", {
+  value: Type.f32(2),
+});
 ```
 
-**Why:** Each flat numeric field gets its own TypedArray column. Iteration touches only the fields a system reads, and the data is cache-line friendly. An `object` field stores JS object references in a plain Array -- no TypedArray benefits, and the garbage collector must trace every reference.
+**Why:** Flat numeric fields and vector fields both use TypedArray storage. Flat fields give per-field column access (good when systems read x but not y). Vector fields give interleaved storage with better cache locality when systems always read all elements together (positions, colors, directions). An `object` field stores JS object references in a plain Array -- no TypedArray benefits, and the garbage collector must trace every reference.
 
 ---
 

@@ -49,25 +49,24 @@ import {
   defineTag,
   cacheQuery,
   addComponent,
-  getComponentValue,
-  setComponentValue,
+  getComponentVectorView,
   queryEntities,
   addSystem,
   runOnce,
   Type,
 } from "iris-ecs";
 
-// Define components
-const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+// Define components -- vector fields store x,y interleaved in one TypedArray
+const Position = defineComponent("Position", { value: Type.f32(2) });
+const Velocity = defineComponent("Velocity", { value: Type.f32(2) });
 const Player = defineTag("Player");
 
 // Create world and entities
 const world = createWorld();
 
 const player = createEntity(world);
-addComponent(world, player, Position, { x: 0, y: 0 });
-addComponent(world, player, Velocity, { x: 1, y: 0 });
+addComponent(world, player, Position, { value: [0, 0] });
+addComponent(world, player, Velocity, { value: [1, 0] });
 addComponent(world, player, Player);
 
 // Define a system -- init runs once, tick runs every frame
@@ -78,13 +77,11 @@ const movementSystem = defineSystem("movementSystem", (world) => {
   return () => {
     // Tick: runs every frame
     queryEntities(world, movers, (e) => {
-      const px = getComponentValue(world, e, Position, "x");
-      const py = getComponentValue(world, e, Position, "y");
-      const vx = getComponentValue(world, e, Velocity, "x");
-      const vy = getComponentValue(world, e, Velocity, "y");
+      const pos = getComponentVectorView(world, e, Position, "value");
+      const vel = getComponentVectorView(world, e, Velocity, "value");
 
-      setComponentValue(world, e, Position, "x", px + vx);
-      setComponentValue(world, e, Position, "y", py + vy);
+      pos[0] += vel[0];
+      pos[1] += vel[1];
     });
   };
 });
@@ -93,7 +90,7 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 addSystem(world, movementSystem);
 await runOnce(world);
 
-// Position is now { x: 1, y: 0 }
+// Position is now [1, 0]
 ```
 
 ## Core Concepts
@@ -187,16 +184,23 @@ import {
   addComponent,
   getComponentValue,
   setComponentValue,
+  getComponentVectorValue,
+  setComponentVectorValue,
+  getComponentVectorView,
 } from "iris-ecs";
 
-const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+const Position = defineComponent("Position", { value: Type.f32(2) });
 const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
 
-addComponent(world, entity, Position, { x: 0, y: 0 });
+addComponent(world, entity, Position, { value: [0, 0] });
 addComponent(world, entity, Health, { current: 100, max: 100 });
 
-const x = getComponentValue(world, entity, Position, "x");  // 0
-setComponentValue(world, entity, Position, "x", 10);
+// Scalar fields use getComponentValue / setComponentValue
+const hp = getComponentValue(world, entity, Health, "current");  // 100
+setComponentValue(world, entity, Health, "current", 80);
+
+// Vector fields use dedicated access functions
+const pos = getComponentVectorView(world, entity, Position, "value");  // Float32Array [0, 0]
 ```
 
 #### Schema Types
@@ -215,6 +219,8 @@ The `Type` namespace provides storage-optimized types:
 | `Type.string()` | Array | Text data |
 | `Type.object<T>()` | Array | Complex nested objects |
 
+All numeric type factories accept an optional size parameter (2-16) to create **vector fields** -- see [Vector Fields](#vector-fields) below.
+
 Numeric types use TypedArrays for cache-friendly memory layout. Use the smallest type that fits your data.
 
 #### Adding Components is Idempotent
@@ -222,13 +228,67 @@ Numeric types use TypedArrays for cache-friendly memory layout. Use the smallest
 Adding a component that already exists does nothing -- the existing data is preserved.
 
 ```typescript
-addComponent(world, entity, Position, { x: 0, y: 0 });
-addComponent(world, entity, Position, { x: 99, y: 99 });  // ignored
+addComponent(world, entity, Health, { current: 100, max: 100 });
+addComponent(world, entity, Health, { current: 50, max: 50 });  // ignored
 
-getComponentValue(world, entity, Position, "x");  // still 0
+getComponentValue(world, entity, Health, "current");  // still 100
 ```
 
 💡 **Tip:** Use `hasComponent()` to check first if you need conditional addition, or `setComponentValue()` to update existing data.
+
+#### Vector Fields
+
+When component fields represent logically grouped numbers (positions, colors, directions), use **vector fields** to store them interleaved in a single TypedArray column. Pass a size (2-16) to any numeric type factory:
+
+```typescript
+import {
+  defineComponent,
+  addComponent,
+  getComponentVectorValue,
+  setComponentVectorValue,
+  getComponentVectorView,
+  Type,
+} from "iris-ecs";
+
+const Position = defineComponent("Position", { value: Type.f32(2) });
+const Color = defineComponent("Color", { value: Type.u32(4) });
+
+const entity = createEntity(world);
+addComponent(world, entity, Position, { value: [10, 20] });
+addComponent(world, entity, Color, { value: [255, 128, 0, 255] });
+```
+
+Vector fields use dedicated access functions instead of the scalar `getComponentValue` / `setComponentValue`:
+
+```typescript
+// Copy-based read -- returns a tuple (e.g., [number, number])
+const pos = getComponentVectorValue(world, entity, Position, "value");
+
+// Copy-based write
+setComponentVectorValue(world, entity, Position, "value", [30, 40]);
+
+// Zero-copy view -- returns a TypedArray subarray backed by the column buffer
+const view = getComponentVectorView(world, entity, Position, "value");
+view[0] += 1.0; // direct mutation, no copy
+```
+
+The zero-copy view shares the underlying buffer -- mutations are immediate. Views are invalidated if the archetype resizes (when new entities are added and capacity grows). Use views within a system tick; do not cache across frames.
+
+Components can mix scalar and vector fields:
+
+```typescript
+const Particle = defineComponent("Particle", {
+  position: Type.f32(3),
+  mass: Type.f32(),
+});
+
+addComponent(world, entity, Particle, { position: [0, 0, 0], mass: 1.0 });
+
+const mass = getComponentValue(world, entity, Particle, "mass");            // number
+const pos = getComponentVectorValue(world, entity, Particle, "position");   // [number, number, number]
+```
+
+TypeScript enforces the scalar/vector boundary at the type level -- `getComponentValue` rejects vector fields, and `getComponentVectorValue` rejects scalar fields.
 
 ### Resources
 
@@ -366,21 +426,23 @@ An **Archetype** groups entities that share the same component set. All entities
 
 ```
 Archetype [Position, Velocity]
-┌─────────┬─────────┬─────────┐
-│ Entity  │ Pos.x/y │ Vel.x/y │
-├─────────┼─────────┼─────────┤
-│ bullet1 │  10, 5  │  1, 0   │
-│ bullet2 │  15, 8  │  1, 0   │
-└─────────┴─────────┴─────────┘
+┌─────────┬──────────────────┬──────────────────┐
+│ Entity  │ Position (vec2)  │ Velocity (vec2)  │
+├─────────┼──────────────────┼──────────────────┤
+│ bullet1 │  [10, 5]         │  [1, 0]          │
+│ bullet2 │  [15, 8]         │  [1, 0]          │
+└─────────┴──────────────────┴──────────────────┘
 
 Archetype [Position, Velocity, Health]
-┌─────────┬─────────┬─────────┬─────────┐
-│ Entity  │ Pos.x/y │ Vel.x/y │ Health  │
-├─────────┼─────────┼─────────┼─────────┤
-│ player  │   0, 0  │   1, 0  │   100   │
-│ enemy   │  50, 20 │  -1, 0  │    50   │
-└─────────┴─────────┴─────────┴─────────┘
+┌─────────┬──────────────────┬──────────────────┬─────────┐
+│ Entity  │ Position (vec2)  │ Velocity (vec2)  │ Health  │
+├─────────┼──────────────────┼──────────────────┼─────────┤
+│ player  │  [0, 0]          │  [1, 0]          │   100   │
+│ enemy   │  [50, 20]        │  [-1, 0]         │    50   │
+└─────────┴──────────────────┴──────────────────┴─────────┘
 ```
+
+Vector fields like Position store all elements interleaved in a single TypedArray column: `[x0, y0, x1, y1, ...]`. This keeps each entity's vector contiguous in memory for cache-friendly access.
 
 Within an archetype, component data is stored in **columns** (TypedArrays for numeric types). When a query iterates entities with `Position` and `Velocity`, it walks through archetypes that contain both components. This columnar layout keeps data contiguous rather than scattered across objects, reducing memory overhead and enabling efficient iteration.
 
@@ -397,7 +459,7 @@ import { queryEntities, queryFirstEntity, cacheQuery, not } from "iris-ecs";
 
 // Iterate all entities with Position and Velocity
 queryEntities(world, [Position, Velocity], (entity) => {
-  const x = getComponentValue(world, entity, Position, "x");
+  const pos = getComponentVectorView(world, entity, Position, "value")!;
   // ...
 });
 
@@ -457,8 +519,7 @@ import {
   run,
   stop,
   queryEntities,
-  getComponentValue,
-  setComponentValue,
+  getComponentVectorView,
   getResourceValue,
 } from "iris-ecs";
 
@@ -471,10 +532,11 @@ const movementSystem = defineSystem("movementSystem", (world) => {
     const dt = getResourceValue(world, Time, "delta") ?? 0;
 
     queryEntities(world, movers, (e) => {
-      const x = getComponentValue(world, e, Position, "x");
-      const vx = getComponentValue(world, e, Velocity, "x");
+      const pos = getComponentVectorView(world, e, Position, "value");
+      const vel = getComponentVectorView(world, e, Velocity, "value");
 
-      setComponentValue(world, e, Position, "x", x + vx * dt);
+      pos[0] += vel[0] * dt;
+      pos[1] += vel[1] * dt;
     });
   };
 });
@@ -492,8 +554,8 @@ For simple systems that don't need one-time setup, plain functions also work, an
 
 ```typescript
 function debugSystem(world) {
-  queryEntities(world, [Position], (e) => {
-    console.log(getComponentValue(world, e, Position, "x"));
+  queryEntities(world, [Health], (e) => {
+    console.log(getComponentValue(world, e, Health, "current"));
   });
 }
 
@@ -613,13 +675,13 @@ import { defineActions, createEntity, addComponent } from "iris-ecs";
 const spawnActions = defineActions((world) => ({
   player(x: number, y: number) {
     const entity = createEntity(world);
-    addComponent(world, entity, Position, { x, y });
+    addComponent(world, entity, Position, { value: [x, y] });
     addComponent(world, entity, Player);
     return entity;
   },
   enemy(x: number, y: number) {
     const entity = createEntity(world);
-    addComponent(world, entity, Position, { x, y });
+    addComponent(world, entity, Position, { value: [x, y] });
     addComponent(world, entity, Enemy);
     return entity;
   },

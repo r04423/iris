@@ -5,9 +5,12 @@ import {
   addComponent,
   emitComponentChanged,
   getComponentValue,
+  getComponentVectorValue,
+  getComponentVectorView,
   hasComponent,
   removeComponent,
   setComponentValue,
+  setComponentVectorValue,
 } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
@@ -1176,6 +1179,195 @@ describe("Component", () => {
 
       assert.strictEqual(ticks.added[meta.row], 10);
       assert.strictEqual(ticks.changed[meta.row], 30);
+    });
+  });
+
+  // ============================================================================
+  // Vector Field Access
+  // ============================================================================
+
+  describe("Vector Field Access", () => {
+    it("gets vector value as tuple copy", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10.5, 20.5] });
+
+      const pos = getComponentVectorValue(world, entity, Position, "value");
+      assert.deepStrictEqual(pos, [10.5, 20.5]);
+    });
+
+    it("returns a copy, not a reference into the column", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      const pos = getComponentVectorValue(world, entity, Position, "value")!;
+      pos[0] = 999;
+
+      const pos2 = getComponentVectorValue(world, entity, Position, "value");
+      assert.deepStrictEqual(pos2, [10, 20]);
+    });
+
+    it("sets vector value from tuple", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [0, 0] });
+
+      setComponentVectorValue(world, entity, Position, "value", [30.5, 40.5]);
+
+      const pos = getComponentVectorValue(world, entity, Position, "value");
+      assert.deepStrictEqual(pos, [30.5, 40.5]);
+    });
+
+    it("gets vector view as typed array subarray", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      const view = getComponentVectorView(world, entity, Position, "value");
+      assert.ok(view instanceof Float32Array);
+      assert.strictEqual(view.length, 2);
+      assert.strictEqual(view[0], 10);
+      assert.strictEqual(view[1], 20);
+    });
+
+    it("view mutations are visible to get", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      const view = getComponentVectorView(world, entity, Position, "value")!;
+      view[0] = 99;
+      view[1] = 88;
+
+      const pos = getComponentVectorValue(world, entity, Position, "value");
+      assert.deepStrictEqual(pos, [99, 88]);
+    });
+
+    it("returns undefined for missing component", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+
+      assert.strictEqual(getComponentVectorValue(world, entity, Position, "value"), undefined);
+      assert.strictEqual(getComponentVectorView(world, entity, Position, "value"), undefined);
+    });
+
+    it("set updates change detection tick", async () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [0, 0] });
+
+      let changeCount = 0;
+      addSystem(world, function counter() {
+        queryEntities(world, [changed(Position)], () => {
+          changeCount++;
+        });
+      });
+
+      await runOnce(world);
+      assert.strictEqual(changeCount, 1); // added counts as changed
+
+      await runOnce(world);
+      assert.strictEqual(changeCount, 1); // no change
+
+      setComponentVectorValue(world, entity, Position, "value", [1, 2]);
+      await runOnce(world);
+      assert.strictEqual(changeCount, 2); // changed
+    });
+
+    it("supports vec3 (stride 3)", () => {
+      const world = createWorld();
+      const Position3D = defineComponent("Position3D", { value: Type.f32(3) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position3D, { value: [1, 2, 3] });
+
+      const pos = getComponentVectorValue(world, entity, Position3D, "value");
+      assert.deepStrictEqual(pos, [1, 2, 3]);
+
+      const view = getComponentVectorView(world, entity, Position3D, "value")!;
+      assert.strictEqual(view.length, 3);
+    });
+
+    it("supports vec4 (stride 4)", () => {
+      const world = createWorld();
+      const Color = defineComponent("Color", { value: Type.u32(4) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Color, { value: [255, 128, 0, 255] });
+
+      const color = getComponentVectorValue(world, entity, Color, "value");
+      assert.deepStrictEqual(color, [255, 128, 0, 255]);
+    });
+
+    it("mixed scalar and vector fields on same component", () => {
+      const world = createWorld();
+      const Particle = defineComponent("Particle", {
+        position: Type.f32(3),
+        mass: Type.f32(),
+      });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Particle, { position: [1, 2, 3], mass: 9.8 });
+
+      const pos = getComponentVectorValue(world, entity, Particle, "position");
+      assert.deepStrictEqual(pos, [1, 2, 3]);
+
+      const mass = getComponentValue(world, entity, Particle, "mass");
+      assert.strictEqual(mass, Math.fround(9.8));
+    });
+
+    it("preserves vector data during archetype transitions", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Velocity = defineComponent("Velocity", { value: Type.f32(2) });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { value: [10, 20] });
+
+      addComponent(world, entity, Velocity, { value: [1, 2] });
+
+      const pos = getComponentVectorValue(world, entity, Position, "value");
+      assert.deepStrictEqual(pos, [10, 20]);
+
+      const vel = getComponentVectorValue(world, entity, Velocity, "value");
+      assert.deepStrictEqual(vel, [1, 2]);
+
+      removeComponent(world, entity, Position);
+
+      const velAfter = getComponentVectorValue(world, entity, Velocity, "value");
+      assert.deepStrictEqual(velAfter, [1, 2]);
+    });
+
+    it("handles multiple entities with vector components", () => {
+      const world = createWorld();
+      const Position = defineComponent("Position", { value: Type.f32(2) });
+
+      const entities: EntityId[] = [];
+      for (let i = 0; i < 5; i++) {
+        const e = createEntity(world);
+        addComponent(world, e, Position, { value: [i * 10, i * 10 + 1] });
+        entities.push(e);
+      }
+
+      for (let i = 0; i < 5; i++) {
+        const pos = getComponentVectorValue(world, entities[i]!, Position, "value");
+        assert.deepStrictEqual(pos, [i * 10, i * 10 + 1]);
+      }
     });
   });
 });

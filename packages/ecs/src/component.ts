@@ -1,11 +1,11 @@
-import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype } from "./archetype.js";
+import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype, getColumnStride } from "./archetype.js";
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, isPair } from "./encoding.js";
 import { ensureEntity, moveEntityToArchetype } from "./entity.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets } from "./relation.js";
-import type { InferSchema, InferSchemaRecord, SchemaRecord } from "./schema.js";
+import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -85,10 +85,39 @@ export function addComponent<S extends SchemaRecord>(
 
   moveEntityToArchetype(world, entityMeta, toArchetype);
 
+  // Write initial field data inline to avoid repeated ensureEntity lookups
+  // and support stride-aware writes for vector fields
   if (data) {
-    for (const fieldName in data) {
-      const value = data[fieldName];
-      setComponentValue(world, entityId, componentId as Component<S>, fieldName as keyof S, value);
+    const fieldColumns = entityMeta.archetype.columns.get(componentId);
+
+    if (fieldColumns) {
+      for (const fieldName in data) {
+        const value = data[fieldName];
+        const column = fieldColumns[fieldName as string];
+
+        if (!column) {
+          continue;
+        }
+
+        const stride = getColumnStride(column, entityMeta.archetype.capacity);
+
+        if (stride === 1) {
+          column[entityMeta.row] = value;
+        } else {
+          const offset = entityMeta.row * stride;
+
+          for (let i = 0; i < stride; i++) {
+            column[offset + i] = (value as number[])[i]!;
+          }
+        }
+      }
+
+      const ticks = entityMeta.archetype.ticks.get(componentId);
+      if (ticks) {
+        ticks.changed[entityMeta.row] = world.execution.tick;
+      }
+
+      fireObserverEvent(world, "componentChanged", componentId, entityId);
     }
   }
 
@@ -337,6 +366,185 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
+}
+
+// ============================================================================
+// Vector Component Operations (Public API)
+// ============================================================================
+
+/**
+ * Get vector component field value as a tuple copy.
+ *
+ * Returns a new array containing the vector elements. Mutations to the
+ * returned array do not affect the stored data.
+ *
+ * @param world - World instance
+ * @param entityId - Entity to query
+ * @param componentId - Data component with vector field
+ * @param fieldName - Vector field name
+ * @returns Tuple copy of vector value, or undefined if component/field not present
+ *
+ * @example
+ * ```typescript
+ * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * const pos = getComponentVectorValue(world, entity, Position, "value"); // [number, number]
+ * ```
+ */
+export function getComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityWith<Component<S, N>>,
+  componentId: Component<S, N>,
+  fieldName: K
+): InferSchema<S[K]>;
+
+export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K
+): InferSchema<S[K]> | undefined;
+
+export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K
+): InferSchema<S[K]> | undefined {
+  const { archetype, row } = ensureEntity(world, entityId);
+
+  const fieldColumns = archetype.columns.get(componentId);
+  if (!fieldColumns) return;
+
+  const column = fieldColumns[fieldName as string];
+  if (!column) return;
+
+  const stride = getColumnStride(column, archetype.capacity);
+  const offset = row * stride;
+  const result = [];
+
+  for (let i = 0; i < stride; i++) {
+    result[i] = column[offset + i];
+  }
+
+  return result as InferSchema<S[K]>;
+}
+
+/**
+ * Set vector component field value from a tuple.
+ *
+ * Copies the tuple elements into the interleaved column. Updates change
+ * detection tick and fires componentChanged observer.
+ *
+ * @param world - World instance
+ * @param entityId - Entity to modify
+ * @param componentId - Data component with vector field
+ * @param fieldName - Vector field name
+ * @param value - Tuple of values to set
+ *
+ * @example
+ * ```typescript
+ * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * setComponentVectorValue(world, entity, Position, "value", [10, 20]);
+ * ```
+ */
+export function setComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityWith<Component<S, N>>,
+  componentId: Component<S, N>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void {
+  const { archetype, row } = ensureEntity(world, entityId);
+
+  const fieldColumns = archetype.columns.get(componentId);
+  if (!fieldColumns) return;
+
+  const column = fieldColumns[fieldName as string];
+  if (!column) return;
+
+  const stride = getColumnStride(column, archetype.capacity);
+  const offset = row * stride;
+
+  for (let i = 0; i < stride; i++) {
+    column[offset + i] = (value as number[])[i]!;
+  }
+
+  const ticks = archetype.ticks.get(componentId);
+  if (ticks) {
+    ticks.changed[row] = world.execution.tick;
+  }
+
+  fireObserverEvent(world, "componentChanged", componentId, entityId);
+}
+
+/**
+ * Get a zero-copy typed array view into a vector component field.
+ *
+ * Returns a `subarray` view that shares the underlying buffer. Mutations
+ * to the view directly modify the stored data. **The view is invalidated
+ * if the archetype resizes** (e.g., when new entities cause capacity growth).
+ * Use within a system tick; do not cache across frames.
+ *
+ * @param world - World instance
+ * @param entityId - Entity to query
+ * @param componentId - Data component with vector field
+ * @param fieldName - Vector field name
+ * @returns Typed array view into the vector, or undefined if component/field not present
+ *
+ * @example
+ * ```typescript
+ * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * const view = getComponentVectorView(world, entity, Position, "value"); // Float32Array
+ * view[0] += 1.0; // direct mutation, no copy
+ * ```
+ */
+export function getComponentVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityWith<Component<S, N>>,
+  componentId: Component<S, N>,
+  fieldName: K
+): TypedArrayInstance;
+
+export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K
+): TypedArrayInstance | undefined;
+
+export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S>,
+  fieldName: K
+): TypedArrayInstance | undefined {
+  const { archetype, row } = ensureEntity(world, entityId);
+
+  const fieldColumns = archetype.columns.get(componentId);
+  if (!fieldColumns) return;
+
+  const column = fieldColumns[fieldName as string];
+  if (!column || Array.isArray(column)) return;
+
+  const stride = getColumnStride(column, archetype.capacity);
+  const offset = row * stride;
+  return column.subarray(offset, offset + stride) as TypedArrayInstance;
 }
 
 // ============================================================================

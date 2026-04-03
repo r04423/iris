@@ -54,7 +54,7 @@ run(world); // starts a requestAnimationFrame loop
 
 - **World** - Container for all ECS state. Created with `createWorld()`. Passed as first argument to every operation. No globals, no singletons.
 - **Entity** - A unique 32-bit identifier. Has no data of its own, just an ID for attaching components. Created with `createEntity(world)`.
-- **Component** - Typed data attached to an entity. Defined with a schema of typed fields (e.g., `{ x: Type.f32(), y: Type.f32() }`). Numeric fields use TypedArrays for cache-friendly columnar storage.
+- **Component** - Typed data attached to an entity. Defined with a schema of typed fields (e.g., `{ x: Type.f32(), y: Type.f32() }`). Numeric fields use TypedArrays for cache-friendly columnar storage. Numeric type factories accept an optional size (2-16) for vector fields (e.g., `Type.f32(3)` for a vec3) -- these store elements interleaved in a single column and use dedicated `getComponentVectorValue` / `setComponentVectorValue` / `getComponentVectorView` functions.
 - **Tag** - A component with no data. Lightweight marker for filtering entities (e.g., `Dead`, `Player`, `Selected`). Defined with `defineTag("Name")`.
 - **Resource** - World-level shared state. The correct way to store global data. Do NOT use module-level variables or system-local state for data that other systems need to read. Managed with `addResource` / `getResourceValue` / `setResourceValue`.
 - **Archetype** - Internal grouping of entities sharing the same component set. Adding / removing components moves entities between archetypes (expensive). Reading / writing component values is cheap (direct TypedArray access).
@@ -74,8 +74,8 @@ Each rule file covers one concept. Load the relevant file for the task at hand. 
 - [world.md](./rules/world.md) - World lifecycle: `createWorld`, `resetWorld`
 - [entities.md](./rules/entities.md) - Entity lifecycle: `createEntity`, `destroyEntity`, `isEntityAlive`, ID recycling, 32-bit encoding
 - [naming.md](./rules/naming.md) - Entity names: `setName`, `getName`, `removeName`, `lookupByName`
-- [schema.md](./rules/schema.md) - Schema types: `Type.f32()`, `Type.i32()`, `Type.u32()`, `Type.bool()`, `Type.string()`, `Type.object()`, TypedArray mapping, schema design
-- [components.md](./rules/components.md) - Components: `defineComponent`, `addComponent`, `removeComponent`, `hasComponent`, `getComponentValue`, `setComponentValue`, `markComponentChanged`
+- [schema.md](./rules/schema.md) - Schema types: `Type.f32()`, `Type.i32()`, `Type.u32()`, `Type.bool()`, `Type.string()`, `Type.object()`, TypedArray mapping, vector fields (`Type.f32(2)`), schema design
+- [components.md](./rules/components.md) - Components: `defineComponent`, `addComponent`, `removeComponent`, `hasComponent`, `getComponentValue`, `setComponentValue`, `markComponentChanged`, `getComponentVectorValue`, `setComponentVectorValue`, `getComponentVectorView`
 - [tags.md](./rules/tags.md) - Tags: `defineTag`, tag patterns, when to use tags vs. components
 - [resources.md](./rules/resources.md) - Resources (global state): `addResource`, `removeResource`, `hasResource`, `getResourceValue`, `setResourceValue`
 - [queries.md](./rules/queries.md) - Queries and filters: `queryEntities`, `queryFirstEntity`, `collectEntities`, `cacheQuery`, `not()`
