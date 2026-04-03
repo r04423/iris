@@ -1,7 +1,7 @@
 import type { EntityId } from "./encoding.js";
 import { addEntityRecord, removeEntityRecord } from "./entity.js";
 import { fireObserverEvent } from "./observer.js";
-import type { Schema, SchemaRecord, TypedArrayConstructor } from "./schema.js";
+import type { Schema, SchemaRecord, TypedArrayConstructor, TypedArrayInstance } from "./schema.js";
 import { Type } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -23,6 +23,25 @@ export type Column = Int8Array | Int16Array | Int32Array | Uint32Array | Float32
  */
 export type FieldColumns = {
   [fieldName: string]: Column;
+};
+
+/**
+ * Map a schema record to its column types.
+ *
+ * Each field maps to the runtime array type used for storage.
+ *
+ * @internal
+ */
+export type FieldColumnsOf<S extends SchemaRecord> = {
+  [K in keyof S]: S[K] extends Schema<number>
+    ? TypedArrayInstance
+    : S[K] extends Schema<number[]>
+      ? TypedArrayInstance
+      : S[K] extends Schema<boolean>
+        ? boolean[]
+        : S[K] extends Schema<string>
+          ? string[]
+          : unknown[];
 };
 
 /**

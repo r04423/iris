@@ -1,4 +1,5 @@
-import type { EntityId, EntityWith } from "./encoding.js";
+import type { FieldColumnsOf } from "./archetype.js";
+import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding.js";
 import { assert, InvalidArgument } from "./error.js";
 import type { FilterMeta } from "./filters.js";
 import { ensureFilter } from "./filters.js";
@@ -14,11 +15,16 @@ import type { World } from "./world.js";
 declare const QUERY_COMPONENTS_BRAND: unique symbol;
 
 /**
+ * Phantom brand for carrying original query terms tuple on QueryMeta (covariant).
+ */
+declare const QUERY_TERMS_BRAND: unique symbol;
+
+/**
  * Query metadata for registry caching.
  *
  * Stores required and excluded components with reference to underlying filter.
  */
-export type QueryMeta<C extends EntityId = EntityId> = {
+export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (EntityId | QueryModifier)[]> = {
   /**
    * Required components.
    */
@@ -53,6 +59,11 @@ export type QueryMeta<C extends EntityId = EntityId> = {
    * Phantom field carrying guaranteed-present component types via contravariance.
    */
   readonly [QUERY_COMPONENTS_BRAND]: (c: C) => void;
+
+  /**
+   * Phantom field carrying original query terms tuple (covariant).
+   */
+  readonly [QUERY_TERMS_BRAND]?: T;
 };
 
 // ============================================================================
@@ -133,6 +144,30 @@ function isModifier(arg: unknown): arg is QueryModifier {
 }
 
 // ============================================================================
+// Column Query Types
+// ============================================================================
+
+/**
+ * Map a query terms tuple to a tuple of field column types.
+ *
+ * Data-bearing terms (Components, Pairs with schema) produce a `FieldColumnsOf` entry.
+ * Non-data terms (Tags, data-less Pairs, NotModifiers) are skipped.
+ */
+export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
+  ? Head extends NotModifier
+    ? ColumnsTuple<Tail>
+    : Head extends Component<infer S>
+      ? [FieldColumnsOf<S>, ...ColumnsTuple<Tail>]
+      : Head extends Pair<infer R>
+        ? R extends Relation<infer S>
+          ? keyof S extends never
+            ? ColumnsTuple<Tail>
+            : [FieldColumnsOf<S>, ...ColumnsTuple<Tail>]
+          : ColumnsTuple<Tail>
+        : ColumnsTuple<Tail>
+  : [];
+
+// ============================================================================
 // Query Hashing
 // ============================================================================
 
@@ -175,7 +210,7 @@ export function hashQuery(include: EntityId[], exclude: EntityId[], added: Entit
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
   ...terms: [...T]
-): QueryMeta<ExtractIncluded<T>> {
+): QueryMeta<ExtractIncluded<T>, T> {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
@@ -224,7 +259,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
     world.queries.byId.set(queryId, queryMeta);
   }
 
-  return queryMeta as QueryMeta<ExtractIncluded<T>>;
+  return queryMeta as unknown as QueryMeta<ExtractIncluded<T>, T>;
 }
 
 // ============================================================================
@@ -450,4 +485,114 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
   });
 
   return result;
+}
+
+// ============================================================================
+// Column Query Iteration
+// ============================================================================
+
+/**
+ * Iterate matching archetypes with direct column access.
+ *
+ * Low-level query API that exposes raw storage arrays for high-performance iteration.
+ * The callback fires once per matching archetype with the archetype's live entities
+ * array and column parameters for each data-bearing term.
+ *
+ * Only `not()` modifiers are supported. `added()` and `changed()` are rejected —
+ * use `queryEntities` for change detection.
+ *
+ * The `entities` array is the archetype's live backing store. If mutating
+ * (destroying entities, adding/removing components) during iteration,
+ * iterate backward to avoid skipping entities due to swap-and-pop.
+ *
+ * @param world - World instance
+ * @param termsOrQuery - Array of component IDs and not() modifiers, or pre-built QueryMeta
+ * @param callback - Called for each matching archetype. Return `false` to stop iteration
+ *
+ * @example
+ * ```typescript
+ * // Direct column access for high-performance iteration
+ * queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+ *   for (let i = 0; i < entities.length; i++) {
+ *     pos.x[i] += vel.x[i]!;
+ *     pos.y[i] += vel.y[i]!;
+ *   }
+ * });
+ *
+ * // Pre-cached query
+ * const q = cacheQuery(world, Position, Velocity, not(Dead));
+ * queryColumns(world, q, (entities, pos, vel) => { ... });
+ *
+ * // Mutation-safe backward iteration
+ * queryColumns(world, [Position, Health], (entities, pos, health) => {
+ *   for (let i = entities.length - 1; i >= 0; i--) {
+ *     if (health.hp[i]! <= 0) {
+ *       destroyEntity(world, entities[i]!);
+ *     }
+ *   }
+ * });
+ * ```
+ */
+export function queryColumns<T extends (EntityId | NotModifier)[]>(
+  world: World,
+  terms: [...T],
+  callback: (entities: EntityId[], ...columns: ColumnsTuple<T>) => unknown
+): void;
+
+export function queryColumns<C extends EntityId, T extends unknown[]>(
+  world: World,
+  query: QueryMeta<C, T>,
+  callback: (entities: EntityId[], ...columns: ColumnsTuple<T>) => unknown
+): void;
+
+export function queryColumns(
+  world: World,
+  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
+  // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
+  callback: (entities: any, ...columns: any[]) => unknown
+): void {
+  const queryMeta = resolveQuery(world, termsOrQuery);
+
+  assert(queryMeta.added.length === 0 && queryMeta.changed.length === 0, InvalidArgument, {
+    expected: "queryColumns does not support added() or changed() modifiers",
+  });
+
+  const archetypes = queryMeta.filter.archetypes;
+  const include = queryMeta.include;
+
+  // Callback args laid out as [entities, col0, col1, ...]. Single allocation
+  // reused across all archetype iterations — apply() passes them as individual
+  // parameters matching the caller's (entities, pos, vel, ...) signature
+  const args: unknown[] = [];
+
+  for (let a = 0; a < archetypes.length; a++) {
+    const archetype = archetypes[a]!;
+
+    if (archetype.entities.length === 0) {
+      continue;
+    }
+
+    // First arg is always the live entities array
+    args[0] = archetype.entities;
+    let col = 1;
+
+    // Resolve columns for each included term. Tags and data-less pairs have
+    // no entry in archetype.columns, so they are naturally skipped, and only
+    // data-bearing components and pairs produce callback parameters
+    for (let t = 0; t < include.length; t++) {
+      const cols = archetype.columns.get(include[t]!);
+
+      if (cols) {
+        args[col++] = cols;
+      }
+    }
+
+    // Truncate to actual column count
+    args.length = col;
+
+    // biome-ignore lint/complexity/noBannedTypes: apply() avoids per-archetype spread allocation
+    if ((callback as Function).apply(undefined, args) === false) {
+      return;
+    }
+  }
 }

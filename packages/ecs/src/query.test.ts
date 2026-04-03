@@ -13,6 +13,7 @@ import {
   ensureQuery,
   hashQuery,
   not,
+  queryColumns,
   queryEntities,
   queryFirstEntity,
 } from "./query.js";
@@ -1862,6 +1863,289 @@ describe("Query", () => {
       await runOnce(world);
       assert.strictEqual(seen.length, 1);
       assert.strictEqual(seen[0], entity);
+    });
+  });
+
+  describe("queryColumns", () => {
+    describe("Basic Iteration", () => {
+      it("iterates single archetype with correct column data", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_Position", { x: Type.f32(), y: Type.f32() });
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 10, y: 20 });
+        addComponent(world, e2, Position, { x: 30, y: 40 });
+
+        let callCount = 0;
+
+        queryColumns(world, [Position], (entities, pos) => {
+          callCount++;
+
+          assert.strictEqual(entities.length, 2);
+          assert.strictEqual(pos.x[0], 10);
+          assert.strictEqual(pos.y[0], 20);
+          assert.strictEqual(pos.x[1], 30);
+          assert.strictEqual(pos.y[1], 40);
+        });
+
+        assert.strictEqual(callCount, 1);
+      });
+    });
+
+    describe("Multi-Archetype", () => {
+      it("fires callback for each matching archetype", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_ma_Position", { x: Type.f32() });
+        const Velocity = defineComponent("qc_ma_Velocity", { vx: Type.f32() });
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
+
+        let callCount = 0;
+        const xValues: number[] = [];
+
+        queryColumns(world, [Position], (entities, pos) => {
+          callCount++;
+          for (let i = 0; i < entities.length; i++) {
+            xValues.push(pos.x[i]!);
+          }
+        });
+
+        assert.strictEqual(callCount, 2);
+        assert.deepStrictEqual(xValues.sort(), [1, 2]);
+      });
+    });
+
+    describe("Tags", () => {
+      it("uses tags for filtering but excludes them from column parameters", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_tag_Position", { x: Type.f32() });
+        const IsEnemy = defineTag("qc_IsEnemy");
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e1, IsEnemy);
+        addComponent(world, e2, Position, { x: 2 });
+
+        let matchedCount = 0;
+
+        // Tag is used for filtering but does not produce a column parameter
+        queryColumns(world, [Position, IsEnemy], (entities, pos) => {
+          matchedCount += entities.length;
+          assert.strictEqual(pos.x[0], 1);
+        });
+
+        assert.strictEqual(matchedCount, 1);
+      });
+    });
+
+    describe("not() Modifier", () => {
+      it("excludes matching archetypes", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_not_Position", { x: Type.f32() });
+        const Dead = defineTag("qc_Dead");
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Dead);
+
+        const xValues: number[] = [];
+
+        queryColumns(world, [Position, not(Dead)], (entities, pos) => {
+          for (let i = 0; i < entities.length; i++) {
+            xValues.push(pos.x[i]!);
+          }
+        });
+
+        assert.deepStrictEqual(xValues, [1]);
+      });
+    });
+
+    describe("Modifier Restrictions", () => {
+      it("rejects added() modifier", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_rej_Position", { x: Type.f32() });
+
+        assert.throws(
+          // @ts-expect-error added() is intentionally rejected by the type system
+          () => queryColumns(world, [added(Position)], () => {}),
+          (err: Error) => err.message.includes("queryColumns does not support added() or changed() modifiers")
+        );
+      });
+
+      it("rejects changed() modifier", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_rejc_Position", { x: Type.f32() });
+
+        assert.throws(
+          // @ts-expect-error changed() is intentionally rejected by the type system
+          () => queryColumns(world, [changed(Position)], () => {}),
+          (err: Error) => err.message.includes("queryColumns does not support added() or changed() modifiers")
+        );
+      });
+    });
+
+    describe("Pairs", () => {
+      it("provides column parameters for pairs with data", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_pair_Position", { x: Type.f32() });
+        const Likes = defineRelation("qc_Likes", { schema: { strength: Type.f32() } });
+        const target = createEntity(world);
+        const e1 = createEntity(world);
+        const likesTarget = pair(Likes, target);
+
+        addComponent(world, e1, Position, { x: 10 });
+        addComponent(world, e1, likesTarget, { strength: 0.8 });
+
+        queryColumns(world, [Position, likesTarget], (entities, pos, likes) => {
+          assert.strictEqual(entities.length, 1);
+          assert.strictEqual(pos.x[0], 10);
+          assert.ok(Math.abs(likes.strength[0]! - 0.8) < 0.001);
+        });
+      });
+
+      it("excludes data-less pairs from column parameters", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_dlp_Position", { x: Type.f32() });
+        const ChildOf = defineRelation("qc_ChildOf");
+        const parent = createEntity(world);
+        const child = createEntity(world);
+        const childOfParent = pair(ChildOf, parent);
+
+        addComponent(world, child, Position, { x: 5 });
+        addComponent(world, child, childOfParent);
+
+        // Data-less pair does not produce a column parameter — only pos
+        queryColumns(world, [Position, childOfParent], (_entities, pos) => {
+          assert.strictEqual(pos.x[0], 5);
+        });
+      });
+    });
+
+    describe("Pre-Cached Query", () => {
+      it("works with pre-cached query from ensureQuery", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_cache_Position", { x: Type.f32() });
+        const e1 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 42 });
+
+        const q = ensureQuery(world, Position);
+        let called = false;
+
+        queryColumns(world, q, (entities, pos) => {
+          called = true;
+          assert.strictEqual(entities.length, 1);
+          assert.strictEqual(pos.x[0], 42);
+        });
+
+        assert.strictEqual(called, true);
+      });
+    });
+
+    describe("Early Exit", () => {
+      it("stops iteration when callback returns false", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_exit_Position", { x: Type.f32() });
+        const Velocity = defineComponent("qc_exit_Velocity", { vx: Type.f32() });
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
+
+        let callCount = 0;
+
+        queryColumns(world, [Position], (_entities, _pos) => {
+          callCount++;
+          return false;
+        });
+
+        assert.strictEqual(callCount, 1);
+      });
+    });
+
+    describe("Empty Archetypes", () => {
+      it("skips archetypes with no entities", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_empty_Position", { x: Type.f32() });
+        const Velocity = defineComponent("qc_empty_Velocity", { vx: Type.f32() });
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
+
+        destroyEntity(world, e2);
+
+        let callCount = 0;
+
+        queryColumns(world, [Position], (entities, _pos) => {
+          callCount++;
+          assert.ok(entities.length > 0);
+        });
+
+        assert.strictEqual(callCount, 1);
+      });
+    });
+
+    describe("Mutation Safety", () => {
+      it("supports safe backward iteration with entity destruction", () => {
+        const world = createWorld();
+        const Health = defineComponent("qc_mut_Health", { hp: Type.i32() });
+        const entities: ReturnType<typeof createEntity>[] = [];
+
+        for (let i = 0; i < 5; i++) {
+          const e = createEntity(world);
+          addComponent(world, e, Health, { hp: i < 3 ? 0 : 100 });
+          entities.push(e);
+        }
+
+        queryColumns(world, [Health], (ents, health) => {
+          for (let i = ents.length - 1; i >= 0; i--) {
+            if (health.hp[i]! <= 0) {
+              destroyEntity(world, ents[i]!);
+            }
+          }
+        });
+
+        let remaining = 0;
+        queryColumns(world, [Health], (ents) => {
+          remaining += ents.length;
+        });
+
+        assert.strictEqual(remaining, 2);
+      });
+    });
+
+    describe("Vector Columns", () => {
+      it("provides stride-based access through column references", () => {
+        const world = createWorld();
+        const Position = defineComponent("qc_vec_Position", { value: Type.f32(3) });
+        const e1 = createEntity(world);
+        const e2 = createEntity(world);
+
+        addComponent(world, e1, Position, { value: [1, 2, 3] });
+        addComponent(world, e2, Position, { value: [4, 5, 6] });
+
+        queryColumns(world, [Position], (_entities, pos) => {
+          assert.strictEqual(pos.value[0], 1);
+          assert.strictEqual(pos.value[1], 2);
+          assert.strictEqual(pos.value[2], 3);
+          assert.strictEqual(pos.value[3], 4);
+          assert.strictEqual(pos.value[4], 5);
+          assert.strictEqual(pos.value[5], 6);
+        });
+      });
     });
   });
 });

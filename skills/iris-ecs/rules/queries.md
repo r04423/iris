@@ -1,8 +1,8 @@
 ---
 name: queries
-description: Queries -- queryEntities, collectEntities, queryFirstEntity, cacheQuery, not(), query modifiers, archetype-based filtering
+description: Queries -- queryEntities, queryColumns, collectEntities, queryFirstEntity, cacheQuery, not(), query modifiers, archetype-based filtering
 metadata:
-  tags: query, queryEntities, collectEntities, queryFirstEntity, cacheQuery, not, filter, archetype
+  tags: query, queryEntities, queryColumns, collectEntities, queryFirstEntity, cacheQuery, not, filter, archetype
 ---
 
 # Queries
@@ -11,7 +11,7 @@ Queries fetch entities that match a set of component constraints.
 
 ```typescript
 import {
-  queryEntities, collectEntities, queryFirstEntity,
+  queryEntities, queryColumns, collectEntities, queryFirstEntity,
   cacheQuery, not,
 } from "iris-ecs";
 ```
@@ -202,6 +202,99 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 ```
 
 **Why:** `cacheQuery` returns the same object if the query already exists, so it's not catastrophically expensive -- but it's wasted work when you can hold the reference from init.
+
+## `queryColumns` -- Direct Column Access
+
+```typescript
+queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+  for (let i = 0; i < entities.length; i++) {
+    const offset = i * 2;
+    pos.value[offset] += vel.value[offset];
+    pos.value[offset + 1] += vel.value[offset + 1];
+  }
+});
+```
+
+Iterates matching archetypes and passes the raw column storage objects directly to the callback. Each callback invocation receives:
+
+1. `entities` -- the archetype's entity ID array
+2. One column object per data-bearing term (components and data relations), in query term order
+
+Tags and data-less pairs are skipped -- they produce no column parameter.
+
+Accepts inline terms or a pre-cached `QueryMeta`:
+
+```typescript
+const movers = cacheQuery(world, Position, Velocity, not(Frozen));
+
+queryColumns(world, movers, (entities, pos, vel) => {
+  // pos.value is the raw Float32Array for Position
+  // vel.value is the raw Float32Array for Velocity
+  for (let i = 0; i < entities.length; i++) {
+    const offset = i * 2;
+    pos.value[offset] += vel.value[offset];
+    pos.value[offset + 1] += vel.value[offset + 1];
+  }
+});
+```
+
+Return `false` to stop iteration early.
+
+**Restrictions:** `added()` and `changed()` modifiers are not supported -- throws `InvalidArgument`. Use `queryEntities` for change detection.
+
+### When to Use
+
+Use `queryColumns` when:
+- Processing large entity counts with tight TypedArray loops
+- Vectorizing operations over contiguous column data
+- Avoiding per-entity `getComponentValue` / `getComponentVectorView` overhead
+
+Use `queryEntities` when:
+- You need per-entity logic (conditionals, branching per entity)
+- Change detection (`added()`, `changed()`)
+- Working with non-numeric component fields (strings, objects)
+- Entity count is small or iteration isn't a bottleneck
+
+## Anti-Patterns
+
+---
+
+```typescript
+// WRONG: using queryEntities with per-entity getters in a tight numeric loop
+queryEntities(world, movers, (entity) => {
+  const pos = getComponentVectorView(world, entity, Position, "value");
+  const vel = getComponentVectorView(world, entity, Velocity, "value");
+  pos[0] += vel[0];
+  pos[1] += vel[1];
+});
+
+// RIGHT: use queryColumns for direct column access
+queryColumns(world, movers, (entities, pos, vel) => {
+  for (let i = 0; i < entities.length; i++) {
+    const offset = i * 2;
+    pos.value[offset] += vel.value[offset];
+    pos.value[offset + 1] += vel.value[offset + 1];
+  }
+});
+```
+
+**Why:** `queryEntities` calls the callback per entity, and each `getComponentVectorView` does a map lookup + subarray allocation. `queryColumns` gives you the raw TypedArray once per archetype -- you loop over it directly with zero per-entity overhead.
+
+---
+
+```typescript
+// WRONG: using queryColumns with added() or changed()
+queryColumns(world, [added(Position), Velocity], (entities, pos, vel) => {
+  // ...
+});
+
+// RIGHT: use queryEntities for change detection
+queryEntities(world, [added(Position), Velocity], (entity) => {
+  // ...
+});
+```
+
+**Why:** `queryColumns` operates on full archetype columns. Change detection filters individual entities within archetypes, which requires per-entity evaluation -- use `queryEntities` for this.
 
 ## See Also
 

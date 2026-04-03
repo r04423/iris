@@ -72,6 +72,7 @@ export {
   collectEntities,
   ensureQuery as cacheQuery,
   not,
+  queryColumns,
   queryEntities,
   queryFirstEntity,
 } from "./query.js";
@@ -118,6 +119,7 @@ export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observe
 export type {
   AddedModifier,
   ChangedModifier,
+  ColumnsTuple,
   ExtractIncluded,
   ModifierType,
   NotModifier,

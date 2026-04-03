@@ -503,6 +503,50 @@ queryEntities(world, [Position, Velocity, not(Frozen), not(Disabled)], (entity) 
 
 Queries match archetypes where all required components are present and no excluded components exist. Matched archetypes are cached and auto-update when archetypes are created or destroyed.
 
+#### Column Iteration
+
+For performance-critical systems, `queryColumns()` provides direct access to the underlying TypedArray columns instead of iterating entity-by-entity. The callback receives the entity array and column objects for each data-bearing component, once per matching archetype:
+
+```typescript
+import { queryColumns, cacheQuery, not } from "iris-ecs";
+
+queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+  // pos.value and vel.value are raw TypedArrays (e.g. Float32Array)
+  // entities.length tells you how many entities are in this archetype
+  for (let i = 0; i < entities.length; i++) {
+    const offset = i * 2; // vec2 stride
+    pos.value[offset] += vel.value[offset];
+    pos.value[offset + 1] += vel.value[offset + 1];
+  }
+});
+```
+
+Tags and data-less pairs produce no column parameter -- only data-bearing components and relation pairs appear as callback arguments. The parameter order matches the order of data-bearing terms in the query.
+
+Pre-cached queries work the same way:
+
+```typescript
+const movementSystem = defineSystem("movementSystem", (world) => {
+  const movers = cacheQuery(world, Position, Velocity, not(Frozen));
+
+  return () => {
+    queryColumns(world, movers, (entities, pos, vel) => {
+      for (let i = 0; i < entities.length; i++) {
+        const offset = i * 2;
+        pos.value[offset] += vel.value[offset];
+        pos.value[offset + 1] += vel.value[offset + 1];
+      }
+    });
+  };
+});
+```
+
+Return `false` from the callback to stop iteration early (same as `queryEntities`).
+
+`queryColumns` does not support `added()` or `changed()` modifiers -- use `queryEntities` for change detection.
+
+💡 **Tip:** Use `queryColumns` when you need to process large numbers of entities with tight loops over TypedArray data. Use `queryEntities` for entity-level logic, change detection, or when you need per-entity API calls like `getComponentValue`.
+
 ### Systems
 
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
