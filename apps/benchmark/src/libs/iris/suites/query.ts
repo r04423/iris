@@ -214,7 +214,7 @@ function queryBenchmarks(): BenchmarkDef[] {
       fn(world: World) {
         const w = world as QueryPoolWorld;
         // biome-ignore lint/suspicious/noExplicitAny: generated components lack static schema types
-        (queryColumns as any)(world, w.__queryMeta, (entities: EntityId[], col: { v: Float32Array }) => {
+        (queryColumns as any)(world, w.__queryMeta, (entities: EntityId[], [col]: [{ v: Float32Array }]) => {
           const v = col.v;
           for (let i = 0; i < entities.length; i++) {
             v[i]! += 1;

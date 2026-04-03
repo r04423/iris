@@ -531,12 +531,12 @@ Queries match archetypes where all required components are present and no exclud
 
 #### Column Iteration
 
-For performance-critical systems, `queryColumns()` provides direct access to the underlying TypedArray columns instead of iterating entity-by-entity. The callback receives the entity array and column objects for each data-bearing component, once per matching archetype:
+For performance-critical systems, `queryColumns()` provides direct access to the underlying TypedArray columns instead of iterating entity-by-entity. The callback receives the entity array and a columns tuple for each matching archetype. Each element in the tuple corresponds to a data-bearing component in query term order:
 
 ```typescript
 import { queryColumns, cacheQuery, not } from "iris-ecs";
 
-queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+queryColumns(world, [Player, Position, Velocity, not(Dead)], (entities, [pos, vel]) => {
   // pos.value and vel.value are raw TypedArrays (e.g. Float32Array)
   // entities.length tells you how many entities are in this archetype
   for (let i = 0; i < entities.length; i++) {
@@ -547,16 +547,16 @@ queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
 });
 ```
 
-Tags and data-less pairs produce no column parameter -- only data-bearing components and relation pairs appear as callback arguments. The parameter order matches the order of data-bearing terms in the query.
+Tags and data-less pairs are omitted from the columns tuple -- only data-bearing components and relation pairs appear as elements. The element order matches the order of data-bearing terms in the query.
 
 Pre-cached queries work the same way:
 
 ```typescript
 const movementSystem = defineSystem("movementSystem", (world) => {
-  const movers = cacheQuery(world, [Position, Velocity, not(Frozen)]);
+  const movers = cacheQuery(world, [Position, Enemy, Velocity, not(Frozen)]);
 
   return () => {
-    queryColumns(world, movers, (entities, pos, vel) => {
+    queryColumns(world, movers, (entities, [pos, vel]) => {
       for (let i = 0; i < entities.length; i++) {
         const offset = i * 2;
         pos.value[offset] += vel.value[offset];

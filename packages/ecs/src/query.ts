@@ -512,7 +512,7 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * @example
  * ```typescript
  * // Direct column access for high-performance iteration
- * queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+ * queryColumns(world, [Position, Velocity, not(Dead)], (entities, [pos, vel]) => {
  *   for (let i = 0; i < entities.length; i++) {
  *     pos.x[i] += vel.x[i]!;
  *     pos.y[i] += vel.y[i]!;
@@ -521,10 +521,10 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  *
  * // Pre-cached query
  * const q = cacheQuery(world, [Position, Velocity, not(Dead)]);
- * queryColumns(world, q, (entities, pos, vel) => { ... });
+ * queryColumns(world, q, (entities, [pos, vel]) => { ... });
  *
  * // Mutation-safe backward iteration
- * queryColumns(world, [Position, Health], (entities, pos, health) => {
+ * queryColumns(world, [Position, Health], (entities, [pos, health]) => {
  *   for (let i = entities.length - 1; i >= 0; i--) {
  *     if (health.hp[i]! <= 0) {
  *       destroyEntity(world, entities[i]!);
@@ -536,20 +536,20 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
 export function queryColumns<T extends (EntityId | NotModifier)[]>(
   world: World,
   terms: [...T],
-  callback: (entities: EntityId[], ...columns: ColumnsTuple<T>) => unknown
+  callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
 ): void;
 
 export function queryColumns<C extends EntityId, T extends unknown[]>(
   world: World,
   query: QueryMeta<C, T>,
-  callback: (entities: EntityId[], ...columns: ColumnsTuple<T>) => unknown
+  callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
 ): void;
 
 export function queryColumns(
   world: World,
   termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
-  callback: (entities: any, ...columns: any[]) => unknown
+  callback: (entities: any, columns: any) => unknown
 ): void {
   const queryMeta = resolveQuery(world, termsOrQuery);
 
@@ -560,10 +560,8 @@ export function queryColumns(
   const archetypes = queryMeta.filter.archetypes;
   const include = queryMeta.include;
 
-  // Callback args laid out as [entities, col0, col1, ...]. Single allocation
-  // reused across all archetype iterations — apply() passes them as individual
-  // parameters matching the caller's (entities, pos, vel, ...) signature
-  const args: unknown[] = [];
+  // Single allocation reused across all archetype iterations
+  const columns: unknown[] = [];
 
   for (let a = 0; a < archetypes.length; a++) {
     const archetype = archetypes[a]!;
@@ -572,26 +570,20 @@ export function queryColumns(
       continue;
     }
 
-    // First arg is always the live entities array
-    args[0] = archetype.entities;
-    let col = 1;
-
     // Resolve columns for each included term. Tags and data-less pairs have
     // no entry in archetype.columns, so they are naturally skipped, and only
     // data-bearing components and pairs produce callback parameters
+    columns.length = 0;
+
     for (let t = 0; t < include.length; t++) {
       const cols = archetype.columns.get(include[t]!);
 
       if (cols) {
-        args[col++] = cols;
+        columns.push(cols);
       }
     }
 
-    // Truncate to actual column count
-    args.length = col;
-
-    // biome-ignore lint/complexity/noBannedTypes: apply() avoids per-archetype spread allocation
-    if ((callback as Function).apply(undefined, args) === false) {
+    if (callback(archetype.entities, columns) === false) {
       return;
     }
   }

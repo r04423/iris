@@ -1879,7 +1879,7 @@ describe("Query", () => {
 
         let callCount = 0;
 
-        queryColumns(world, [Position], (entities, pos) => {
+        queryColumns(world, [Position], (entities, [pos]) => {
           callCount++;
 
           assert.strictEqual(entities.length, 2);
@@ -1908,7 +1908,7 @@ describe("Query", () => {
         let callCount = 0;
         const xValues: number[] = [];
 
-        queryColumns(world, [Position], (entities, pos) => {
+        queryColumns(world, [Position], (entities, [pos]) => {
           callCount++;
           for (let i = 0; i < entities.length; i++) {
             xValues.push(pos.x[i]!);
@@ -1935,7 +1935,7 @@ describe("Query", () => {
         let matchedCount = 0;
 
         // Tag is used for filtering but does not produce a column parameter
-        queryColumns(world, [Position, IsEnemy], (entities, pos) => {
+        queryColumns(world, [Position, IsEnemy], (entities, [pos]) => {
           matchedCount += entities.length;
           assert.strictEqual(pos.x[0], 1);
         });
@@ -1958,7 +1958,7 @@ describe("Query", () => {
 
         const xValues: number[] = [];
 
-        queryColumns(world, [Position, not(Dead)], (entities, pos) => {
+        queryColumns(world, [Position, not(Dead)], (entities, [pos]) => {
           for (let i = 0; i < entities.length; i++) {
             xValues.push(pos.x[i]!);
           }
@@ -2004,7 +2004,7 @@ describe("Query", () => {
         addComponent(world, e1, Position, { x: 10 });
         addComponent(world, e1, likesTarget, { strength: 0.8 });
 
-        queryColumns(world, [Position, likesTarget], (entities, pos, likes) => {
+        queryColumns(world, [Position, likesTarget], (entities, [pos, likes]) => {
           assert.strictEqual(entities.length, 1);
           assert.strictEqual(pos.x[0], 10);
           assert.ok(Math.abs(likes.strength[0]! - 0.8) < 0.001);
@@ -2023,7 +2023,7 @@ describe("Query", () => {
         addComponent(world, child, childOfParent);
 
         // Data-less pair does not produce a column parameter — only pos
-        queryColumns(world, [Position, childOfParent], (_entities, pos) => {
+        queryColumns(world, [Position, childOfParent], (_entities, [pos]) => {
           assert.strictEqual(pos.x[0], 5);
         });
       });
@@ -2040,7 +2040,7 @@ describe("Query", () => {
         const q = ensureQuery(world, [Position]);
         let called = false;
 
-        queryColumns(world, q, (entities, pos) => {
+        queryColumns(world, q, (entities, [pos]) => {
           called = true;
           assert.strictEqual(entities.length, 1);
           assert.strictEqual(pos.x[0], 42);
@@ -2064,7 +2064,7 @@ describe("Query", () => {
 
         let callCount = 0;
 
-        queryColumns(world, [Position], (_entities, _pos) => {
+        queryColumns(world, [Position], (_entities, _columns) => {
           callCount++;
           return false;
         });
@@ -2089,7 +2089,7 @@ describe("Query", () => {
 
         let callCount = 0;
 
-        queryColumns(world, [Position], (entities, _pos) => {
+        queryColumns(world, [Position], (entities, _columns) => {
           callCount++;
           assert.ok(entities.length > 0);
         });
@@ -2110,7 +2110,7 @@ describe("Query", () => {
           entities.push(e);
         }
 
-        queryColumns(world, [Health], (ents, health) => {
+        queryColumns(world, [Health], (ents, [health]) => {
           for (let i = ents.length - 1; i >= 0; i--) {
             if (health.hp[i]! <= 0) {
               destroyEntity(world, ents[i]!);
@@ -2137,7 +2137,7 @@ describe("Query", () => {
         addComponent(world, e1, Position, { value: [1, 2, 3] });
         addComponent(world, e2, Position, { value: [4, 5, 6] });
 
-        queryColumns(world, [Position], (_entities, pos) => {
+        queryColumns(world, [Position], (_entities, [pos]) => {
           assert.strictEqual(pos.value[0], 1);
           assert.strictEqual(pos.value[1], 2);
           assert.strictEqual(pos.value[2], 3);

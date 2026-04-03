@@ -206,7 +206,7 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 ## `queryColumns` -- Direct Column Access
 
 ```typescript
-queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
+queryColumns(world, [Position, Velocity, not(Dead)], (entities, [pos, vel]) => {
   for (let i = 0; i < entities.length; i++) {
     const offset = i * 2;
     pos.value[offset] += vel.value[offset];
@@ -218,16 +218,16 @@ queryColumns(world, [Position, Velocity, not(Dead)], (entities, pos, vel) => {
 Iterates matching archetypes and passes the raw column storage objects directly to the callback. Each callback invocation receives:
 
 1. `entities` -- the archetype's entity ID array
-2. One column object per data-bearing term (components and data relations), in query term order
+2. `columns` -- a tuple with one element per data-bearing term (components and data relations), in query term order
 
-Tags and data-less pairs are skipped -- they produce no column parameter.
+Tags and data-less pairs are omitted from the columns tuple.
 
 Accepts inline terms or a pre-cached `QueryMeta`:
 
 ```typescript
 const movers = cacheQuery(world, [Position, Velocity, not(Frozen)]);
 
-queryColumns(world, movers, (entities, pos, vel) => {
+queryColumns(world, movers, (entities, [pos, vel]) => {
   // pos.value is the raw Float32Array for Position
   // vel.value is the raw Float32Array for Velocity
   for (let i = 0; i < entities.length; i++) {
@@ -269,7 +269,7 @@ queryEntities(world, movers, (entity) => {
 });
 
 // RIGHT: use queryColumns for direct column access
-queryColumns(world, movers, (entities, pos, vel) => {
+queryColumns(world, movers, (entities, [pos, vel]) => {
   for (let i = 0; i < entities.length; i++) {
     const offset = i * 2;
     pos.value[offset] += vel.value[offset];
@@ -284,7 +284,7 @@ queryColumns(world, movers, (entities, pos, vel) => {
 
 ```typescript
 // WRONG: using queryColumns with added() or changed()
-queryColumns(world, [added(Position), Velocity], (entities, pos, vel) => {
+queryColumns(world, [added(Position), Velocity], (entities, [pos, vel]) => {
   // ...
 });
 
