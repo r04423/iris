@@ -1,6 +1,7 @@
 import type { Archetype } from "./archetype.js";
 import { addEntityToArchetype, removeEntityFromArchetypeByRow, transferEntityToArchetypeByRow } from "./archetype.js";
-import { addComponent, cascadeRemoveComponent } from "./component.js";
+import type { ComponentEntry, ValidateEntries } from "./component.js";
+import { addComponent, addComponents, cascadeRemoveComponent } from "./component.js";
 import type { Component, Entity, EntityId, Relation } from "./encoding.js";
 import {
   COMPONENT_TYPE,
@@ -178,11 +179,38 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
  * addComponent(world, entity, Position, { x: 0, y: 0 });
  * ```
  */
-export function createEntity(world: World): Entity {
+export function createEntity(world: World): Entity;
+
+/**
+ * Creates a new entity with initial components.
+ *
+ * @param world - World instance
+ * @param entries - Array of component entries
+ * @returns Encoded entity ID
+ * @throws {LimitExceeded} If entity limit (1,048,576) exceeded
+ *
+ * @example
+ * ```typescript
+ * const entity = createEntity(world, [
+ *   [Position, { x: 0, y: 0 }],
+ *   Player,
+ * ]);
+ * ```
+ */
+export function createEntity<const T extends readonly ComponentEntry[]>(
+  world: World,
+  entries: T & ValidateEntries<T>
+): Entity;
+
+export function createEntity(world: World, entries?: readonly ComponentEntry[]): Entity {
   const entityId = allocateEntityId(world);
   registerEntity(world, entityId);
 
   fireObserverEvent(world, "entityCreated", entityId);
+
+  if (entries) {
+    addComponents(world, entityId, entries);
+  }
 
   return entityId;
 }

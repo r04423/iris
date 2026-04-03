@@ -48,7 +48,6 @@ import {
   defineSystem,
   defineTag,
   cacheQuery,
-  addComponent,
   getComponentVectorView,
   queryEntities,
   addSystem,
@@ -64,10 +63,11 @@ const Player = defineTag("Player");
 // Create world and entities
 const world = createWorld();
 
-const player = createEntity(world);
-addComponent(world, player, Position, { value: [0, 0] });
-addComponent(world, player, Velocity, { value: [1, 0] });
-addComponent(world, player, Player);
+const player = createEntity(world, [
+  [Position, { value: [0, 0] }],
+  [Velocity, { value: [1, 0] }],
+  Player,
+]);
 
 // Define a system -- init runs once, tick runs every frame
 const movementSystem = defineSystem("movementSystem", (world) => {
@@ -113,6 +113,12 @@ const world = createWorld();
 const player = createEntity(world);
 const enemy = createEntity(world);
 
+// Create with initial components
+const npc = createEntity(world, [
+  [Position, { value: [10, 20] }],
+  Enemy,
+]);
+
 destroyEntity(world, enemy);
 isEntityAlive(world, enemy); // false
 isEntityAlive(world, player); // true
@@ -121,7 +127,7 @@ isEntityAlive(world, player); // true
 resetWorld(world);
 ```
 
-Create entities with `createEntity()`, destroy them with `destroyEntity()`. Use `isEntityAlive()` to check if an entity reference is still valid. Call `resetWorld()` to clear all entities and state while preserving definitions -- useful for level reloads or testing.
+Create entities with `createEntity()`, optionally passing an array of component entries to attach in one call. Destroy them with `destroyEntity()`. Use `isEntityAlive()` to check if an entity reference is still valid. Call `resetWorld()` to clear all entities and state while preserving definitions -- useful for level reloads or testing.
 
 ⚠️ **Entity IDs are recycled.** After destroying an entity, its ID may be reused for a new entity. Never store entity IDs long-term without checking `isEntityAlive()` first -- your old reference might now point to a different entity.
 
@@ -182,6 +188,7 @@ import {
   defineComponent,
   Type,
   addComponent,
+  addComponents,
   getComponentValue,
   setComponentValue,
   getComponentVectorValue,
@@ -235,6 +242,20 @@ getComponentValue(world, entity, Health, "current");  // still 100
 ```
 
 💡 **Tip:** Use `hasComponent()` to check first if you need conditional addition, or `setComponentValue()` to update existing data.
+
+#### Batch Adding Components
+
+Use `addComponents()` to attach multiple components in one call:
+
+```typescript
+addComponents(world, entity, [
+  [Position, { value: [0, 0] }],
+  [Velocity, { value: [1, 0] }],
+  Player,
+]);
+```
+
+Each entry is either a standalone ID (tag, entity, schema-less pair) or a `[component, data]` tuple for data components.
 
 #### Vector Fields
 
@@ -740,20 +761,20 @@ addSystem(world, loadAssetsSystem, { schedule: Startup });
 **Actions** bundle reusable operations with a world captured in closure. Define actions once, then call them without repeatedly passing the world.
 
 ```typescript
-import { defineActions, createEntity, addComponent } from "iris-ecs";
+import { defineActions, createEntity } from "iris-ecs";
 
 const spawnActions = defineActions((world) => ({
   player(x: number, y: number) {
-    const entity = createEntity(world);
-    addComponent(world, entity, Position, { value: [x, y] });
-    addComponent(world, entity, Player);
-    return entity;
+    return createEntity(world, [
+      [Position, { value: [x, y] }],
+      Player,
+    ]);
   },
   enemy(x: number, y: number) {
-    const entity = createEntity(world);
-    addComponent(world, entity, Position, { value: [x, y] });
-    addComponent(world, entity, Enemy);
-    return entity;
+    return createEntity(world, [
+      [Position, { value: [x, y] }],
+      Enemy,
+    ]);
   },
 }));
 

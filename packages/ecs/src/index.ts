@@ -22,6 +22,7 @@ export { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 
 export {
   addComponent,
+  addComponents,
   emitComponentChanged as markComponentChanged,
   getComponentValue,
   getComponentVectorValue,
@@ -107,6 +108,7 @@ export {
 // ============================================================================
 
 export type { ActionGetter, ActionInitializer, Actions } from "./actions.js";
+export type { ComponentEntry, ValidateEntries } from "./component.js";
 export type {
   Component,
   Entity,

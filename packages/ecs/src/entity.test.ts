@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { addComponent } from "./component.js";
+import { addComponent, getComponentValue, hasComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
@@ -44,6 +44,43 @@ describe("Entity", () => {
 
       assert.strictEqual(registry.byId.size, initialSize + 2);
       assert.strictEqual(registry.nextId, 3);
+    });
+  });
+
+  describe("Entity Creation with Components", () => {
+    it("creates entity with components in one call", () => {
+      const world = createWorld();
+      const Player = defineTag("ce_Player");
+      const Position = defineComponent("ce_Position", { x: Type.f32(), y: Type.f32() });
+
+      const entity = createEntity(world, [Player, [Position, { x: 10, y: 20 }]]);
+
+      assert.strictEqual(isEntityAlive(world, entity), true);
+      assert.strictEqual(hasComponent(world, entity, Player), true);
+      assert.strictEqual(hasComponent(world, entity, Position), true);
+      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10);
+      assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
+    });
+
+    it("no-arg form still works unchanged", () => {
+      const world = createWorld();
+
+      const entity = createEntity(world);
+
+      assert.strictEqual(isEntityAlive(world, entity), true);
+      const meta = world.entities.byId.get(entity)!;
+      assert.strictEqual(meta.archetype, world.archetypes.root);
+    });
+
+    it("creates entity with pair entries", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ce_ChildOf");
+      const parent = createEntity(world);
+
+      const child = createEntity(world, [pair(ChildOf, parent)]);
+
+      assert.strictEqual(isEntityAlive(world, child), true);
+      assert.strictEqual(hasComponent(world, child, pair(ChildOf, parent)), true);
     });
   });
 

@@ -125,6 +125,88 @@ export function addComponent<S extends SchemaRecord>(
   fireObserverEvent(world, "componentAdded", componentId, entityId);
 }
 
+// ============================================================================
+// Batch Component Operations (Public API)
+// ============================================================================
+
+/**
+ * Entry for batch component operations.
+ *
+ * Either a standalone ID (tag, entity, schema-less pair) or a `[component, data]` tuple
+ * for data components and pairs with schemas.
+ */
+export type ComponentEntry = EntityId | readonly [EntityId, Record<string, unknown>];
+
+/**
+ * Validates each entry in a component entries tuple at compile time.
+ *
+ * Data components and pairs with schemas require matching typed data.
+ * Tags, entities, and schema-less pairs pass through unchanged.
+ */
+export type ValidateEntries<T extends readonly ComponentEntry[]> = {
+  [I in keyof T]: T[I] extends readonly [infer C, unknown]
+    ? C extends Component<infer S>
+      ? readonly [C, InferSchemaRecord<S>]
+      : C extends Pair<Relation<infer S>>
+        ? S extends Record<string, never>
+          ? C
+          : readonly [C, InferSchemaRecord<S>]
+        : C extends Entity | Tag
+          ? C
+          : T[I]
+    : T[I] extends Component<infer S>
+      ? readonly [T[I], InferSchemaRecord<S>]
+      : T[I] extends Pair<Relation<infer S>>
+        ? S extends Record<string, never>
+          ? T[I]
+          : readonly [T[I], InferSchemaRecord<S>]
+        : T[I];
+};
+
+/**
+ * Add multiple components to an entity in one call.
+ *
+ * Each entry is either a standalone ID (tag/entity/schema-less pair) or a
+ * `[component, data]` tuple for data components and pairs with schemas.
+ *
+ * @param world - World instance
+ * @param entityId - Entity to modify
+ * @param entries - Array of component entries
+ *
+ * @example
+ * ```typescript
+ * addComponents(world, entity, [
+ *   [Position, { x: 0, y: 0 }],
+ *   [Velocity, { vx: 1, vy: 0 }],
+ *   Player,
+ * ]);
+ * ```
+ */
+export function addComponents<const T extends readonly ComponentEntry[]>(
+  world: World,
+  entityId: EntityId,
+  entries: T & ValidateEntries<T>
+): void;
+
+export function addComponents(world: World, entityId: EntityId, entries: readonly ComponentEntry[]): void {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+
+    if (typeof entry === "number") {
+      addComponent(world, entityId, entry as Entity | Tag | Pair<Relation<Record<string, never>>>);
+    } else {
+      const [componentId, data] = entry;
+
+      addComponent(
+        world,
+        entityId,
+        componentId as Component<SchemaRecord> | Pair<Relation<SchemaRecord>>,
+        data as InferSchemaRecord<SchemaRecord>
+      );
+    }
+  }
+}
+
 /**
  * Remove component from entity.
  *

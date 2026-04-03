@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { createAndRegisterArchetype } from "./archetype.js";
 import {
   addComponent,
+  addComponents,
   emitComponentChanged,
   getComponentValue,
   getComponentVectorValue,
@@ -99,6 +100,90 @@ describe("Component", () => {
       assert.throws(() => {
         addComponent(world, entity1, entity2);
       }, NotFound);
+    });
+  });
+
+  describe("Batch Component Add", () => {
+    it("adds multiple data components with correct values", () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_Position", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("ba_Velocity", { vx: Type.f32(), vy: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [
+        [Position, { x: 10, y: 20 }],
+        [Velocity, { vx: 1, vy: 2 }],
+      ]);
+
+      assert.strictEqual(hasComponent(world, entity, Position), true);
+      assert.strictEqual(hasComponent(world, entity, Velocity), true);
+      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10);
+      assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
+      assert.strictEqual(getComponentValue(world, entity, Velocity, "vx"), 1);
+      assert.strictEqual(getComponentValue(world, entity, Velocity, "vy"), 2);
+    });
+
+    it("adds mix of tags and data components", () => {
+      const world = createWorld();
+      const Player = defineTag("ba_Player");
+      const Position = defineComponent("ba_mix_Position", { x: Type.f32(), y: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [Player, [Position, { x: 5, y: 10 }]]);
+
+      assert.strictEqual(hasComponent(world, entity, Player), true);
+      assert.strictEqual(hasComponent(world, entity, Position), true);
+      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 5);
+      assert.strictEqual(getComponentValue(world, entity, Position, "y"), 10);
+    });
+
+    it("adds pairs with and without schemas", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ba_ChildOf");
+      const Amount = defineRelation("ba_Amount", { schema: { value: Type.f32() } });
+      const entity = createEntity(world);
+      const parent = createEntity(world);
+      const target = createEntity(world);
+
+      addComponents(world, entity, [pair(ChildOf, parent), [pair(Amount, target), { value: 42 }]]);
+
+      assert.strictEqual(hasComponent(world, entity, pair(ChildOf, parent)), true);
+      assert.strictEqual(hasComponent(world, entity, pair(Amount, target)), true);
+      assert.strictEqual(getComponentValue(world, entity, pair(Amount, target), "value"), 42);
+    });
+
+    it("handles empty entries array", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const registry = world.entities;
+
+      const metaBefore = registry.byId.get(entity)!;
+      const archBefore = metaBefore.archetype;
+
+      addComponents(world, entity, []);
+
+      const metaAfter = registry.byId.get(entity)!;
+      assert.strictEqual(metaAfter.archetype, archBefore);
+    });
+
+    it("is idempotent for duplicate components in entries", () => {
+      const world = createWorld();
+      const Player = defineTag("ba_idem_Player");
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [Player, Player]);
+
+      assert.strictEqual(hasComponent(world, entity, Player), true);
+    });
+
+    it("works with a single entry", () => {
+      const world = createWorld();
+      const Player = defineTag("ba_single_Player");
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [Player]);
+
+      assert.strictEqual(hasComponent(world, entity, Player), true);
     });
   });
 

@@ -1,8 +1,8 @@
 ---
 name: entities
-description: Entity lifecycle -- createEntity, destroyEntity, isEntityAlive, ID recycling, generation tracking
+description: Entity lifecycle -- createEntity, destroyEntity, isEntityAlive, addComponents, ID recycling, generation tracking
 metadata:
-  tags: entity, createEntity, destroyEntity, isEntityAlive, lifecycle, ID
+  tags: entity, createEntity, destroyEntity, isEntityAlive, addComponents, lifecycle, ID
 ---
 
 # Entities
@@ -20,6 +20,22 @@ const entity = createEntity(world);
 ```
 
 Returns a branded `Entity` type. You cannot use raw numbers where an `Entity` is expected -- the type system enforces this.
+
+### Creating Entities with Initial Components
+
+`createEntity` accepts an optional entries array to add components in one call:
+
+```typescript
+const player = createEntity(world, [
+  [Position, { x: 0, y: 0 }],
+  [Health, { current: 100, max: 100 }],
+  Player,
+]);
+```
+
+Each entry is either a standalone ID (tag, entity, schema-less pair) or a `[component, data]` tuple for data components and data-carrying pairs. TypeScript validates every entry at compile time -- wrong field names, data on tags, or missing data on data components are type errors.
+
+This is equivalent to calling `createEntity` followed by `addComponents`. See [components.md](./components.md) for details on batch operations.
 
 Entity limit is 1,048,575. Throws `LimitExceeded` if exceeded.
 

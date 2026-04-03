@@ -1,8 +1,8 @@
 ---
 name: components
-description: Components -- defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView
+description: Components -- defineComponent, addComponent, addComponents, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView
 metadata:
-  tags: component, defineComponent, addComponent, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView, vector
+  tags: component, defineComponent, addComponent, addComponents, removeComponent, hasComponent, getComponentValue, setComponentValue, markComponentChanged, getComponentVectorValue, setComponentVectorValue, getComponentVectorView, vector
 ---
 
 # Components
@@ -11,7 +11,7 @@ Components are typed data attached to entities. Each component has a schema that
 
 ```typescript
 import {
-  defineComponent, addComponent, removeComponent, hasComponent,
+  defineComponent, addComponent, addComponents, removeComponent, hasComponent,
   getComponentValue, setComponentValue, markComponentChanged,
   getComponentVectorValue, setComponentVectorValue, getComponentVectorView,
   Type,
@@ -50,6 +50,22 @@ addComponent(world, entity, Health, { current: 50, max: 50 }); // no-op, Health 
 ```
 
 Fires the `componentAdded` observer event.
+
+### Batch Adding Components
+
+`addComponents` adds multiple components to an entity in one call:
+
+```typescript
+addComponents(world, entity, [
+  [Position, { x: 0, y: 0 }],
+  [Health, { current: 100, max: 100 }],
+  Player,
+]);
+```
+
+Each entry is either a standalone ID (tag, entity, schema-less pair) or a `[component, data]` tuple for data components and data-carrying pairs. TypeScript validates every entry at compile time -- wrong field names, data on tags, or missing data on data components are type errors.
+
+`createEntity` also accepts entries directly -- see [entities.md](./entities.md).
 
 ### Archetype Transitions
 
@@ -190,9 +206,10 @@ const Inventory = defineComponent("Inventory", {
 const ItemSlot = defineComponent("ItemSlot", { itemId: Type.u32(), count: Type.u32() });
 const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
 
-const slot = createEntity(world);
-addComponent(world, slot, ItemSlot, { itemId: 42, count: 3 });
-addComponent(world, slot, pair(ChildOf, player));
+const slot = createEntity(world, [
+  [ItemSlot, { itemId: 42, count: 3 }],
+  pair(ChildOf, player),
+]);
 ```
 
 Use `Type.object<T>()` when the nested data is truly opaque to the ECS -- configuration blobs, serialized state, or data only one system reads wholesale. Use child entities when you need to query, filter, or independently update individual items.
