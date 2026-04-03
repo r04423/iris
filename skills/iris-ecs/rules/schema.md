@@ -43,7 +43,7 @@ TypeScript infers fixed-length tuple types: `Type.f32(2)` infers `[number, numbe
 
 Only numeric factories support vector fields. `Type.bool()`, `Type.string()`, and `Type.object<T>()` do not accept a size parameter.
 
-Vector fields use dedicated access functions -- see [components.md](./components.md) for `getComponentVectorValue`, `setComponentVectorValue`, `getComponentVectorView`.
+Vector fields use dedicated access functions -- see [components.md](./components.md) for `getComponentVectorValue`, `setComponentVectorValue`, `getComponentVectorView` and [resources.md](./resources.md) for `getResourceVectorValue`, `setResourceVectorValue`, `getResourceVectorView`.
 
 ## Choosing a Type
 

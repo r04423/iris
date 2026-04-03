@@ -329,6 +329,32 @@ queryEntities(world, [Time], (entity) => {
 
 Use resources for frame timing, configuration, asset registry, input state, physics settings, or any global data that systems need but doesn't belong to a specific entity.
 
+Resources with vector fields use dedicated access functions, mirroring the component vector API:
+
+```typescript
+import {
+  defineComponent,
+  addResource,
+  getResourceVectorValue,
+  setResourceVectorValue,
+  getResourceVectorView,
+  Type,
+} from "iris-ecs";
+
+const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+addResource(world, Gravity, { value: [0, -9.81, 0] });
+
+// Copy-based read
+const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
+
+// Copy-based write
+setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+
+// Zero-copy view
+const view = getResourceVectorView(world, Gravity, "value"); // Float64Array
+view[1] = -15; // direct mutation
+```
+
 ### Relations
 
 A **Relation** describes a directed connection between two entities. Combine a relation with a target using `pair()` to create a pair -- pairs are added to entities like components.

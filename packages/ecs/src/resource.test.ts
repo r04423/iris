@@ -3,7 +3,16 @@ import { describe, it } from "node:test";
 import { hasComponent } from "./component.js";
 import { collectEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
-import { addResource, getResourceValue, hasResource, removeResource, setResourceValue } from "./resource.js";
+import {
+  addResource,
+  getResourceValue,
+  getResourceVectorValue,
+  getResourceVectorView,
+  hasResource,
+  removeResource,
+  setResourceValue,
+  setResourceVectorValue,
+} from "./resource.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -65,6 +74,55 @@ describe("Resource", () => {
       // Should find the singleton entity (which is the component ID itself)
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], Physics);
+    });
+  });
+
+  describe("Vector Resources", () => {
+    it("adds and reads vector resource", () => {
+      const world = createWorld();
+      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+
+      addResource(world, Gravity, { value: [0, -9.81, 0] });
+
+      const value = getResourceVectorValue(world, Gravity, "value");
+      assert.deepStrictEqual(value, [0, -9.81, 0]);
+    });
+
+    it("writes vector resource", () => {
+      const world = createWorld();
+      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+
+      addResource(world, Gravity, { value: [0, -9.81, 0] });
+      setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+
+      const value = getResourceVectorValue(world, Gravity, "value");
+      assert.deepStrictEqual(value, [0, -20, 0]);
+    });
+
+    it("returns zero-copy typed array view", () => {
+      const world = createWorld();
+      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+
+      addResource(world, Gravity, { value: [0, -9.81, 0] });
+
+      const view = getResourceVectorView(world, Gravity, "value");
+      assert.ok(view instanceof Float64Array);
+      assert.strictEqual(view!.length, 3);
+
+      // Mutate through view
+      view![1] = -20;
+
+      // Change visible via copy read
+      const value = getResourceVectorValue(world, Gravity, "value");
+      assert.deepStrictEqual(value, [0, -20, 0]);
+    });
+
+    it("returns undefined for missing resource", () => {
+      const world = createWorld();
+      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+
+      assert.strictEqual(getResourceVectorValue(world, Gravity, "value"), undefined);
+      assert.strictEqual(getResourceVectorView(world, Gravity, "value"), undefined);
     });
   });
 });

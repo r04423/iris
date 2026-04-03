@@ -1,6 +1,15 @@
-import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
+import {
+  addComponent,
+  getComponentValue,
+  getComponentVectorValue,
+  getComponentVectorView,
+  hasComponent,
+  removeComponent,
+  setComponentValue,
+  setComponentVectorValue,
+} from "./component.js";
 import type { Component, EntityId, EntityWith } from "./encoding.js";
-import type { InferSchema, InferSchemaRecord, SchemaRecord } from "./schema.js";
+import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -130,4 +139,123 @@ export function setResourceValue<S extends SchemaRecord, K extends keyof S>(
   value: InferSchema<S[K]>
 ): void {
   setComponentValue(world, component, component, key, value);
+}
+
+// ============================================================================
+// Vector Resource Operations
+// ============================================================================
+
+/**
+ * Gets the value of a vector field on a global resource as a tuple copy.
+ *
+ * Returns a new array containing the vector elements. Mutations to the
+ * returned array do not affect the stored data.
+ *
+ * @param world - World instance
+ * @param component - Component definition (narrowed via hasResource for non-null access)
+ * @param key - Vector field name
+ * @returns Tuple copy of vector value, or undefined if not present
+ *
+ * @example
+ * ```typescript
+ * const Gravity = defineComponent("Gravity", { value: Type.f32(3) });
+ * addResource(world, Gravity, { value: [0, -9.81, 0] });
+ * const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
+ * ```
+ */
+export function getResourceVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S, N> & EntityWith<Component<S, N>>,
+  key: K
+): InferSchema<S[K]>;
+
+export function getResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K
+): InferSchema<S[K]> | undefined;
+
+export function getResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K
+): InferSchema<S[K]> | undefined {
+  return getComponentVectorValue(world, component, component, key);
+}
+
+/**
+ * Sets the value of a vector field on a global resource from a tuple.
+ *
+ * Copies the tuple elements into the interleaved column. Updates change
+ * detection tick and fires componentChanged observer.
+ *
+ * @param world - World instance
+ * @param component - Component definition
+ * @param key - Vector field name
+ * @param value - Tuple of values to set
+ *
+ * @example
+ * ```typescript
+ * setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+ * ```
+ */
+export function setResourceVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S, N> & EntityWith<Component<S, N>>,
+  key: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K,
+  value: InferSchema<S[K]>
+): void {
+  setComponentVectorValue(world, component, component, key, value);
+}
+
+/**
+ * Gets a zero-copy typed array view into a vector field on a global resource.
+ *
+ * Returns a `subarray` view that shares the underlying buffer. Mutations
+ * to the view directly modify the stored data.
+ *
+ * @param world - World instance
+ * @param component - Component definition (narrowed via hasResource for non-null access)
+ * @param key - Vector field name
+ * @returns Typed array view into the vector, or undefined if not present
+ *
+ * @example
+ * ```typescript
+ * const Gravity = defineComponent("Gravity", { value: Type.f32(3) });
+ * const view = getResourceVectorView(world, Gravity, "value"); // Float32Array
+ * view[1] = -20; // direct mutation, no copy
+ * ```
+ */
+export function getResourceVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S, N> & EntityWith<Component<S, N>>,
+  key: K
+): TypedArrayInstance;
+
+export function getResourceVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K
+): TypedArrayInstance | undefined;
+
+export function getResourceVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  component: Component<S>,
+  key: K
+): TypedArrayInstance | undefined {
+  return getComponentVectorView(world, component, component, key);
 }

@@ -1,8 +1,8 @@
 ---
 name: resources
-description: Resources -- addResource, removeResource, hasResource, getResourceValue, setResourceValue, world-level singletons
+description: Resources -- addResource, removeResource, hasResource, getResourceValue, setResourceValue, getResourceVectorValue, setResourceVectorValue, getResourceVectorView, world-level singletons
 metadata:
-  tags: resource, addResource, removeResource, hasResource, getResourceValue, setResourceValue, singleton, global
+  tags: resource, addResource, removeResource, hasResource, getResourceValue, setResourceValue, getResourceVectorValue, setResourceVectorValue, getResourceVectorView, singleton, global, vector
 ---
 
 # Resources
@@ -100,6 +100,41 @@ const physicsSystem = defineSystem("physicsSystem", (world) => {
     });
   };
 });
+```
+
+## Vector Resources
+
+Resources with vector fields (see [schema.md](./schema.md)) use dedicated access functions, mirroring the component vector API:
+
+```typescript
+import {
+  defineComponent, addResource, getResourceVectorValue,
+  setResourceVectorValue, getResourceVectorView, Type,
+} from "iris-ecs";
+
+const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+addResource(world, Gravity, { value: [0, -9.81, 0] });
+
+// Copy-based read -- returns a tuple
+const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
+
+// Copy-based write
+setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+
+// Zero-copy view -- TypedArray subarray backed by the column buffer
+const view = getResourceVectorView(world, Gravity, "value"); // Float64Array
+view[1] = -15; // direct mutation, no copy
+```
+
+`getResourceVectorView` returns a `TypedArray` subarray that shares the underlying buffer. Views are invalidated if the archetype resizes. Use views within a system tick; do not cache across frames.
+
+`hasResource` narrowing works with all vector functions:
+
+```typescript
+if (hasResource(world, Gravity)) {
+  const g = getResourceVectorValue(world, Gravity, "value");     // non-null
+  const view = getResourceVectorView(world, Gravity, "value");   // non-null
+}
 ```
 
 ## Anti-Patterns
