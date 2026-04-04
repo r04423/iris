@@ -141,12 +141,12 @@ export type SystemOptions = {
   /**
    * Run before these systems (within same schedule).
    */
-  before?: string | string[];
+  before?: SystemFactory | SystemFactory[];
 
   /**
    * Run after these systems (within same schedule).
    */
-  after?: string | string[];
+  after?: SystemFactory | SystemFactory[];
 };
 
 /**
@@ -197,7 +197,7 @@ export type SystemMeta = {
  * @example
  * ```typescript
  * addSystem(world, physicsSystem);
- * addSystem(world, renderSystem, { schedule: PostUpdate, after: "physicsSystem" });
+ * addSystem(world, renderSystem, { schedule: PostUpdate, after: physicsSystem });
  * addSystem(world, movementFactory); // SystemFactory from defineSystem()
  * ```
  */
@@ -225,8 +225,8 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
     runner,
     schedule: options?.schedule ?? Update,
     index: world.systems.nextIndex++,
-    before: !before ? [] : Array.isArray(before) ? before : [before],
-    after: !after ? [] : Array.isArray(after) ? after : [after],
+    before: !before ? [] : Array.isArray(before) ? before.map((s) => s.name) : [before.name],
+    after: !after ? [] : Array.isArray(after) ? after.map((s) => s.name) : [after.name],
   });
 
   world.schedules.dirty = true;

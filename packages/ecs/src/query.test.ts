@@ -19,7 +19,7 @@ import {
 } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
-import { addSystem, runOnce } from "./scheduler.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -1668,20 +1668,21 @@ describe("Query", () => {
 
       let systemBSawEntity = false;
 
-      addSystem(world, function systemB() {
+      const systemB = defineSystem("systemB", (world) => () => {
         queryEntities(world, [added(Health)], () => {
           systemBSawEntity = true;
         });
       });
 
-      addSystem(
-        world,
-        function systemA() {
+      const systemA = defineSystem("systemA", (world) => {
+        return () => {
           const entity = createEntity(world);
           addComponent(world, entity, Health, { value: 50 });
-        },
-        { before: "systemB" }
-      );
+        };
+      });
+
+      addSystem(world, systemB);
+      addSystem(world, systemA, { before: systemB });
 
       await runOnce(world);
 
@@ -1715,23 +1716,24 @@ describe("Query", () => {
       const systemAResults: EntityId[] = [];
       const systemBResults: EntityId[] = [];
 
-      addSystem(world, function systemB() {
+      const systemB = defineSystem("systemB", (world) => () => {
         queryEntities(world, [changed(Position)], (e) => {
           systemBResults.push(e);
         });
       });
 
-      addSystem(
-        world,
-        function systemA() {
+      const systemA = defineSystem("systemA", (world) => {
+        return () => {
           queryEntities(world, [changed(Position)], (e) => {
             systemAResults.push(e);
           });
           // Modify after querying
           setComponentValue(world, entity, Position, "x", systemAResults.length);
-        },
-        { before: "systemB" }
-      );
+        };
+      });
+
+      addSystem(world, systemB);
+      addSystem(world, systemA, { before: systemB });
 
       await runOnce(world);
 

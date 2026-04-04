@@ -10,7 +10,7 @@ import {
   readEvents,
   readLastEvent,
 } from "./event.js";
-import { addSystem, runOnce } from "./scheduler.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -472,12 +472,14 @@ describe("Event", () => {
       const readerSeen: number[] = [];
 
       // Emitter sees the original event but not the one it emits mid-iteration
-      addSystem(world, function emitter() {
+      const emitter = defineSystem("emitter", (world) => () => {
         readEvents(world, Event, (e) => {
           emitterSeen.push(e.value);
           emitEvent(world, Event, { value: e.value + 10 });
         });
       });
+
+      addSystem(world, emitter);
 
       // Reader (later system) sees the mid-iteration event on the same schedule
       addSystem(
@@ -487,7 +489,7 @@ describe("Event", () => {
             readerSeen.push(e.value);
           });
         },
-        { after: "emitter" }
+        { after: emitter }
       );
 
       emitEvent(world, Event, { value: 1 });
@@ -704,31 +706,33 @@ describe("Event", () => {
       const spawnedPlayers: number[] = [];
       const damageLog: Array<{ entity: number; amount: number }> = [];
 
-      // Use a run counter instead of tick values (decoupled from tick semantics)
-      let spawnRun = 0;
-      let combatRun = 0;
-
       // Spawn system emits events on first run
-      addSystem(world, function spawnSystem() {
-        spawnRun++;
-        if (spawnRun === 1) {
-          emitEvent(world, PlayerSpawned, { entity: 1 });
-          emitEvent(world, PlayerSpawned, { entity: 2 });
-        }
+      const spawnSystem = defineSystem("spawnSystem", (world) => {
+        let spawnRun = 0;
+        return () => {
+          spawnRun++;
+          if (spawnRun === 1) {
+            emitEvent(world, PlayerSpawned, { entity: 1 });
+            emitEvent(world, PlayerSpawned, { entity: 2 });
+          }
+        };
       });
 
+      addSystem(world, spawnSystem);
+
       // Combat system emits damage events on second run
-      addSystem(
-        world,
-        function combatSystem() {
+      const combatSystem = defineSystem("combatSystem", (world) => {
+        let combatRun = 0;
+        return () => {
           combatRun++;
           if (combatRun === 2) {
             emitEvent(world, PlayerDamaged, { entity: 1, amount: 10 });
             emitEvent(world, PlayerDamaged, { entity: 2, amount: 15 });
           }
-        },
-        { after: "spawnSystem" }
-      );
+        };
+      });
+
+      addSystem(world, combatSystem, { after: spawnSystem });
 
       // UI system reads both events
       addSystem(
@@ -741,7 +745,7 @@ describe("Event", () => {
             damageLog.push({ entity: e.entity, amount: e.amount });
           });
         },
-        { after: "combatSystem" }
+        { after: combatSystem }
       );
 
       // Audio system also reads events
@@ -757,7 +761,7 @@ describe("Event", () => {
             audioDamageCount++;
           });
         },
-        { after: "combatSystem" }
+        { after: combatSystem }
       );
 
       // Run several ticks
@@ -812,11 +816,13 @@ describe("Event", () => {
       const readerSeen: number[] = [];
 
       // Reader runs first
-      addSystem(world, function reader() {
+      const reader = defineSystem("reader", (world) => () => {
         readEvents(world, Event, (e) => {
           readerSeen.push(e.value);
         });
       });
+
+      addSystem(world, reader);
 
       // Writer runs second
       let writeRun = 0;
@@ -828,7 +834,7 @@ describe("Event", () => {
             emitEvent(world, Event, { value: 99 });
           }
         },
-        { after: "reader" }
+        { after: reader }
       );
 
       // First frame: reader sees nothing, writer emits

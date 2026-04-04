@@ -67,22 +67,28 @@ describe("Scheduler", () => {
       assert.strictEqual(world.systems.byId.get("physicsSystem")?.schedule, Update);
     });
 
-    it("normalizes single constraint string to array", () => {
+    it("extracts name from single factory constraint", () => {
       const world = createWorld();
 
-      function system() {}
-      addSystem(world, system, { before: "other", after: "another" });
+      const other = defineSystem("other", () => () => {});
+      const another = defineSystem("another", () => () => {});
+      const system = defineSystem("system", () => () => {});
+      addSystem(world, system, { before: other, after: another });
 
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["other"]);
       assert.deepStrictEqual(meta?.after, ["another"]);
     });
 
-    it("accepts array constraints directly", () => {
+    it("extracts names from factory array constraints", () => {
       const world = createWorld();
 
-      function system() {}
-      addSystem(world, system, { before: ["a", "b"], after: ["c", "d"] });
+      const a = defineSystem("a", () => () => {});
+      const b = defineSystem("b", () => () => {});
+      const c = defineSystem("c", () => () => {});
+      const d = defineSystem("d", () => () => {});
+      const system = defineSystem("system", () => () => {});
+      addSystem(world, system, { before: [a, b], after: [c, d] });
 
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["a", "b"]);
@@ -121,16 +127,15 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, function render() {
+      const render = defineSystem("render", () => () => {
         calls.push("render");
       });
-      addSystem(
-        world,
-        function physics() {
-          calls.push("physics");
-        },
-        { before: "render" }
-      );
+      const physics = defineSystem("physics", () => () => {
+        calls.push("physics");
+      });
+
+      addSystem(world, render);
+      addSystem(world, physics, { before: render });
 
       await runOnce(world);
 
@@ -141,19 +146,19 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, function physics() {
+      const physics = defineSystem("physics", () => () => {
         calls.push("physics");
       });
+
+      addSystem(world, physics);
       addSystem(world, function input() {
         calls.push("input");
       });
-      addSystem(
-        world,
-        function render() {
-          calls.push("render");
-        },
-        { after: "physics" }
-      );
+
+      const render = defineSystem("render", () => () => {
+        calls.push("render");
+      });
+      addSystem(world, render, { after: physics });
 
       await runOnce(world);
 
@@ -213,24 +218,26 @@ describe("Scheduler", () => {
     it("throws on circular dependency", async () => {
       const world = createWorld();
 
-      function a() {}
-      function b() {}
+      const a = defineSystem("a", () => () => {});
+      const b = defineSystem("b", () => () => {});
 
-      addSystem(world, a, { before: "b" });
-      addSystem(world, b, { before: "a" });
+      addSystem(world, a, { before: b });
+      addSystem(world, b, { before: a });
 
       await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
     });
 
     it("throws on unknown system reference in before or after", async () => {
+      const nonexistent = defineSystem("nonexistent", () => () => {});
+
       const world1 = createWorld();
       function system1() {}
-      addSystem(world1, system1, { after: "nonexistent" });
+      addSystem(world1, system1, { after: nonexistent });
       await assert.rejects(runOnce(world1), (err) => err instanceof NotFound);
 
       const world2 = createWorld();
       function system2() {}
-      addSystem(world2, system2, { before: "nonexistent" });
+      addSystem(world2, system2, { before: nonexistent });
       await assert.rejects(runOnce(world2), (err) => err instanceof NotFound);
     });
   });
@@ -240,24 +247,20 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      // Register in reverse order, but constrain to run first->second->third
-      addSystem(world, function third() {
+      const third = defineSystem("third", () => () => {
         calls.push("third");
       });
-      addSystem(
-        world,
-        function second() {
-          calls.push("second");
-        },
-        { before: "third" }
-      );
-      addSystem(
-        world,
-        function first() {
-          calls.push("first");
-        },
-        { before: "second" }
-      );
+      const second = defineSystem("second", () => () => {
+        calls.push("second");
+      });
+      const first = defineSystem("first", () => () => {
+        calls.push("first");
+      });
+
+      // Register in reverse order, but constrain to run first->second->third
+      addSystem(world, third);
+      addSystem(world, second, { before: third });
+      addSystem(world, first, { before: second });
 
       await runOnce(world);
 
@@ -367,24 +370,24 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      // D (index 0) depends on both B and C
-      addSystem(
-        world,
-        function systemD() {
-          calls.push("D");
-        },
-        { after: ["systemB", "systemC"] }
-      );
-
-      // C (index 1) no deps
-      addSystem(world, function systemC() {
+      const systemB = defineSystem("systemB", () => () => {
+        calls.push("B");
+      });
+      const systemC = defineSystem("systemC", () => () => {
         calls.push("C");
       });
 
-      // B (index 2) no deps
-      addSystem(world, function systemB() {
-        calls.push("B");
+      // D (index 0) depends on both B and C
+      const systemD = defineSystem("systemD", () => () => {
+        calls.push("D");
       });
+      addSystem(world, systemD, { after: [systemB, systemC] });
+
+      // C (index 1) no deps
+      addSystem(world, systemC);
+
+      // B (index 2) no deps
+      addSystem(world, systemB);
 
       // A (index 3) no deps
       addSystem(world, function systemA() {
@@ -826,17 +829,16 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, function render() {
+      const render = defineSystem("render", () => () => {
         calls.push("render");
       });
 
-      const factory = defineSystem("physics", () => {
-        return () => {
-          calls.push("physics");
-        };
+      const physics = defineSystem("physics", () => () => {
+        calls.push("physics");
       });
 
-      addSystem(world, factory, { before: "render" });
+      addSystem(world, render);
+      addSystem(world, physics, { before: render });
 
       await runOnce(world);
 
@@ -847,18 +849,19 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const factory = defineSystem("asyncSys", () => {
+      const syncSys = defineSystem("syncSys", () => () => {
+        calls.push("sync");
+      });
+
+      const asyncSys = defineSystem("asyncSys", () => {
         return async () => {
           await Promise.resolve();
           calls.push("async");
         };
       });
 
-      addSystem(world, function syncSys() {
-        calls.push("sync");
-      });
-
-      addSystem(world, factory, { before: "syncSys" });
+      addSystem(world, syncSys);
+      addSystem(world, asyncSys, { before: syncSys });
 
       await runOnce(world);
 
@@ -899,7 +902,7 @@ describe("Scheduler", () => {
         };
       });
 
-      addSystem(world, factory, { after: "plain" });
+      addSystem(world, factory);
 
       await runOnce(world);
 

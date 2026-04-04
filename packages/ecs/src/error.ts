@@ -124,8 +124,8 @@ export class InvalidArgument extends IrisError {
  * @example
  * ```typescript
  * // Thrown on circular system dependencies
- * addSystem(world, a, { before: "b" });
- * addSystem(world, b, { before: "a" });
+ * addSystem(world, a, { before: b });
+ * addSystem(world, b, { before: a });
  * await runOnce(world);
  * ```
  */
