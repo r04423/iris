@@ -678,6 +678,34 @@ Without constraints, systems run in registration order. Use arrays for multiple 
 
 `defineSystem` factory can be registered multiple times with different names via the `name` option: `addSystem(world, movementSystem, { name: "lateMovement" })`.
 
+#### System Sets
+
+**System sets** are named groups for ordering entire groups of systems relative to each other. Instead of wiring individual `before`/`after` between every physics and render system, declare the group-level constraint once:
+
+```typescript
+import { defineSystemSet, addSystemSet, addSystem } from "iris-ecs";
+
+const PhysicsSystems = defineSystemSet("PhysicsSystems");
+const RenderSystems = defineSystemSet("RenderSystems");
+
+addSystemSet(world, PhysicsSystems, { before: RenderSystems });
+addSystemSet(world, RenderSystems);
+
+addSystem(world, applyGravity, { set: PhysicsSystems });
+addSystem(world, detectCollisions, { set: PhysicsSystems, after: applyGravity });
+addSystem(world, drawSprites, { set: RenderSystems });
+addSystem(world, drawParticles, { set: RenderSystems });
+// All physics systems run before all render systems
+```
+
+Systems within a set still respect their own `before`/`after` constraints. A system can also order itself relative to a set without joining it:
+
+```typescript
+addSystem(world, debugOverlay, { after: PhysicsSystems, before: RenderSystems });
+```
+
+A system uses either `schedule` or `set`, not both -- the set inherits its schedule from `addSystemSet`.
+
 #### Schedules
 
 Systems are grouped into **schedules** -- named execution phases. The default pipeline runs these schedules every frame:

@@ -179,11 +179,7 @@ describe("DirectedAcyclicGraph", () => {
       assert.throws(
         () => topologicalSort(dag),
         (err: unknown) => {
-          return (
-            err instanceof Error &&
-            err.message.includes("a") &&
-            err.message.includes("b")
-          );
+          return err instanceof Error && err.message.includes("a") && err.message.includes("b");
         }
       );
     });
@@ -200,10 +196,7 @@ describe("DirectedAcyclicGraph", () => {
         () => topologicalSort(dag),
         (err: unknown) => {
           return (
-            err instanceof Error &&
-            err.message.includes("a") &&
-            err.message.includes("b") &&
-            err.message.includes("c")
+            err instanceof Error && err.message.includes("a") && err.message.includes("b") && err.message.includes("c")
           );
         }
       );
