@@ -13,7 +13,7 @@ import type { QueryMeta } from "./query.js";
 import type { ComponentMeta } from "./registry.js";
 import { COMPONENT_REGISTRY } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
-import type { ScheduleLabel, SystemMeta } from "./scheduler.js";
+import type { ScheduleLabel, SystemMeta, SystemSetLabel, SystemSetMeta } from "./scheduler.js";
 import { First, Last, PostUpdate, PreUpdate, Update } from "./scheduler.js";
 
 // ============================================================================
@@ -122,6 +122,16 @@ export type World = {
      * Next registration index for stable ordering.
      */
     nextIndex: number;
+  };
+
+  /**
+   * System set registry.
+   */
+  systemSets: {
+    /**
+     * System set metadata by label.
+     */
+    byId: Map<SystemSetLabel, SystemSetMeta>;
   };
 
   /**
@@ -243,6 +253,9 @@ export function createWorld(): World {
     systems: {
       byId: new Map(),
       nextIndex: 0,
+    },
+    systemSets: {
+      byId: new Map(),
     },
     schedules: {
       byId: new Map(),

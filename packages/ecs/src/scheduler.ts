@@ -1,3 +1,12 @@
+import {
+  addEdge,
+  addNode,
+  createDag,
+  getPredecessors,
+  getSuccessors,
+  removeNode as removeDagNode,
+  topologicalSort,
+} from "./directed-acyclic-graph.js";
 import { assert, Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
 import { flushEvents } from "./event.js";
 import { fireObserverEvent } from "./observer.js";
@@ -91,6 +100,72 @@ export const PostUpdate = defineSchedule("PostUpdate");
 export const Last = defineSchedule("Last");
 
 // ============================================================================
+// System Set Label Types
+// ============================================================================
+
+/**
+ * System set label brand for nominal typing.
+ */
+declare const SYSTEM_SET_LABEL_BRAND: unique symbol;
+
+/**
+ * System set label (branded string).
+ *
+ * Identifies a system set for group-level ordering.
+ */
+export type SystemSetLabel = string & { [SYSTEM_SET_LABEL_BRAND]: true };
+
+/**
+ * Reference to a system or system set in ordering constraints.
+ */
+export type SystemReference = SystemFactory | SystemSetLabel | string;
+
+/**
+ * Options for system set registration.
+ */
+export type SystemSetOptions = {
+  /**
+   * Schedule this set belongs to. Defaults to Update.
+   */
+  schedule?: ScheduleLabel;
+
+  /**
+   * All systems in this set run before these systems or sets.
+   */
+  before?: SystemReference | SystemReference[];
+
+  /**
+   * All systems in this set run after these systems or sets.
+   */
+  after?: SystemReference | SystemReference[];
+};
+
+/**
+ * System set metadata stored in registry.
+ */
+export type SystemSetMeta = {
+  /**
+   * Schedule this set belongs to.
+   */
+  schedule: ScheduleLabel;
+
+  /**
+   * Systems or sets this set must execute before.
+   */
+  before: string[];
+
+  /**
+   * Systems or sets this set must execute after.
+   */
+  after: string[];
+
+  /**
+   * System names that belong to this set (populated by addSystem calls).
+   */
+  systems: string[];
+};
+
+// ============================================================================
 // Scheduler Types
 // ============================================================================
 
@@ -125,29 +200,48 @@ export type SystemFactory = {
 };
 
 /**
- * Options for system registration.
+ * Shared options for system registration.
  */
-export type SystemOptions = {
+type SystemOptionsBase = {
   /**
    * Custom name (overrides function.name). Required for anonymous functions.
    */
   name?: string;
 
   /**
-   * Schedule this system belongs to. Defaults to Update.
+   * Run before these systems or sets (within same schedule).
    */
-  schedule?: ScheduleLabel;
+  before?: SystemReference | SystemReference[];
 
   /**
-   * Run before these systems (within same schedule).
+   * Run after these systems or sets (within same schedule).
    */
-  before?: SystemFactory | SystemFactory[];
-
-  /**
-   * Run after these systems (within same schedule).
-   */
-  after?: SystemFactory | SystemFactory[];
+  after?: SystemReference | SystemReference[];
 };
+
+/**
+ * Options for system registration.
+ *
+ * Exactly one of `schedule` or `set` may be provided. When `set` is given,
+ * the system inherits the set's schedule. When neither is given, the system
+ * defaults to the Update schedule.
+ */
+export type SystemOptions = SystemOptionsBase &
+  (
+    | {
+        /** Schedule this system belongs to. Defaults to Update. */
+        schedule?: ScheduleLabel;
+        set?: never;
+      }
+    | {
+        schedule?: never;
+        /**
+         * System set this system belongs to. The set must be registered first
+         * via `addSystemSet()`. The set's schedule applies to this system.
+         */
+        set?: SystemSetLabel;
+      }
+  );
 
 /**
  * System metadata stored in registry.
@@ -177,7 +271,85 @@ export type SystemMeta = {
    * Systems this one must execute after (these run before this system).
    */
   after: string[];
+
+  /**
+   * System set this system belongs to, if any.
+   */
+  set?: SystemSetLabel;
 };
+
+// ============================================================================
+// System Set Definition
+// ============================================================================
+
+/**
+ * Define a system set label.
+ *
+ * System sets are named groups for group-level ordering. Define the label
+ * first, then register it in a world via `addSystemSet()`.
+ *
+ * @param name - Set name (must be unique when registered)
+ * @returns System set label
+ *
+ * @example
+ * ```typescript
+ * const PhysicsSystems = defineSystemSet("PhysicsSystems");
+ * addSystemSet(world, PhysicsSystems, { before: RenderSystems });
+ * ```
+ */
+export function defineSystemSet(name: string): SystemSetLabel {
+  return name as SystemSetLabel;
+}
+
+// ============================================================================
+// System Set Registration
+// ============================================================================
+
+/**
+ * Register a system set in the world with optional ordering constraints.
+ *
+ * Must be called before any `addSystem()` call that references this set
+ * via the `set` option.
+ *
+ * @param world - World instance
+ * @param set - System set label from `defineSystemSet()`
+ * @param options - Registration options (schedule, before, after)
+ *
+ * @example
+ * ```typescript
+ * const PhysicsSystems = defineSystemSet("PhysicsSystems");
+ * const RenderSystems = defineSystemSet("RenderSystems");
+ * addSystemSet(world, PhysicsSystems, { schedule: Update, before: RenderSystems });
+ * addSystemSet(world, RenderSystems, { schedule: Update });
+ * ```
+ */
+export function addSystemSet(world: World, set: SystemSetLabel, options?: SystemSetOptions): void {
+  assert(!world.systemSets.byId.has(set), Duplicate, { resource: "SystemSet", id: set });
+
+  const before = options?.before;
+  const after = options?.after;
+
+  world.systemSets.byId.set(set, {
+    schedule: options?.schedule ?? Update,
+    before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
+    after: !after ? [] : Array.isArray(after) ? after.map(resolveReference) : [resolveReference(after)],
+    systems: [],
+  });
+
+  world.schedules.dirty = true;
+}
+
+// ============================================================================
+// Reference Resolution
+// ============================================================================
+
+/**
+ * Resolves a SystemReference to a string name.
+ * @internal
+ */
+function resolveReference(ref: SystemReference): string {
+  return typeof ref === "string" ? ref : ref.name;
+}
 
 // ============================================================================
 // System Registration
@@ -217,17 +389,37 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
   assert(name && name !== "anonymous", InvalidArgument, { expected: "named system function or name option" });
   assert(!world.systems.byId.has(name), Duplicate, { resource: "System", id: name });
 
-  // Normalize before/after constraints to arrays for consistent handling
+  const setLabel = options?.set;
+
+  // Validate set exists
+  if (setLabel) {
+    assert(world.systemSets.byId.has(setLabel), NotFound, {
+      resource: "SystemSet",
+      id: setLabel,
+      context: `"${name}" set option`,
+    });
+  }
+
+  // Resolve schedule: from set if specified, else from options, else Update
+  const schedule = setLabel ? world.systemSets.byId.get(setLabel)!.schedule : (options?.schedule ?? Update);
+
+  // Normalize before/after constraints to arrays
   const before = options?.before;
   const after = options?.after;
 
   world.systems.byId.set(name, {
     runner,
-    schedule: options?.schedule ?? Update,
+    schedule,
     index: world.systems.nextIndex++,
-    before: !before ? [] : Array.isArray(before) ? before.map((s) => s.name) : [before.name],
-    after: !after ? [] : Array.isArray(after) ? after.map((s) => s.name) : [after.name],
+    before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
+    after: !after ? [] : Array.isArray(after) ? after.map(resolveReference) : [resolveReference(after)],
+    set: setLabel,
   });
+
+  // Add system to set's member list
+  if (setLabel) {
+    world.systemSets.byId.get(setLabel)!.systems.push(name);
+  }
 
   world.schedules.dirty = true;
 }
@@ -336,11 +528,15 @@ export function insertScheduleAfter(world: World, schedule: ScheduleLabel, ancho
 // ============================================================================
 
 /**
- * Builds an execution order from registered systems using topological sort.
- * Systems are ordered by before/after constraints, with registration order as tiebreaker.
+ * Builds an execution order from registered systems using a DAG with set flattening.
+ *
+ * 1. Collect systems and sets for this schedule
+ * 2. Build DAG with system + set nodes and constraint edges
+ * 3. Flatten: replace set nodes with edges to/from member systems
+ * 4. Topological sort with registration-index comparator
  */
 function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
-  // Filter systems belonging to this schedule
+  // Collect systems belonging to this schedule
   const scheduleSystems = new Map<string, SystemMeta>();
 
   for (const [name, meta] of world.systems.byId) {
@@ -349,116 +545,124 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
     }
   }
 
+  // Collect sets belonging to this schedule
+  const scheduleSets = new Map<string, SystemSetMeta>();
+
+  for (const [label, meta] of world.systemSets.byId) {
+    if (meta.schedule === scheduleLabel) {
+      scheduleSets.set(label, meta);
+    }
+  }
+
   if (scheduleSystems.size === 0) {
     world.schedules.byId.set(scheduleLabel, []);
-
     return;
   }
 
-  // Build dependency graph for Kahn's algorithm
-  const adjacency = new Map<string, string[]>();
-  const inDegree = new Map<string, number>();
+  // Build DAG with system and set nodes
+  const dag = createDag<string>();
 
   for (const name of scheduleSystems.keys()) {
-    adjacency.set(name, []);
-    inDegree.set(name, 0);
+    addNode(dag, name);
   }
 
-  // Convert before/after constraints into directed edges
+  for (const label of scheduleSets.keys()) {
+    addNode(dag, label);
+  }
+
+  // Add system constraint edges
   for (const [name, meta] of scheduleSystems) {
     for (const beforeName of meta.before) {
-      if (!scheduleSystems.has(beforeName)) {
+      if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
         throw new NotFound({
-          resource: "System",
+          resource: "System or SystemSet",
           id: beforeName,
           context: `"${name}" before constraint in schedule "${scheduleLabel}"`,
         });
       }
-
-      // "A before B" means edge A -> B (A must run first)
-      adjacency.get(name)!.push(beforeName);
-      inDegree.set(beforeName, inDegree.get(beforeName)! + 1);
+      addEdge(dag, name, beforeName);
     }
 
     for (const afterName of meta.after) {
-      if (!scheduleSystems.has(afterName)) {
+      if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
         throw new NotFound({
-          resource: "System",
+          resource: "System or SystemSet",
           id: afterName,
           context: `"${name}" after constraint in schedule "${scheduleLabel}"`,
         });
       }
-
-      // "A after B" means edge B -> A (B must run first)
-      adjacency.get(afterName)!.push(name);
-      inDegree.set(name, inDegree.get(name)! + 1);
+      addEdge(dag, afterName, name);
     }
   }
 
-  // Initialize queue with systems having no dependencies
-  const queue: string[] = [];
+  // Add set constraint edges
+  for (const [label, meta] of scheduleSets) {
+    for (const beforeName of meta.before) {
+      if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
+        throw new NotFound({
+          resource: "System or SystemSet",
+          id: beforeName,
+          context: `"${label}" before constraint in schedule "${scheduleLabel}"`,
+        });
+      }
+      addEdge(dag, label, beforeName);
+    }
 
-  for (const [name, degree] of inDegree) {
-    if (degree === 0) {
-      insertSorted(queue, name, scheduleSystems);
+    for (const afterName of meta.after) {
+      if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
+        throw new NotFound({
+          resource: "System or SystemSet",
+          id: afterName,
+          context: `"${label}" after constraint in schedule "${scheduleLabel}"`,
+        });
+      }
+      addEdge(dag, afterName, label);
     }
   }
 
-  // Process queue, maintaining sorted order by registration index
-  const result: string[] = [];
+  // Flatten: replace set nodes with edges to/from member systems
+  for (const [label, meta] of scheduleSets) {
+    const predecessors = getPredecessors(dag, label);
+    const successors = getSuccessors(dag, label);
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    result.push(current);
-
-    for (const dependent of adjacency.get(current)!) {
-      const newDegree = inDegree.get(dependent)! - 1;
-      inDegree.set(dependent, newDegree);
-
-      if (newDegree === 0) {
-        insertSorted(queue, dependent, scheduleSystems);
+    if (meta.systems.length === 0) {
+      // Empty set: wire predecessors directly to successors
+      for (const pred of predecessors) {
+        for (const succ of successors) {
+          addEdge(dag, pred, succ);
+        }
+      }
+    } else {
+      // Redirect edges to/from each member system
+      for (const pred of predecessors) {
+        for (let k = 0; k < meta.systems.length; k++) {
+          addEdge(dag, pred, meta.systems[k]!);
+        }
+      }
+      for (const succ of successors) {
+        for (let k = 0; k < meta.systems.length; k++) {
+          addEdge(dag, meta.systems[k]!, succ);
+        }
       }
     }
+
+    removeDagNode(dag, label);
   }
 
-  // Detect circular dependencies (remaining systems with non-zero in-degree)
-  if (result.length !== scheduleSystems.size) {
-    const remaining: string[] = [];
+  // Sort with registration-index comparator for determinism
+  let result: string[];
 
-    for (const [name, degree] of inDegree) {
-      if (degree > 0) {
-        remaining.push(name);
-      }
-    }
-
-    throw new InvalidState({ message: `Circular dependency in schedule "${scheduleLabel}": ${remaining.join(", ")}` });
+  try {
+    result = topologicalSort(dag, (a, b) => {
+      return scheduleSystems.get(a)!.index - scheduleSystems.get(b)!.index;
+    });
+  } catch (err) {
+    throw new InvalidState({
+      message: `Circular dependency in schedule "${scheduleLabel}": ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 
   world.schedules.byId.set(scheduleLabel, result);
-}
-
-/**
- * Inserts a system name into the queue maintaining sorted order by registration index.
- * Uses binary search for O(log n) insertion position lookup.
- * This ensures deterministic ordering when multiple systems have no dependency constraints.
- */
-function insertSorted(queue: string[], name: string, systems: Map<string, SystemMeta>): void {
-  const index = systems.get(name)!.index;
-  let low = 0;
-  let high = queue.length;
-
-  // Binary search for correct insertion position
-  while (low < high) {
-    const mid = (low + high) >>> 1;
-
-    if (systems.get(queue[mid]!)!.index < index) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  queue.splice(low, 0, name);
 }
 
 /**

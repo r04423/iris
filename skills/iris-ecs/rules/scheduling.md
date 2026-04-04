@@ -1,6 +1,6 @@
 ---
 name: scheduling
-description: Schedules and execution -- First, PreUpdate, Update, PostUpdate, Last, Startup, Shutdown, defineSchedule, insertScheduleBefore, insertScheduleAfter, run, runOnce, stop
+description: Schedules and execution -- First, PreUpdate, Update, PostUpdate, Last, Startup, Shutdown, defineSchedule, insertScheduleBefore, insertScheduleAfter, run, runOnce, stop, system set schedule affinity
 metadata:
   tags: schedule, pipeline, defineSchedule, insertScheduleBefore, insertScheduleAfter, run, runOnce, stop, First, PreUpdate, Update, PostUpdate, Last, Startup, Shutdown, ScheduleLabel
 ---
@@ -237,13 +237,20 @@ addSystem(world, renderSystem);   // runs third?
 addSystem(world, applyInput);
 addSystem(world, movementSystem, { after: "applyInput" });
 addSystem(world, renderSystem, { schedule: PostUpdate });
+
+// BETTER: use system sets for group-level ordering
+const GameplaySystems = defineSystemSet("GameplaySystems");
+addSystemSet(world, GameplaySystems, { schedule: Update });
+addSystem(world, applyInput, { set: GameplaySystems });
+addSystem(world, movementSystem, { set: GameplaySystems, after: applyInput });
+addSystem(world, renderSystem, { schedule: PostUpdate });
 ```
 
-**Why:** Registration order is the tiebreaker, not the contract. Adding a system between the first two in a future PR silently changes execution order. Explicit `before`/`after` constraints survive refactoring. For cross-phase ordering, use separate schedules -- that's what they're for.
+**Why:** Registration order is the tiebreaker, not the contract. Explicit `before`/`after` constraints survive refactoring. For group-level ordering ("all physics before all rendering"), use system sets -- see [systems.md](./systems.md). For cross-phase ordering, use separate schedules.
 
 ## See Also
 
-- [systems.md](./systems.md) -- `defineSystem`, `addSystem`, init/tick separation, `before`/`after` ordering
+- [systems.md](./systems.md) -- `defineSystem`, `addSystem`, `defineSystemSet`, `addSystemSet`, init/tick separation, `before`/`after` ordering, system sets
 - [world.md](./world.md) -- `createWorld`, `resetWorld` (resets schedules dirty flag)
 - [events.md](./events.md) -- events flush automatically at end of each frame
 - [change-detection.md](./change-detection.md) -- `added()`, `changed()`, `removed()` depend on system execution context

@@ -87,8 +87,10 @@ export {
 
 export {
   addSystem,
+  addSystemSet,
   defineSchedule,
   defineSystem,
+  defineSystemSet,
   First,
   insertScheduleAfter,
   insertScheduleBefore,
@@ -131,7 +133,18 @@ export type {
   QueryMeta,
   QueryModifier,
 } from "./query.js";
-export type { ScheduleLabel, SystemFactory, SystemMeta, SystemOptions, SystemRunner, SystemTick } from "./scheduler.js";
+export type {
+  ScheduleLabel,
+  SystemFactory,
+  SystemMeta,
+  SystemOptions,
+  SystemReference,
+  SystemRunner,
+  SystemSetLabel,
+  SystemSetMeta,
+  SystemSetOptions,
+  SystemTick,
+} from "./scheduler.js";
 export type {
   InferSchema,
   InferSchemaRecord,

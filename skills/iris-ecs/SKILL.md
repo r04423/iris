@@ -60,7 +60,7 @@ run(world); // starts a requestAnimationFrame loop
 - **Archetype** - Internal grouping of entities sharing the same component set. Adding / removing components moves entities between archetypes (expensive). Reading / writing component values is cheap (direct TypedArray access).
 - **Query** - Fetches entities matching component constraints. Supports exclusion with `not()`. Cache queries in system init with `cacheQuery()`.
 - **Change Detection** - Track entity changes between system runs. `added()` and `changed()` are query modifiers. `removed()` returns an Event (read with `readEvents`). ONLY works inside system execution context.
-- **System** - A function that operates on the world each frame. Uses init / tick separation: init runs once (cache queries here), tick runs every frame. Defined with `defineSystem()`.
+- **System** - A function that operates on the world each frame. Uses init / tick separation: init runs once (cache queries here), tick runs every frame. Defined with `defineSystem()`. Systems can be grouped into **system sets** (`defineSystemSet`, `addSystemSet`) for group-level ordering.
 - **Schedule** - Named execution phase. Default pipeline: `First` > `PreUpdate` > `Update` > `PostUpdate` > `Last`. Plus `Startup` (runs once before first frame) and `Shutdown` (runs once on `stop()`).
 - **Relation** - A directed connection between two entities. `pair(relation, target)` encodes a relation into a Pair, which acts like a component: added / removed / queried with `addComponent`, `hasComponent`, `queryEntities`. Supports wildcards, exclusive mode, and cascade deletion.
 - **Event** - Ephemeral message for inter-system communication. Double-buffered, survives one full frame, then discarded. Each system tracks consumption independently.
@@ -80,7 +80,7 @@ Each rule file covers one concept. Load the relevant file for the task at hand. 
 - [resources.md](./rules/resources.md) - Resources (global state): `addResource`, `removeResource`, `hasResource`, `getResourceValue`, `setResourceValue`
 - [queries.md](./rules/queries.md) - Queries and filters: `queryEntities`, `queryFirstEntity`, `collectEntities`, `cacheQuery`, `not()`
 - [change-detection.md](./rules/change-detection.md) - Change detection: `added()`, `changed()`, `removed()`, system context requirement
-- [systems.md](./rules/systems.md) - Systems: `defineSystem`, `addSystem`, init/tick separation, `before`/`after` ordering, plain function systems
+- [systems.md](./rules/systems.md) - Systems and system sets: `defineSystem`, `addSystem`, `defineSystemSet`, `addSystemSet`, init/tick separation, `before`/`after` ordering, system sets for group-level ordering, plain function systems
 - [scheduling.md](./rules/scheduling.md) - Schedules and execution: `First`/`PreUpdate`/`Update`/`PostUpdate`/`Last`/`Startup`/`Shutdown`, `defineSchedule`, `insertScheduleBefore`/`After`, `run`, `runOnce`, `stop`
 - [relations.md](./rules/relations.md) - Relations, pairs, wildcards: `defineRelation`, `pair`, `getPairRelation`, `getPairTarget`, `getRelationTargets`, `Wildcard`, exclusive relations, cascade deletion, data relations
 - [events.md](./rules/events.md) - Events: `defineEvent`, `emitEvent`, `readEvents`, `collectEvents`, `readLastEvent`, `hasEvents`, `countEvents`, `clearEvents`

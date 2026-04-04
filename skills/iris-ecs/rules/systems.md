@@ -1,8 +1,8 @@
 ---
 name: systems
-description: Systems -- defineSystem, addSystem, plain function systems, init/tick separation, before/after ordering, system-private state
+description: Systems -- defineSystem, addSystem, defineSystemSet, addSystemSet, plain function systems, init/tick separation, before/after ordering, system sets, system-private state
 metadata:
-  tags: system, defineSystem, addSystem, SystemFactory, SystemRunner, SystemOptions, before, after, init, tick
+  tags: system, defineSystem, addSystem, defineSystemSet, addSystemSet, SystemFactory, SystemRunner, SystemOptions, SystemSetLabel, SystemSetOptions, before, after, set, init, tick
 ---
 
 # Systems
@@ -101,9 +101,12 @@ Accepts either a `SystemFactory` (from `defineSystem`) or a plain `SystemRunner`
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `name` | `string` | function/factory name | Overrides the system name. Required for anonymous functions. |
-| `schedule` | `ScheduleLabel` | `Update` | Which schedule to run in. See [scheduling.md](./scheduling.md). |
-| `before` | `string \| string[]` | — | This system runs before the named systems. |
-| `after` | `string \| string[]` | — | This system runs after the named systems. |
+| `schedule` | `ScheduleLabel` | `Update` | Which schedule to run in. Cannot be combined with `set`. See [scheduling.md](./scheduling.md). |
+| `set` | `SystemSetLabel` | — | System set to join. Inherits the set's schedule. Cannot be combined with `schedule`. |
+| `before` | `SystemReference \| SystemReference[]` | — | This system runs before the named systems or sets. |
+| `after` | `SystemReference \| SystemReference[]` | — | This system runs after the named systems or sets. |
+
+`SystemReference` accepts a `SystemFactory` (resolved via `.name`), a `SystemSetLabel`, or a plain `string`.
 
 Throws `Duplicate` if a system with the same name is already registered.
 
@@ -123,6 +126,43 @@ addSystem(world, damageFlash);
 addSystem(world, damageFlash, { name: "healFlash", schedule: PostUpdate });
 ```
 
+## System Sets -- Group-Level Ordering
+
+System sets are named groups for ordering entire groups of systems relative to each other.
+
+```typescript
+import { defineSystemSet, addSystemSet } from "iris-ecs";
+
+const PhysicsSystems = defineSystemSet("PhysicsSystems");
+const RenderSystems = defineSystemSet("RenderSystems");
+
+addSystemSet(world, RenderSystems);
+addSystemSet(world, PhysicsSystems, { before: RenderSystems });
+
+addSystem(world, applyGravity, { set: PhysicsSystems });
+addSystem(world, detectCollisions, { set: PhysicsSystems, after: applyGravity });
+addSystem(world, drawSprites, { set: RenderSystems });
+```
+
+All physics systems run before all render systems. Systems within a set still respect their own `before`/`after` constraints.
+
+`addSystemSet` options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `schedule` | `ScheduleLabel` | `Update` | Schedule for all systems in this set. |
+| `before` | `SystemReference \| SystemReference[]` | — | All members run before these systems or sets. |
+| `after` | `SystemReference \| SystemReference[]` | — | All members run after these systems or sets. |
+
+Sets must be registered via `addSystemSet` before any `addSystem` call references them via `set`. Sets are a build-time concept -- the executor sees a flat sorted list.
+
+### Standalone system ordering relative to a set
+
+```typescript
+// Run after all physics systems, before all render systems
+addSystem(world, debugOverlay, { after: PhysicsSystems, before: RenderSystems });
+```
+
 ## Ordering with `before` / `after`
 
 Within a schedule, systems run in registration order by default. Use `before` and `after` to enforce ordering constraints:
@@ -133,16 +173,22 @@ addSystem(world, applyDamage);
 addSystem(world, resolveCollisions, { after: "applyInput", before: "applyDamage" });
 ```
 
-Both accept a single name or an array:
+Both accept a single reference or an array. References can be a `SystemFactory`, a `SystemSetLabel`, or a plain `string`:
 
 ```typescript
 addSystem(world, renderUI, {
   schedule: Last,
   after: ["updateCamera", "updateParticles"],
 });
+
+// Factory reference (resolved via .name)
+addSystem(world, collision, { after: gravity });
+
+// Set reference (orders relative to entire group)
+addSystem(world, debugOverlay, { after: PhysicsSystems });
 ```
 
-Constraints are resolved via topological sort within each schedule. Circular dependencies throw `InvalidState` at build time. Referencing a system name that doesn't exist in the same schedule throws `NotFound`.
+Constraints are resolved via topological sort within each schedule. Circular dependencies throw `InvalidState` at build time. Referencing a system or set that doesn't exist in the same schedule throws `NotFound`.
 
 ## System-Private State
 
@@ -220,3 +266,4 @@ const spawnSystem = defineSystem("spawnSystem", (world) => {
 - [actions.md](./actions.md) -- cached closures for reusable operations, also cached in init
 - [change-detection.md](./change-detection.md) -- `added()`, `changed()`, `removed()` require system execution context
 - [resources.md](./resources.md) -- world-level state accessed from systems
+- [events.md](./events.md) -- inter-system communication via double-buffered event queues

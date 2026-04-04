@@ -10,8 +10,10 @@ import { addResource, getResourceValue } from "./resource.js";
 import type { ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
+  addSystemSet,
   defineSchedule,
   defineSystem,
+  defineSystemSet,
   First,
   insertScheduleAfter,
   insertScheduleBefore,
@@ -94,6 +96,17 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(meta?.before, ["a", "b"]);
       assert.deepStrictEqual(meta?.after, ["c", "d"]);
     });
+
+    it("stores before/after as string arrays from string references", () => {
+      const world = createWorld();
+
+      const system = defineSystem("system", () => () => {});
+      addSystem(world, system, { before: "target1", after: ["target2", "target3"] });
+
+      const meta = world.systems.byId.get("system");
+      assert.deepStrictEqual(meta?.before, ["target1"]);
+      assert.deepStrictEqual(meta?.after, ["target2", "target3"]);
+    });
   });
 
   describe("Registration Validation", () => {
@@ -119,6 +132,14 @@ describe("Scheduler", () => {
       addSystem(world, physicsSystem);
 
       assert.throws(() => addSystem(world, physicsSystem), Duplicate);
+    });
+
+    it("throws InvalidArgument for factory with empty name", () => {
+      const world = createWorld();
+
+      const factory = defineSystem("", () => () => {});
+
+      assert.throws(() => addSystem(world, factory), InvalidArgument);
     });
   });
 
@@ -185,6 +206,29 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(calls, ["a", "b", "c"]);
     });
 
+    it("respects combined before and after constraints", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const a = defineSystem("a", () => () => {
+        calls.push("a");
+      });
+      const b = defineSystem("b", () => () => {
+        calls.push("b");
+      });
+      const c = defineSystem("c", () => () => {
+        calls.push("c");
+      });
+
+      addSystem(world, c);
+      addSystem(world, a);
+      addSystem(world, b, { after: a, before: c });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["a", "b", "c"]);
+    });
+
     it("runs with no systems registered", async () => {
       const world = createWorld();
 
@@ -239,6 +283,31 @@ describe("Scheduler", () => {
       function system2() {}
       addSystem(world2, system2, { before: nonexistent });
       await assert.rejects(runOnce(world2), (err) => err instanceof NotFound);
+    });
+
+    it("throws on 3-node transitive cycle", async () => {
+      const world = createWorld();
+
+      const a = defineSystem("a", () => () => {});
+      const b = defineSystem("b", () => () => {});
+      const c = defineSystem("c", () => () => {});
+
+      addSystem(world, a, { before: b });
+      addSystem(world, b, { before: c });
+      addSystem(world, c, { before: a });
+
+      await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
+    });
+
+    it("throws NotFound for cross-schedule reference", async () => {
+      const world = createWorld();
+
+      const postSys = defineSystem("postSys", () => () => {});
+      addSystem(world, postSys, { schedule: PostUpdate });
+
+      addSystem(world, function updateSys() {}, { before: postSys });
+
+      await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
     });
   });
 
@@ -330,6 +399,22 @@ describe("Scheduler", () => {
 
       assert.strictEqual(world.execution.scheduleLabel, null);
       assert.strictEqual(world.execution.systemId, null);
+    });
+
+    it("execution context changes per system", async () => {
+      const world = createWorld();
+      const captured: string[] = [];
+
+      addSystem(world, function alpha() {
+        captured.push(world.execution.systemId!);
+      });
+      addSystem(world, function beta() {
+        captured.push(world.execution.systemId!);
+      });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(captured, ["alpha", "beta"]);
     });
   });
 
@@ -601,27 +686,6 @@ describe("Scheduler", () => {
       assert.strictEqual(shutdownCount, 1);
     });
 
-    it("startup runs before pipeline schedules", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      addSystem(
-        world,
-        function startupSys() {
-          calls.push("startup");
-        },
-        { schedule: Startup }
-      );
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
-
-      await runOnce(world);
-
-      assert.strictEqual(calls[0], "startup");
-      assert.strictEqual(calls[1], "update");
-    });
-
     it("stop then runOnce re-triggers startup and shutdown", async () => {
       const world = createWorld();
       let startupCount = 0;
@@ -654,6 +718,24 @@ describe("Scheduler", () => {
       await stop(world);
       assert.strictEqual(shutdownCount, 2);
     });
+
+    it("stop without prior runOnce runs shutdown", async () => {
+      const world = createWorld();
+      let shutdownCount = 0;
+
+      addSystem(
+        world,
+        function shutdownSys() {
+          shutdownCount++;
+        },
+        { schedule: Shutdown }
+      );
+
+      // No runOnce call -- stop directly
+      await stop(world);
+
+      assert.strictEqual(shutdownCount, 1);
+    });
   });
 
   describe("Auto-rebuild", () => {
@@ -678,6 +760,34 @@ describe("Scheduler", () => {
 
       assert.deepStrictEqual(calls, ["first", "second"]);
     });
+
+    it("rebuild includes newly inserted schedule", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(world, function updateSys() {
+        calls.push("update");
+      });
+
+      await runOnce(world);
+      assert.deepStrictEqual(calls, ["update"]);
+
+      // Insert custom schedule and add a system to it
+      const Physics = defineSchedule("Physics");
+      insertScheduleBefore(world, Physics, Update);
+      addSystem(
+        world,
+        function physicsSys() {
+          calls.push("physics");
+        },
+        { schedule: Physics }
+      );
+
+      calls.length = 0;
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["physics", "update"]);
+    });
   });
 
   describe("defineSystem", () => {
@@ -693,25 +803,6 @@ describe("Scheduler", () => {
       assert.strictEqual(initCount, 0);
       addSystem(world, factory);
       assert.strictEqual(initCount, 1);
-    });
-
-    it("tick runs every frame", async () => {
-      const world = createWorld();
-      let tickCount = 0;
-
-      const factory = defineSystem("testSystem", () => {
-        return () => {
-          tickCount++;
-        };
-      });
-
-      addSystem(world, factory);
-
-      await runOnce(world);
-      await runOnce(world);
-      await runOnce(world);
-
-      assert.strictEqual(tickCount, 3);
     });
 
     it("init runs once, tick runs many", async () => {
@@ -779,31 +870,6 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(found, [42]);
     });
 
-    it("system name comes from defineSystem", () => {
-      const world = createWorld();
-
-      const factory = defineSystem("mySystem", () => {
-        return () => {};
-      });
-
-      addSystem(world, factory);
-
-      assert.strictEqual(world.systems.byId.has("mySystem"), true);
-    });
-
-    it("options.name overrides factory name", () => {
-      const world = createWorld();
-
-      const factory = defineSystem("originalName", () => {
-        return () => {};
-      });
-
-      addSystem(world, factory, { name: "customName" });
-
-      assert.strictEqual(world.systems.byId.has("customName"), true);
-      assert.strictEqual(world.systems.byId.has("originalName"), false);
-    });
-
     it("schedule option works", async () => {
       const world = createWorld();
       const calls: string[] = [];
@@ -825,69 +891,6 @@ describe("Scheduler", () => {
       assert.strictEqual(calls.indexOf("first") < calls.indexOf("update"), true);
     });
 
-    it("before/after constraints work", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      const render = defineSystem("render", () => () => {
-        calls.push("render");
-      });
-
-      const physics = defineSystem("physics", () => () => {
-        calls.push("physics");
-      });
-
-      addSystem(world, render);
-      addSystem(world, physics, { before: render });
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["physics", "render"]);
-    });
-
-    it("awaits async tick functions", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      const syncSys = defineSystem("syncSys", () => () => {
-        calls.push("sync");
-      });
-
-      const asyncSys = defineSystem("asyncSys", () => {
-        return async () => {
-          await Promise.resolve();
-          calls.push("async");
-        };
-      });
-
-      addSystem(world, syncSys);
-      addSystem(world, asyncSys, { before: syncSys });
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["async", "sync"]);
-    });
-
-    it("sets execution context correctly during tick", async () => {
-      const world = createWorld();
-      let capturedSchedule: string | null = null;
-      let capturedSystem: string | null = null;
-
-      const factory = defineSystem("capture", () => {
-        return () => {
-          capturedSchedule = world.execution.scheduleLabel;
-          capturedSystem = world.execution.systemId;
-        };
-      });
-
-      addSystem(world, factory);
-
-      await runOnce(world);
-
-      assert.strictEqual(capturedSchedule, Update);
-      assert.strictEqual(capturedSystem, "capture");
-    });
-
     it("plain SystemRunner and SystemFactory coexist in same schedule", async () => {
       const world = createWorld();
       const calls: string[] = [];
@@ -907,31 +910,6 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.deepStrictEqual(calls, ["plain", "factory"]);
-    });
-
-    it("throws Duplicate for same factory name registered twice", () => {
-      const world = createWorld();
-
-      const factory = defineSystem("dupe", () => {
-        return () => {};
-      });
-
-      addSystem(world, factory);
-
-      assert.throws(() => addSystem(world, factory), Duplicate);
-    });
-
-    it("allows same factory registered with different names", () => {
-      const world = createWorld();
-
-      const factory = defineSystem("original", () => {
-        return () => {};
-      });
-
-      addSystem(world, factory, { name: "instance1" });
-      addSystem(world, factory, { name: "instance2" });
-
-      assert.strictEqual(world.systems.byId.size, 2);
     });
 
     it("local state persists across ticks", async () => {
@@ -1117,6 +1095,592 @@ describe("Scheduler", () => {
 
       // Duration should include the 10ms+ await
       assert.strictEqual(capturedDuration >= 5, true);
+    });
+  });
+
+  describe("System Sets", () => {
+    describe("defineSystemSet", () => {
+      it("returns a branded string label", () => {
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        assert.strictEqual(PhysicsSet, "PhysicsSet");
+      });
+    });
+
+    describe("addSystemSet", () => {
+      it("registers a system set in the world", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+        assert.strictEqual(world.systemSets.byId.has(PhysicsSet), true);
+      });
+
+      it("defaults schedule to Update", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+        assert.strictEqual(world.systemSets.byId.get(PhysicsSet)?.schedule, Update);
+      });
+
+      it("accepts explicit schedule", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { schedule: PostUpdate });
+        assert.strictEqual(world.systemSets.byId.get(PhysicsSet)?.schedule, PostUpdate);
+      });
+
+      it("throws Duplicate for duplicate set label", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+        assert.throws(() => addSystemSet(world, PhysicsSet), Duplicate);
+      });
+
+      it("marks schedules dirty", () => {
+        const world = createWorld();
+        world.schedules.dirty = false;
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+        assert.strictEqual(world.schedules.dirty, true);
+      });
+    });
+
+    describe("addSystem with set", () => {
+      it("associates system with a set", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+
+        const sys = defineSystem("sys", () => () => {});
+        addSystem(world, sys, { set: PhysicsSet });
+
+        assert.strictEqual(world.systems.byId.get("sys")?.set, PhysicsSet);
+        assert.deepStrictEqual(world.systemSets.byId.get(PhysicsSet)?.systems, ["sys"]);
+      });
+
+      it("inherits schedule from set", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { schedule: PostUpdate });
+
+        const sys = defineSystem("sys", () => () => {});
+        addSystem(world, sys, { set: PhysicsSet });
+
+        assert.strictEqual(world.systems.byId.get("sys")?.schedule, PostUpdate);
+      });
+
+      it("throws NotFound when set is not registered", () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+
+        const sys = defineSystem("sys", () => () => {});
+        assert.throws(() => addSystem(world, sys, { set: PhysicsSet }), NotFound);
+      });
+    });
+
+    describe("string references in before/after", () => {
+      it("resolves string reference to custom-named system", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const sys = defineSystem("sys", () => () => {
+          calls.push("sys");
+        });
+        addSystem(world, sys, { name: "customName" });
+
+        const other = defineSystem("other", () => () => {
+          calls.push("other");
+        });
+        addSystem(world, other, { after: "customName" });
+
+        await runOnce(world);
+        assert.strictEqual(calls.indexOf("sys") < calls.indexOf("other"), true);
+      });
+    });
+
+    describe("set ordering", () => {
+      it("set before set orders all members", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        const RenderSet = defineSystemSet("RenderSet");
+        addSystemSet(world, PhysicsSet, { before: RenderSet });
+        addSystemSet(world, RenderSet);
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {
+            calls.push("p1");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("p2", () => () => {
+            calls.push("p2");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("r1", () => () => {
+            calls.push("r1");
+          }),
+          { set: RenderSet }
+        );
+        addSystem(
+          world,
+          defineSystem("r2", () => () => {
+            calls.push("r2");
+          }),
+          { set: RenderSet }
+        );
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("r1"), true);
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("r2"), true);
+        assert.strictEqual(calls.indexOf("p2") < calls.indexOf("r1"), true);
+        assert.strictEqual(calls.indexOf("p2") < calls.indexOf("r2"), true);
+      });
+
+      it("set after set orders all members", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        const RenderSet = defineSystemSet("RenderSet");
+        addSystemSet(world, PhysicsSet);
+        addSystemSet(world, RenderSet, { after: PhysicsSet });
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {
+            calls.push("p1");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("p2", () => () => {
+            calls.push("p2");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("r1", () => () => {
+            calls.push("r1");
+          }),
+          { set: RenderSet }
+        );
+        addSystem(
+          world,
+          defineSystem("r2", () => () => {
+            calls.push("r2");
+          }),
+          { set: RenderSet }
+        );
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("r1"), true);
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("r2"), true);
+        assert.strictEqual(calls.indexOf("p2") < calls.indexOf("r1"), true);
+        assert.strictEqual(calls.indexOf("p2") < calls.indexOf("r2"), true);
+      });
+
+      it("system before set orders system before all set members", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const RenderSet = defineSystemSet("RenderSet");
+        addSystemSet(world, RenderSet);
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        addSystem(world, standalone, { before: RenderSet });
+
+        addSystem(
+          world,
+          defineSystem("r1", () => () => {
+            calls.push("r1");
+          }),
+          { set: RenderSet }
+        );
+        addSystem(
+          world,
+          defineSystem("r2", () => () => {
+            calls.push("r2");
+          }),
+          { set: RenderSet }
+        );
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("standalone") < calls.indexOf("r1"), true);
+        assert.strictEqual(calls.indexOf("standalone") < calls.indexOf("r2"), true);
+      });
+
+      it("system after set orders system after all set members", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {
+            calls.push("p1");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("p2", () => () => {
+            calls.push("p2");
+          }),
+          { set: PhysicsSet }
+        );
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        addSystem(world, standalone, { after: PhysicsSet });
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("standalone"), true);
+        assert.strictEqual(calls.indexOf("p2") < calls.indexOf("standalone"), true);
+      });
+
+      it("set before system orders all set members before system", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { before: standalone });
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {
+            calls.push("p1");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(world, standalone);
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("standalone"), true);
+      });
+
+      it("set after system orders all set members after system", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { after: standalone });
+
+        addSystem(world, standalone);
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {
+            calls.push("p1");
+          }),
+          { set: PhysicsSet }
+        );
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("standalone") < calls.indexOf("p1"), true);
+      });
+
+      it("in-set system referenced directly (not set-promotion)", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+
+        const p1 = defineSystem("p1", () => () => {
+          calls.push("p1");
+        });
+        const p2 = defineSystem("p2", () => () => {
+          calls.push("p2");
+        });
+        addSystem(world, p1, { set: PhysicsSet });
+        addSystem(world, p2, { set: PhysicsSet });
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        addSystem(world, standalone, { after: p1 });
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("p1") < calls.indexOf("standalone"), true);
+      });
+
+      it("empty set is valid and transparent", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const EmptySet = defineSystemSet("EmptySet");
+        addSystemSet(world, EmptySet);
+
+        const standalone = defineSystem("standalone", () => () => {
+          calls.push("standalone");
+        });
+        addSystem(world, standalone, { after: EmptySet });
+
+        await runOnce(world);
+
+        assert.deepStrictEqual(calls, ["standalone"]);
+      });
+
+      it("empty set wires predecessors to successors", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const EmptySet = defineSystemSet("EmptySet");
+        addSystemSet(world, EmptySet);
+
+        const a = defineSystem("a", () => () => {
+          calls.push("a");
+        });
+        const b = defineSystem("b", () => () => {
+          calls.push("b");
+        });
+
+        addSystem(world, b, { after: EmptySet });
+        addSystem(world, a, { before: EmptySet });
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("a") < calls.indexOf("b"), true);
+      });
+
+      it("systems within a set respect their own constraints", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+
+        const detect = defineSystem("detect", () => () => {
+          calls.push("detect");
+        });
+        const resolve = defineSystem("resolve", () => () => {
+          calls.push("resolve");
+        });
+        const apply = defineSystem("apply", () => () => {
+          calls.push("apply");
+        });
+
+        addSystem(world, resolve, { set: PhysicsSet, after: detect });
+        addSystem(world, detect, { set: PhysicsSet, after: apply });
+        addSystem(world, apply, { set: PhysicsSet });
+
+        await runOnce(world);
+
+        assert.deepStrictEqual(calls, ["apply", "detect", "resolve"]);
+      });
+
+      it("circular dependency through sets throws InvalidState", async () => {
+        const world = createWorld();
+
+        const SetA = defineSystemSet("SetA");
+        const SetB = defineSystemSet("SetB");
+        addSystemSet(world, SetA, { before: SetB });
+        addSystemSet(world, SetB, { before: SetA });
+
+        addSystem(
+          world,
+          defineSystem("a", () => () => {}),
+          { set: SetA }
+        );
+        addSystem(
+          world,
+          defineSystem("b", () => () => {}),
+          { set: SetB }
+        );
+
+        await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
+      });
+
+      it("unknown set in before throws NotFound", async () => {
+        const world = createWorld();
+        const UnknownSet = defineSystemSet("UnknownSet");
+
+        addSystem(world, function sys() {}, { before: UnknownSet });
+
+        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+      });
+
+      it("unknown set in after throws NotFound", async () => {
+        const world = createWorld();
+        const UnknownSet = defineSystemSet("UnknownSet");
+
+        addSystem(world, function sys() {}, { after: UnknownSet });
+
+        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+      });
+
+      it("set referencing unknown target in before throws NotFound", async () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { before: "nonexistent" });
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {}),
+          { set: PhysicsSet }
+        );
+
+        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+      });
+
+      it("set referencing unknown target in after throws NotFound", async () => {
+        const world = createWorld();
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet, { after: "nonexistent" });
+
+        addSystem(
+          world,
+          defineSystem("p1", () => () => {}),
+          { set: PhysicsSet }
+        );
+
+        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+      });
+
+      it("mixed standalone and set systems order correctly", async () => {
+        const world = createWorld();
+        const calls: string[] = [];
+
+        const PhysicsSet = defineSystemSet("PhysicsSet");
+        addSystemSet(world, PhysicsSet);
+
+        addSystem(world, function input() {
+          calls.push("input");
+        });
+        addSystem(
+          world,
+          defineSystem("gravity", () => () => {
+            calls.push("gravity");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          defineSystem("collision", () => () => {
+            calls.push("collision");
+          }),
+          { set: PhysicsSet }
+        );
+        addSystem(
+          world,
+          function render() {
+            calls.push("render");
+          },
+          { after: PhysicsSet }
+        );
+
+        await runOnce(world);
+
+        assert.strictEqual(calls.indexOf("gravity") < calls.indexOf("render"), true);
+        assert.strictEqual(calls.indexOf("collision") < calls.indexOf("render"), true);
+      });
+    });
+  });
+
+  describe("Custom-Named System References", () => {
+    it("custom-named system referenceable via string in before", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const sys = defineSystem("sys", () => () => {
+        calls.push("sys");
+      });
+      addSystem(world, sys, { name: "customName" });
+
+      addSystem(
+        world,
+        function leader() {
+          calls.push("leader");
+        },
+        { before: "customName" }
+      );
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.indexOf("leader") < calls.indexOf("sys"), true);
+    });
+
+    it("same factory registered twice with different names, both execute", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const sys = defineSystem("sys", () => () => {
+        calls.push("sys");
+      });
+      addSystem(world, sys);
+      addSystem(world, sys, { name: "sysCopy" });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.length, 2);
+    });
+
+    it("factory reference resolves to original name, not custom duplicate", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const sys = defineSystem("sys", () => () => {
+        calls.push("sys");
+      });
+      addSystem(world, sys);
+      addSystem(world, sys, { name: "sysCopy" });
+
+      const follower = defineSystem("follower", () => () => {
+        calls.push("follower");
+      });
+      addSystem(world, follower, { after: sys });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.indexOf("sys") < calls.indexOf("follower"), true);
+    });
+
+    it("custom-named system in a set works with set-level ordering", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      const PhysicsSet = defineSystemSet("PhysicsSet");
+      addSystemSet(world, PhysicsSet);
+
+      const sys = defineSystem("sys", () => () => {
+        calls.push("sys");
+      });
+      addSystem(world, sys, { set: PhysicsSet, name: "customPhysics" });
+
+      const follower = defineSystem("follower", () => () => {
+        calls.push("follower");
+      });
+      addSystem(world, follower, { after: PhysicsSet });
+
+      await runOnce(world);
+
+      assert.strictEqual(calls.indexOf("sys") < calls.indexOf("follower"), true);
     });
   });
 });
