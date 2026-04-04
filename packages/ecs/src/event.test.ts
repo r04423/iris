@@ -639,6 +639,54 @@ describe("Event", () => {
   });
 
   // ============================================================================
+  // Vector Schema Events
+  // ============================================================================
+
+  describe("Vector Schema Events", () => {
+    it("round-trips vector field data through emit and read", async () => {
+      const world = createWorld();
+      const MoveEvent = defineEvent("MoveVec", { position: Type.f32(3) });
+      let result: [number, number, number] | undefined;
+
+      addSystem(world, function reader() {
+        readEvents(world, MoveEvent, (e) => {
+          result = e.position;
+        });
+      });
+
+      emitEvent(world, MoveEvent, { position: [1.5, 2.5, 3.5] });
+      await runOnce(world);
+
+      assert.deepStrictEqual(result, [1.5, 2.5, 3.5]);
+    });
+
+    it("handles mixed scalar and vector fields", async () => {
+      const world = createWorld();
+      const HitEvent = defineEvent("HitMixed", {
+        position: Type.f32(3),
+        damage: Type.f32(),
+        source: Type.u32(),
+      });
+      const results: Array<{ position: [number, number, number]; damage: number; source: number }> = [];
+
+      addSystem(world, function reader() {
+        readEvents(world, HitEvent, (e) => {
+          results.push({ position: e.position, damage: e.damage, source: e.source });
+        });
+      });
+
+      emitEvent(world, HitEvent, { position: [1, 2, 3], damage: 50.5, source: 42 });
+      emitEvent(world, HitEvent, { position: [4, 5, 6], damage: 25, source: 7 });
+      await runOnce(world);
+
+      assert.deepStrictEqual(results, [
+        { position: [1, 2, 3], damage: 50.5, source: 42 },
+        { position: [4, 5, 6], damage: 25, source: 7 },
+      ]);
+    });
+  });
+
+  // ============================================================================
   // Integration Tests
   // ============================================================================
 
