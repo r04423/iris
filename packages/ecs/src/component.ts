@@ -5,7 +5,14 @@ import { ensureEntity, moveEntityToArchetype } from "./entity.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets } from "./relation.js";
-import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
+import type {
+  InferSchema,
+  InferSchemaRecord,
+  ScalarFields,
+  SchemaRecord,
+  TypedArrayInstance,
+  VectorFields,
+} from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -319,28 +326,28 @@ export function hasComponent<C extends EntityId>(
  * const x = getComponentValue(world, entity, Position, 'x');
  * ```
  */
-export function getComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function getComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function getComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityWith<Pair<Relation<S, N>>>,
   componentId: Pair<Relation<S, N>>,
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function getComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined;
 
-export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function getComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
@@ -376,7 +383,7 @@ export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
  * setComponentValue(world, entity, Position, 'x', 10.0);
  * ```
  */
-export function setComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function setComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
@@ -384,7 +391,7 @@ export function setComponentValue<S extends SchemaRecord, N extends string, K ex
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function setComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityWith<Pair<Relation<S, N>>>,
   componentId: Pair<Relation<S, N>>,
@@ -392,7 +399,7 @@ export function setComponentValue<S extends SchemaRecord, N extends string, K ex
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function setComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
@@ -400,7 +407,7 @@ export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function setComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,

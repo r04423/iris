@@ -203,10 +203,11 @@ export type InferSchema<S extends Schema> = S extends Schema<infer T> ? T : neve
 export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
 
 /**
- * Extracts field names from a schema record where the field is a scalar type (number, string, boolean).
+ * Extracts field names from a schema record where the field is stored with stride 1
+ * (scalars and object references -- anything that isn't an interleaved vector tuple).
  */
 export type ScalarFields<S extends SchemaRecord> = {
-  [K in keyof S]: InferSchema<S[K]> extends number | string | boolean ? K : never;
+  [K in keyof S]: InferSchema<S[K]> extends unknown[] ? never : K;
 }[keyof S];
 
 /**

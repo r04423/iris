@@ -9,7 +9,14 @@ import {
   setComponentVectorValue,
 } from "./component.js";
 import type { Component, EntityId, EntityWith } from "./encoding.js";
-import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
+import type {
+  InferSchema,
+  InferSchemaRecord,
+  ScalarFields,
+  SchemaRecord,
+  TypedArrayInstance,
+  VectorFields,
+} from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -98,19 +105,19 @@ export function hasResource(world: World, component: EntityId): boolean {
  * const current = getResourceValue(world, Time, "current"); // number | undefined
  * ```
  */
-export function getResourceValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function getResourceValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   world: World,
   component: Component<S, N> & EntityWith<Component<S, N>>,
   key: K
 ): InferSchema<S[K]>;
 
-export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
+export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   component: Component<S>,
   key: K
 ): InferSchema<S[K]> | undefined;
 
-export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
+export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   component: Component<S>,
   key: K
@@ -132,7 +139,7 @@ export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
  * setResourceValue(world, Time, "delta", 0.033);
  * ```
  */
-export function setResourceValue<S extends SchemaRecord, K extends keyof S>(
+export function setResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   world: World,
   component: Component<S>,
   key: K,
