@@ -1,4 +1,13 @@
-import type { Component, EntityId, EntityWith, InferSchema, Pair, Relation, SchemaRecord } from "iris-ecs";
+import type {
+  Component,
+  EntityId,
+  EntityWith,
+  InferSchema,
+  Pair,
+  Relation,
+  ScalarFields,
+  SchemaRecord,
+} from "iris-ecs";
 import { getComponentValue, isEntityAlive, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
 import { useCallback, useSyncExternalStore } from "react";
 import { useResetGeneration, useWorld } from "./context.js";
@@ -27,22 +36,22 @@ import { useResetGeneration, useWorld } from "./context.js";
  * }
  * ```
  */
-export function useComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function useComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
   fieldName: K
 ): InferSchema<S[K]>;
-export function useComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
+export function useComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
   entityId: EntityWith<Pair<Relation<S, N>>>,
   componentId: Pair<Relation<S, N>>,
   fieldName: K
 ): InferSchema<S[K]>;
-export function useComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function useComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined;
-export function useComponentValue<S extends SchemaRecord, K extends keyof S>(
+export function useComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K

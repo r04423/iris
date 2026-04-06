@@ -62,6 +62,9 @@ export type VectorTuple<T, N extends VectorSize> = VectorTupleMap<T>[N];
 // Schema Type
 // ============================================================================
 
+/** @internal */
+declare const VECTOR_SCHEMA_BRAND: unique symbol;
+
 /**
  * Type descriptor for columnar storage.
  *
@@ -84,6 +87,19 @@ export type Schema<T = unknown> = {
   __type?: T;
 };
 
+/**
+ * Schema for interleaved vector storage (e.g. `Type.f32(3)`).
+ *
+ * Carries a phantom brand so `ScalarFields`/`VectorFields` can discriminate
+ * vector schemas from plain schemas at the type level without inspecting the
+ * inferred value type.
+ *
+ * @internal
+ */
+export type VectorSchema<T = unknown> = Schema<T> & {
+  readonly [VECTOR_SCHEMA_BRAND]: true;
+};
+
 // ============================================================================
 // Schema Factories
 // ============================================================================
@@ -98,7 +114,7 @@ export type Schema<T = unknown> = {
  */
 type NumericFactory = {
   (): Schema<number>;
-  <N extends VectorSize>(size: N): Schema<VectorTuple<number, N>>;
+  <N extends VectorSize>(size: N): VectorSchema<VectorTuple<number, N>>;
 };
 
 /** @internal */
@@ -207,14 +223,14 @@ export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
  * (scalars and object references -- anything that isn't an interleaved vector tuple).
  */
 export type ScalarFields<S extends SchemaRecord> = {
-  [K in keyof S]: InferSchema<S[K]> extends unknown[] ? never : K;
+  [K in keyof S]: S[K] extends VectorSchema ? never : K;
 }[keyof S];
 
 /**
  * Extracts field names from a schema record where the field is a vector type (tuple).
  */
 export type VectorFields<S extends SchemaRecord> = {
-  [K in keyof S]: InferSchema<S[K]> extends unknown[] ? K : never;
+  [K in keyof S]: S[K] extends VectorSchema ? K : never;
 }[keyof S];
 
 // ============================================================================
