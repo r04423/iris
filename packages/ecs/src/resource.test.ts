@@ -31,13 +31,14 @@ describe("Resource", () => {
 
     it("modifies global resource", () => {
       const world = createWorld();
-      const Config = defineComponent("Config", { debug: Type.bool() });
+      const Config = defineComponent("Config", { mode: Type.string<"debug" | "release">() });
 
-      addResource(world, Config, { debug: false });
-      assert.strictEqual(getResourceValue(world, Config, "debug"), false);
+      addResource(world, Config, { mode: "debug" });
+      assert.strictEqual(getResourceValue(world, Config, "mode"), "debug");
 
-      setResourceValue(world, Config, "debug", true);
-      assert.strictEqual(getResourceValue(world, Config, "debug"), true);
+      setResourceValue(world, Config, "mode", "release");
+      const mode: "debug" | "release" | undefined = getResourceValue(world, Config, "mode");
+      assert.strictEqual(mode, "release");
     });
 
     it("removes global resource", () => {

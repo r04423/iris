@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { createAndRegisterArchetype } from "./archetype.js";
-import { addComponent, removeComponent, setComponentValue } from "./component.js";
+import { addComponent, getComponentValue, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { InvalidArgument, InvalidState } from "./error.js";
@@ -1872,7 +1872,10 @@ describe("Query", () => {
     describe("Basic Iteration", () => {
       it("iterates single archetype with correct column data", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_Position", { x: Type.f32(), y: Type.f32() });
+        const Position = defineComponent("qc_Position", {
+          x: Type.f32<10 | 30>(),
+          y: Type.f32(),
+        });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -1884,11 +1887,18 @@ describe("Query", () => {
         queryColumns(world, [Position], (entities, [pos]) => {
           callCount++;
 
+          const x: 10 | 30 | undefined = pos.x[0];
+
           assert.strictEqual(entities.length, 2);
-          assert.strictEqual(pos.x[0], 10);
+          assert.strictEqual(x, 10);
           assert.strictEqual(pos.y[0], 20);
           assert.strictEqual(pos.x[1], 30);
           assert.strictEqual(pos.y[1], 40);
+        });
+
+        queryEntities(world, [Position], (entity) => {
+          const x: 10 | 30 = getComponentValue(world, entity, Position, "x");
+          assert.ok(x === 10 || x === 30);
         });
 
         assert.strictEqual(callCount, 1);

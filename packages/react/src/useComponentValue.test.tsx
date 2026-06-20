@@ -29,7 +29,7 @@ const Position = defineComponent("Position", {
 });
 
 const Label = defineComponent("Label", {
-  name: Type.string(),
+  name: Type.string<"hello">(),
 });
 
 // ============================================================================
@@ -207,13 +207,15 @@ describe("useComponentValue", () => {
 
     let renderCount = 0;
 
-    renderHook(
+    const { result } = renderHook(
       () => {
         renderCount++;
         return useComponentValue(entity, Label, "name");
       },
       { wrapper: createWrapper(world) }
     );
+    const value: "hello" | undefined = result.current;
+    assert.strictEqual(value, "hello");
 
     const initialRenderCount = renderCount;
 

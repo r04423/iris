@@ -1,8 +1,17 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { InvalidArgument } from "./error.js";
-import type { InferSchema, InferSchemaRecord, ScalarFields, VectorFields } from "./schema.js";
+import type { InferSchema, InferSchemaRecord, ScalarFields, Schema, VectorFields } from "./schema.js";
 import { Type } from "./schema.js";
+
+type Mode = 0 | 1;
+
+declare enum StringState {
+  Idle = "idle",
+  Running = "running",
+}
+
+function acceptSchemaValue<T>(_schema: Schema<T>, _value: NoInfer<T>): void {}
 
 describe("Schema", () => {
   describe("Typed Array Schemas", () => {
@@ -46,6 +55,31 @@ describe("Schema", () => {
       assert.strictEqual(schema.kind, "primitive");
       assert.strictEqual(schema.arrayConstructor, Array);
       assert.strictEqual(schema.typeName, "string");
+    });
+  });
+
+  describe("Scalar Type Narrowing", () => {
+    it("narrows scalars while keeping defaults and vectors broad", () => {
+      acceptSchemaValue(Type.i8<Mode>(), 0);
+      acceptSchemaValue(Type.i16<Mode>(), 0);
+      acceptSchemaValue(Type.i32<Mode>(), 0);
+      acceptSchemaValue(Type.u32<Mode>(), 0);
+      acceptSchemaValue(Type.f32<Mode>(), 0);
+      acceptSchemaValue(Type.f64<Mode>(), 0);
+      acceptSchemaValue(Type.string<"idle" | "running">(), "idle");
+      acceptSchemaValue(Type.string<StringState>(), StringState.Idle);
+      acceptSchemaValue(Type.bool<true>(), true);
+
+      acceptSchemaValue(Type.u32(), 42);
+      acceptSchemaValue(Type.string(), "anything");
+      acceptSchemaValue(Type.bool(), false);
+      acceptSchemaValue(Type.ref(), { anything: true });
+      acceptSchemaValue(Type.f32(2), [42, 99]);
+
+      // @ts-expect-error -- narrowed numeric schemas reject values outside their domain
+      acceptSchemaValue(Type.u32<Mode>(), 2);
+      // @ts-expect-error -- string enums require enum members rather than raw strings
+      acceptSchemaValue(Type.string<StringState>(), "idle");
     });
   });
 

@@ -124,9 +124,9 @@ describe("Event", () => {
     it("reads emitted events in system context", async () => {
       const world = createWorld();
       const Event = defineEvent("ReadBasic", {
-        value: Type.i32(),
+        value: Type.i32<42>(),
       });
-      const results: number[] = [];
+      const results: 42[] = [];
 
       addSystem(world, function reader() {
         readEvents(world, Event, (e) => {

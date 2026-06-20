@@ -106,7 +106,7 @@ describe("Component", () => {
   describe("Batch Component Add", () => {
     it("adds multiple data components with correct values", () => {
       const world = createWorld();
-      const Position = defineComponent("ba_Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("ba_Position", { x: Type.f32<10>(), y: Type.f32() });
       const Velocity = defineComponent("ba_Velocity", { vx: Type.f32(), vy: Type.f32() });
       const entity = createEntity(world);
 
@@ -117,10 +117,12 @@ describe("Component", () => {
 
       assert.strictEqual(hasComponent(world, entity, Position), true);
       assert.strictEqual(hasComponent(world, entity, Velocity), true);
-      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10);
       assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
       assert.strictEqual(getComponentValue(world, entity, Velocity, "vx"), 1);
       assert.strictEqual(getComponentValue(world, entity, Velocity, "vy"), 2);
+
+      const x: 10 | undefined = getComponentValue(world, entity, Position, "x");
+      assert.strictEqual(x, 10);
     });
 
     it("adds mix of tags and data components", () => {
@@ -775,7 +777,7 @@ describe("Component", () => {
 
     it("gets and sets string field values", () => {
       const world = createWorld();
-      const Name = defineComponent("Name", { value: Type.string() });
+      const Name = defineComponent("Name", { value: Type.string<"Player" | "Enemy">() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Name, { value: "Player" });
@@ -783,7 +785,8 @@ describe("Component", () => {
       assert.strictEqual(getComponentValue(world, entity, Name, "value"), "Player");
 
       setComponentValue(world, entity, Name, "value", "Enemy");
-      assert.strictEqual(getComponentValue(world, entity, Name, "value"), "Enemy");
+      const value: "Player" | "Enemy" | undefined = getComponentValue(world, entity, Name, "value");
+      assert.strictEqual(value, "Enemy");
     });
 
     it("gets and sets i8 field values", () => {

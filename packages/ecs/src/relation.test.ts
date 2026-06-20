@@ -742,7 +742,7 @@ describe("Relation", () => {
     it("preserves data for new target in exclusive data relation", () => {
       const world = createWorld();
       const Targets = defineRelation("Targets", {
-        schema: { priority: Type.i8() },
+        schema: { priority: Type.i8<10 | 20>() },
         exclusive: true,
       });
       const turret = createEntity(world);
@@ -757,7 +757,7 @@ describe("Relation", () => {
 
       // New pair has correct data
       assert.ok(hasComponent(world, turret, pair(Targets, enemy2)));
-      const priority = getComponentValue(world, turret, pair(Targets, enemy2), "priority");
+      const priority: 10 | 20 | undefined = getComponentValue(world, turret, pair(Targets, enemy2), "priority");
       assert.strictEqual(priority, 20);
     });
 

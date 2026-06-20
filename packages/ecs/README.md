@@ -216,14 +216,14 @@ The `Type` namespace provides storage-optimized types:
 
 | Type | Storage | Use case |
 |------|---------|----------|
-| `Type.f32()` | Float32Array | Positions, velocities, normalized values |
-| `Type.f64()` | Float64Array | High-precision calculations |
-| `Type.i8()` | Int8Array | Small signed integers (-128 to 127) |
-| `Type.i16()` | Int16Array | Medium signed integers |
-| `Type.i32()` | Int32Array | Entity counts, scores, health |
-| `Type.u32()` | Uint32Array | Unsigned integers, bit flags |
-| `Type.bool()` | Array | Boolean flags |
-| `Type.string()` | Array | Text data |
+| `Type.f32<T>()` | Float32Array | Positions, velocities, normalized values |
+| `Type.f64<T>()` | Float64Array | High-precision calculations |
+| `Type.i8<T>()` | Int8Array | Small signed integers (-128 to 127) |
+| `Type.i16<T>()` | Int16Array | Medium signed integers |
+| `Type.i32<T>()` | Int32Array | Entity counts, scores, health |
+| `Type.u32<T>()` | Uint32Array | Unsigned integers, bit flags |
+| `Type.bool<T>()` | Array | Boolean flags |
+| `Type.string<T>()` | Array | Text data |
 | `Type.ref<T>()` | Array | Object references, arrays, Maps, Sets, class instances |
 
 All numeric type factories accept an optional size parameter (2-16) to create **vector fields** -- see [Vector Fields](#vector-fields) below.

@@ -51,14 +51,15 @@ describe("Entity", () => {
     it("creates entity with components in one call", () => {
       const world = createWorld();
       const Player = defineTag("ce_Player");
-      const Position = defineComponent("ce_Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("ce_Position", { x: Type.f32<10>(), y: Type.f32() });
 
       const entity = createEntity(world, [Player, [Position, { x: 10, y: 20 }]]);
 
       assert.strictEqual(isEntityAlive(world, entity), true);
       assert.strictEqual(hasComponent(world, entity, Player), true);
       assert.strictEqual(hasComponent(world, entity, Position), true);
-      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10);
+      const x: 10 | undefined = getComponentValue(world, entity, Position, "x");
+      assert.strictEqual(x, 10);
       assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
     });
 

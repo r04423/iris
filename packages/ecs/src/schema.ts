@@ -107,13 +107,13 @@ export type VectorSchema<T = unknown> = Schema<T> & {
 /**
  * Overloaded numeric type factory.
  *
- * Returns a scalar `Schema<number>` when called without arguments, or a vector
- * `Schema<VectorTuple<number, N>>` when called with a size (2-16).
+ * Returns a scalar `Schema<T>`, or a broad numeric vector schema when given a
+ * size (2-16).
  *
  * @internal
  */
 type NumericFactory = {
-  (): Schema<number>;
+  <T extends number = number>(): Schema<T>;
   <N extends VectorSize>(size: N): VectorSchema<VectorTuple<number, N>>;
 };
 
@@ -135,10 +135,6 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
 
 /**
  * Schema factory namespace for defining component storage types.
- *
- * Provides constructors for typed arrays (i8, f32, etc.), primitives (bool, string),
- * and reference values. Numeric factories accept an optional size parameter for
- * interleaved vector storage.
  *
  * @example
  * ```typescript
@@ -173,7 +169,7 @@ export const Type = {
    *
    * @returns Schema for Array<boolean> storage
    */
-  bool: (): Schema<boolean> => ({
+  bool: <T extends boolean = boolean>(): Schema<T> => ({
     kind: "primitive",
     arrayConstructor: Array,
     typeName: "boolean",
@@ -184,7 +180,7 @@ export const Type = {
    *
    * @returns Schema for Array<string> storage
    */
-  string: (): Schema<string> => ({
+  string: <T extends string = string>(): Schema<T> => ({
     kind: "primitive",
     arrayConstructor: Array,
     typeName: "string",
@@ -199,7 +195,7 @@ export const Type = {
    * @template T - TypeScript type of reference values stored
    * @returns Schema for Array<T> storage
    */
-  ref: <T>(): Schema<T> & { kind: "generic"; arrayConstructor: ArrayConstructor } => ({
+  ref: <T = unknown>(): Schema<T> & { kind: "generic"; arrayConstructor: ArrayConstructor } => ({
     kind: "generic",
     arrayConstructor: Array,
     typeName: "unknown",

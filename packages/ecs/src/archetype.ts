@@ -26,6 +26,20 @@ export type FieldColumns = {
 };
 
 /**
+ * Typed array storage with narrowed numeric indexed access.
+ *
+ * @internal
+ */
+type NarrowedTypedArray<T extends number> = TypedArrayInstance & { [index: number]: T };
+
+/**
+ * Maps an inferred scalar value type to its column storage type.
+ *
+ * @internal
+ */
+type FieldColumnOf<T> = [T] extends [number] ? NarrowedTypedArray<T & number> : T[];
+
+/**
  * Map a schema record to its column types.
  *
  * Each field maps to the runtime array type used for storage.
@@ -37,13 +51,9 @@ export type FieldColumnsOf<S extends SchemaRecord> = {
     ? TypedArrayInstance
     : S[K] extends Schema<infer T> & { kind: "generic" }
       ? T[]
-      : S[K] extends Schema<number>
-        ? TypedArrayInstance
-        : S[K] extends Schema<boolean>
-          ? boolean[]
-          : S[K] extends Schema<string>
-            ? string[]
-            : unknown[];
+      : S[K] extends Schema<infer T>
+        ? FieldColumnOf<T>
+        : unknown[];
 };
 
 /**
