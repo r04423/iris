@@ -67,7 +67,7 @@ describe("Schema", () => {
       acceptSchemaValue(Type.f32<Mode>(), 0);
       acceptSchemaValue(Type.f64<Mode>(), 0);
       acceptSchemaValue(Type.string<"idle" | "running">(), "idle");
-      acceptSchemaValue(Type.string<StringState>(), StringState.Idle);
+      acceptSchemaValue(Type.string<StringState>(), "idle" as StringState.Idle);
       acceptSchemaValue(Type.bool<true>(), true);
 
       acceptSchemaValue(Type.u32(), 42);
