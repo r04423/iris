@@ -159,12 +159,12 @@ describe("Archetype", () => {
       assert.deepStrictEqual(archetype.types, [tagId]);
     });
 
-    it("resizes archetype with object schema fields (regular arrays)", () => {
+    it("resizes archetype with reference schema fields (regular arrays)", () => {
       const world = createWorld();
       const componentId = createEntity(world);
 
-      // Use object schema field which allocates regular Array (not TypedArray)
-      const schemas = new Map([[componentId, { data: Type.object<{ value: number }>() }]]);
+      // Use reference schema field which allocates regular Array (not TypedArray)
+      const schemas = new Map([[componentId, { data: Type.ref<{ value: number }>() }]]);
       const archetype = createArchetype([componentId], schemas);
 
       // Initial capacity is 16, need to add > 16 entities to trigger resize

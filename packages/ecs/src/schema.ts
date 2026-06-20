@@ -69,7 +69,7 @@ declare const VECTOR_SCHEMA_BRAND: unique symbol;
  * Type descriptor for columnar storage.
  *
  * Describes how component data should be stored (typed arrays for numbers,
- * regular arrays for primitives/objects). Created via Type namespace factories.
+ * regular arrays for primitives/reference values). Created via Type namespace factories.
  *
  * @template T - TypeScript type of stored values (inferred via phantom __type field)
  *
@@ -137,7 +137,7 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
  * Schema factory namespace for defining component storage types.
  *
  * Provides constructors for typed arrays (i8, f32, etc.), primitives (bool, string),
- * and generic objects. Numeric factories accept an optional size parameter for
+ * and reference values. Numeric factories accept an optional size parameter for
  * interleaved vector storage.
  *
  * @example
@@ -146,6 +146,7 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
  * const Color = { value: Type.u32(4) };          // vec4
  * const Health = { hp: Type.i32() };             // scalar
  * const Name = { value: Type.string() };
+ * const Cache = { value: Type.ref<Map<string, number>>() };
  * ```
  */
 export const Type = {
@@ -190,12 +191,15 @@ export const Type = {
   }),
 
   /**
-   * Generic object schema (Array<T>).
+   * Reference schema (Array<T>).
    *
-   * @template T - TypeScript type of objects stored
+   * Stores JavaScript reference values such as objects, arrays, Maps, Sets,
+   * and class instances.
+   *
+   * @template T - TypeScript type of reference values stored
    * @returns Schema for Array<T> storage
    */
-  object: <T>(): Schema<T> => ({
+  ref: <T>(): Schema<T> & { kind: "generic"; arrayConstructor: ArrayConstructor } => ({
     kind: "generic",
     arrayConstructor: Array,
     typeName: "unknown",
@@ -220,7 +224,7 @@ export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
 
 /**
  * Extracts field names from a schema record where the field is stored with stride 1
- * (scalars and object references -- anything that isn't an interleaved vector tuple).
+ * (scalars and reference values -- anything that isn't an interleaved vector tuple).
  */
 export type ScalarFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? never : K;

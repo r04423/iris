@@ -7,7 +7,7 @@ export const Input = defineComponent("Input", {
   fire: Type.f32(),
 });
 
-// Global input state resource -- holds JS objects that can't be decomposed into scalars
+// Global input state resource -- holds JS references that can't be decomposed into scalars
 export const InputState = defineComponent("InputState", {
-  state: Type.object<{ keys: Set<string>; mouseButton: boolean }>(),
+  state: Type.ref<{ keys: Set<string>; mouseButton: boolean }>(),
 });

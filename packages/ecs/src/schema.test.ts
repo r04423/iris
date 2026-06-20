@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { InvalidArgument } from "./error.js";
+import type { InferSchema, InferSchemaRecord, ScalarFields, VectorFields } from "./schema.js";
 import { Type } from "./schema.js";
 
 describe("Schema", () => {
@@ -48,13 +49,38 @@ describe("Schema", () => {
     });
   });
 
-  describe("Generic Object Schema", () => {
-    it("creates object schema with generic kind", () => {
-      const schema = Type.object<{ x: number }>();
+  describe("Reference Schema", () => {
+    it("creates reference schema with generic kind", () => {
+      const schema = Type.ref<{ x: number }>();
 
       assert.strictEqual(schema.kind, "generic");
       assert.strictEqual(schema.arrayConstructor, Array);
       assert.strictEqual(schema.typeName, "unknown");
+    });
+
+    it("infers reference field types as scalar fields", () => {
+      const schema = {
+        cache: Type.ref<Map<string, number>>(),
+        position: Type.f32(2),
+      };
+
+      type Data = InferSchemaRecord<typeof schema>;
+
+      const data: Data = {
+        cache: new Map([["score", 1]]),
+        position: [10, 20],
+      };
+      const cache: InferSchema<(typeof schema)["cache"]> = data.cache;
+      const scalarField: ScalarFields<typeof schema> = "cache";
+      const vectorField: VectorFields<typeof schema> = "position";
+
+      // @ts-expect-error -- reference fields use scalar APIs, not vector APIs
+      const invalidVectorField: VectorFields<typeof schema> = "cache";
+
+      assert.strictEqual(cache.get("score"), 1);
+      assert.strictEqual(scalarField, "cache");
+      assert.strictEqual(vectorField, "position");
+      assert.strictEqual(invalidVectorField, "cache");
     });
   });
 

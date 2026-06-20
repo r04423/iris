@@ -1895,6 +1895,34 @@ describe("Query", () => {
       });
     });
 
+    describe("Reference Columns", () => {
+      it("types reference fields as arrays of stored references", () => {
+        const world = createWorld();
+        const Buckets = defineComponent("qc_ref_Buckets", {
+          entities: Type.ref<EntityId[]>(),
+          cache: Type.ref<Map<string, number>>(),
+          weight: Type.f32(),
+        });
+        const entity = createEntity(world);
+        const nearby = createEntity(world);
+
+        addComponent(world, entity, Buckets, {
+          entities: [nearby],
+          cache: new Map([["score", 1]]),
+          weight: 2,
+        });
+
+        queryColumns(world, [Buckets], (_entities, [buckets]) => {
+          const entityLists: EntityId[][] = buckets.entities;
+          const caches: Map<string, number>[] = buckets.cache;
+
+          assert.deepStrictEqual(entityLists[0], [nearby]);
+          assert.strictEqual(caches[0]?.get("score"), 1);
+          assert.strictEqual(buckets.weight[0], 2);
+        });
+      });
+    });
+
     describe("Multi-Archetype", () => {
       it("fires callback for each matching archetype", () => {
         const world = createWorld();

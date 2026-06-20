@@ -28,8 +28,8 @@ export const Name = defineComponent("Name", { value: Type.string() });
  * Dual-index registry for O(1) lookups in both directions. Stored as a world resource.
  */
 const NameRegistry = defineComponent("NameRegistry", {
-  nameToEntity: Type.object<Map<string, EntityId>>(),
-  entityToName: Type.object<Map<EntityId, string>>(),
+  nameToEntity: Type.ref<Map<string, EntityId>>(),
+  entityToName: Type.ref<Map<EntityId, string>>(),
 });
 
 // ============================================================================

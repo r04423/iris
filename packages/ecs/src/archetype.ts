@@ -1,7 +1,7 @@
 import type { EntityId } from "./encoding.js";
 import { addEntityRecord, removeEntityRecord } from "./entity.js";
 import { fireObserverEvent } from "./observer.js";
-import type { Schema, SchemaRecord, TypedArrayConstructor, TypedArrayInstance } from "./schema.js";
+import type { Schema, SchemaRecord, TypedArrayConstructor, TypedArrayInstance, VectorSchema } from "./schema.js";
 import { Type } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -12,7 +12,7 @@ import type { World } from "./world.js";
 /**
  * Column storage type.
  *
- * Union of typed arrays (numeric values) and regular arrays (primitives/objects).
+ * Union of typed arrays (numeric values) and regular arrays (primitives/reference values).
  */
 export type Column = Int8Array | Int16Array | Int32Array | Uint32Array | Float32Array | Float64Array | unknown[];
 
@@ -33,15 +33,17 @@ export type FieldColumns = {
  * @internal
  */
 export type FieldColumnsOf<S extends SchemaRecord> = {
-  [K in keyof S]: S[K] extends Schema<number>
+  [K in keyof S]: S[K] extends VectorSchema
     ? TypedArrayInstance
-    : S[K] extends Schema<number[]>
-      ? TypedArrayInstance
-      : S[K] extends Schema<boolean>
-        ? boolean[]
-        : S[K] extends Schema<string>
-          ? string[]
-          : unknown[];
+    : S[K] extends Schema<infer T> & { kind: "generic" }
+      ? T[]
+      : S[K] extends Schema<number>
+        ? TypedArrayInstance
+        : S[K] extends Schema<boolean>
+          ? boolean[]
+          : S[K] extends Schema<string>
+            ? string[]
+            : unknown[];
 };
 
 /**
@@ -108,7 +110,7 @@ export function getColumnStride(column: Column, capacity: number): number {
 }
 
 /**
- * Allocates a column based on schema type (TypedArray for primitives, Array for objects).
+ * Allocates a column based on schema type (TypedArray for numbers, Array for primitives/references).
  */
 function allocateColumn(schema: Schema, capacity: number): Column {
   // Vector columns interleave all elements per entity: [x0,y0,x1,y1,...] for stride 2

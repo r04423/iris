@@ -224,7 +224,7 @@ The `Type` namespace provides storage-optimized types:
 | `Type.u32()` | Uint32Array | Unsigned integers, bit flags |
 | `Type.bool()` | Array | Boolean flags |
 | `Type.string()` | Array | Text data |
-| `Type.object<T>()` | Array | Complex nested objects |
+| `Type.ref<T>()` | Array | Object references, arrays, Maps, Sets, class instances |
 
 All numeric type factories accept an optional size parameter (2-16) to create **vector fields** -- see [Vector Fields](#vector-fields) below.
 
@@ -491,7 +491,7 @@ Archetype [Position, Velocity, Health]
 
 Vector fields like Position store all elements interleaved in a single TypedArray column: `[x0, y0, x1, y1, ...]`. This keeps each entity's vector contiguous in memory for cache-friendly access.
 
-Within an archetype, component data is stored in **columns** (TypedArrays for numeric types). When a query iterates entities with `Position` and `Velocity`, it walks through archetypes that contain both components. This columnar layout keeps data contiguous rather than scattered across objects, reducing memory overhead and enabling efficient iteration.
+Within an archetype, component data is stored in **columns** (TypedArrays for numeric types, Arrays for primitives and references). When a query iterates entities with `Position` and `Velocity`, it walks through archetypes that contain both components. This columnar layout keeps data contiguous rather than scattered across objects, reducing memory overhead and enabling efficient iteration.
 
 Adding or removing a component moves an entity to a different archetype. This is more expensive than reading or writing component values, so prefer stable component sets for entities that update frequently.
 
