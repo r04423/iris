@@ -1,4 +1,4 @@
-import type { EntityId, EntityWith, ExtractIncluded, QueryModifier } from "iris-ecs";
+import type { EntityId, EntityWith, ExtractIncluded, NotModifier } from "iris-ecs";
 import { cacheQuery, collectEntities, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useResetGeneration, useWorld } from "./context.js";
@@ -13,7 +13,7 @@ import { useResetGeneration, useWorld } from "./context.js";
  *
  * @internal
  */
-function termsToKey(terms: (EntityId | QueryModifier)[]): string {
+function termsToKey(terms: (EntityId | NotModifier)[]): string {
   let key = "";
 
   for (let i = 0; i < terms.length; i++) {
@@ -57,7 +57,7 @@ function termsToKey(terms: (EntityId | QueryModifier)[]): string {
  * }
  * ```
  */
-export function useQueryEntities<T extends (EntityId | QueryModifier)[]>(
+export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
   ...terms: [...T]
 ): EntityWith<ExtractIncluded<T>>[] {
   type Result = EntityWith<ExtractIncluded<T>>;
