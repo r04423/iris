@@ -530,6 +530,22 @@ const mySystem = defineSystem("mySystem", (world) => {
 
 💡 **Tip:** Queries are cached internally -- the same component set returns the same cached query. `cacheQuery()` in init makes the caching explicit and avoids array allocation on every frame.
 
+#### Dynamic Queries
+
+Use the builder form of `cacheQuery()` when query terms depend on entity IDs known only at runtime. The returned getter caches each argument tuple and can be passed to every query API:
+
+```typescript
+const childrenOf = cacheQuery(world, (parent: EntityId) => [pair(ChildOf, parent)]);
+
+function visit(parent: EntityId): void {
+  queryEntities(world, childrenOf(parent), (child) => {
+    visit(child);
+  });
+}
+
+visit(scene);
+```
+
 #### Exclusion Filters
 
 Use `not()` to exclude entities that have a component:
@@ -591,7 +607,7 @@ const movementSystem = defineSystem("movementSystem", (world) => {
 Return `false` from the callback to stop iteration early (same as `queryEntities`).
 
 `queryColumns` does not support `added()` or `changed()` modifiers -- use `queryEntities` for change detection.
-
+ 
 💡 **Tip:** Use `queryColumns` when you need to process large numbers of entities with tight loops over TypedArray data. Use `queryEntities` for entity-level logic, change detection, or when you need per-entity API calls like `getComponentValue`.
 
 ### Systems

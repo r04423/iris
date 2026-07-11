@@ -9,7 +9,7 @@ import { initFilterDispatch } from "./filters.js";
 import { initNameSystem } from "./name.js";
 import type { EventType, ObserverMeta } from "./observer.js";
 import { fireObserverEvent } from "./observer.js";
-import type { QueryMeta } from "./query.js";
+import type { QueryMeta, QueryModifier, QueryTrieNode } from "./query.js";
 import type { ComponentMeta } from "./registry.js";
 import { COMPONENT_REGISTRY } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
@@ -100,6 +100,11 @@ export type World = {
      * Query metadata lookup (query hash -> metadata).
      */
     byId: Map<string, QueryMeta>;
+
+    /**
+     * Parametric query caches keyed by builder function identity.
+     */
+    byBuilder: Map<(...args: EntityId[]) => (EntityId | QueryModifier)[], QueryTrieNode>;
   };
 
   /**
@@ -249,6 +254,7 @@ export function createWorld(): World {
     },
     queries: {
       byId: new Map(),
+      byBuilder: new Map(),
     },
     systems: {
       byId: new Map(),
@@ -326,6 +332,7 @@ export function resetWorld(world: World): void {
 
   // 2. Clear queries
   world.queries.byId.clear();
+  world.queries.byBuilder.clear();
 
   // 3. Clear archetypes (break circular refs via edges)
   for (const archetype of world.archetypes.byId.values()) {

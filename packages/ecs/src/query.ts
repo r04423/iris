@@ -66,6 +66,16 @@ export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (Enti
   readonly [QUERY_TERMS_BRAND]?: T;
 };
 
+/**
+ * Trie node for parametric query caching.
+ *
+ * @internal
+ */
+export type QueryTrieNode = {
+  meta?: QueryMeta;
+  children?: Map<EntityId, QueryTrieNode>;
+};
+
 // ============================================================================
 // Query Modifiers
 // ============================================================================
@@ -260,6 +270,107 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   }
 
   return queryMeta as unknown as QueryMeta<ExtractIncluded<T>, T>;
+}
+
+/**
+ * Create a cached parametric query getter.
+ *
+ * @internal
+ */
+export function ensureQueryGetter(
+  world: World,
+  builder: (...args: EntityId[]) => (EntityId | QueryModifier)[]
+): (...args: EntityId[]) => QueryMeta {
+  return (...args: EntityId[]): QueryMeta => {
+    let node: QueryTrieNode;
+
+    const root = world.queries.byBuilder.get(builder);
+
+    if (!root) {
+      node = {};
+      world.queries.byBuilder.set(builder, node);
+    } else {
+      node = root;
+    }
+
+    for (let i = 0; i < args.length; i++) {
+      let children: Map<EntityId, QueryTrieNode> | undefined = node.children;
+
+      if (!children) {
+        children = new Map();
+        node.children = children;
+      }
+
+      let next: QueryTrieNode | undefined = children.get(args[i]!);
+
+      if (!next) {
+        next = {};
+        children.set(args[i]!, next);
+      }
+
+      node = next;
+    }
+
+    let meta = node.meta;
+
+    if (!meta) {
+      meta = ensureQuery(world, builder(...args)) as QueryMeta;
+      node.meta = meta;
+    }
+
+    return meta;
+  };
+}
+
+/**
+ * Cache a static query or create a cached parametric query getter.
+ *
+ * Parametric builders must be pure and return the same term structure for the
+ * same arguments. Create getters once: builder identity owns the cache. Pair
+ * targets use generation-stripped weak-reference semantics. Change detection
+ * windows are tracked independently for each system and argument tuple.
+ *
+ * @param world - World instance
+ * @param builder - Entity arguments to query terms builder
+ * @returns Cached query getter
+ *
+ * @example
+ * ```typescript
+ * const childrenOf = cacheQuery(world, (parent: EntityId) => [pair(ChildOf, parent)]);
+ * queryEntities(world, childrenOf(root), (child) => { ... });
+ * ```
+ */
+export function cacheQuery<A extends EntityId[], const T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  builder: (...args: [...A]) => T
+): (...args: [...A]) => QueryMeta<ExtractIncluded<T>, T>;
+
+/**
+ * Cache a query in the registry, creating it if necessary.
+ *
+ * @param world - World instance
+ * @param terms - Components and modifiers
+ * @returns Query metadata
+ *
+ * @example
+ * ```typescript
+ * const movers = cacheQuery(world, [Position, Velocity, not(Dead)]);
+ * ```
+ */
+export function cacheQuery<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  terms: [...T]
+): QueryMeta<ExtractIncluded<T>, T>;
+
+export function cacheQuery(
+  world: World,
+  termsOrBuilder: (EntityId | QueryModifier)[] | ((...args: EntityId[]) => (EntityId | QueryModifier)[])
+): QueryMeta<never> | ((...args: EntityId[]) => QueryMeta<never>) {
+  if (typeof termsOrBuilder === "function") {
+    return ensureQueryGetter(world, termsOrBuilder);
+  }
+
+  return ensureQuery(world, termsOrBuilder);
 }
 
 // ============================================================================

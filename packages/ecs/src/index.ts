@@ -72,9 +72,9 @@ export { getName, lookupByName, Name, removeName, setName } from "./name.js";
 
 export {
   added,
+  cacheQuery,
   changed,
   collectEntities,
-  ensureQuery as cacheQuery,
   not,
   queryColumns,
   queryEntities,
