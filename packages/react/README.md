@@ -205,7 +205,7 @@ function ShieldIndicator({ entity }: { entity: EntityId }) {
   if (!hasShield) return null;
   return <div className="shield-icon" />;
 }
-```
+``` 
 
 ### `useHasResource(resource)`
 
@@ -262,6 +262,16 @@ function EnemyList() {
 ```
 
 The returned array reference is stable when contents haven't changed -- safe to use as a dependency or pass to child components without causing unnecessary re-renders.
+
+### `useEntityByName(name, components?)`
+
+Returns the entity with the given name, or `undefined`. Optional components are validated reactively and narrow the returned entity type.
+
+```tsx
+import { useEntityByName } from "iris-react";
+
+const player = useEntityByName("player", [Position, Health]);
+```
 
 ### `useQueryFirstEntity(...terms)`
 

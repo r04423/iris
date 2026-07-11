@@ -30,5 +30,6 @@ export { useResourceValue } from "./useResourceValue.js";
 // Query Hooks
 // ============================================================================
 
+export { useEntityByName } from "./useEntityByName.js";
 export { useQueryEntities } from "./useQueryEntities.js";
 export { useQueryFirstEntity } from "./useQueryFirstEntity.js";
