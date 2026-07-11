@@ -41,7 +41,7 @@ export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (Enti
   exclude: EntityId[];
 
   /**
-   * Underlying filter branches. Queries without or() terms have exactly one.
+   * Underlying filter branches. Queries without or() terms have at most one.
    */
   filters: FilterMeta[];
 
@@ -322,7 +322,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
 }
 
 /**
- * Expand or() groups into disjoint conjunctive filter branches.
+ * Expand query terms into disjoint conjunctive filter branches.
  *
  * Each or() group contributes one branch per alternative; multiple groups
  * multiply (cartesian product).
@@ -338,11 +338,6 @@ function buildQueryFilters(
   exclude: EntityId[],
   orGroups: EntityId[][]
 ): FilterMeta[] {
-  // Fast path: no or() terms, single conjunctive filter (existing behavior)
-  if (orGroups.length === 0) {
-    return [ensureFilter(world, { include, exclude })];
-  }
-
   let branches: FilterTerms[] = [{ include, exclude }];
 
   for (let g = 0; g < orGroups.length; g++) {

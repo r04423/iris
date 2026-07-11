@@ -415,6 +415,21 @@ describe("Query", () => {
       assert.strictEqual(entities.length, 1);
       assert.strictEqual(entities[0], entity1);
     });
+
+    it("returns no entities when a component is both included and excluded", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position);
+
+      const query = ensureQuery(world, [Position, not(Position)]);
+
+      // Contradictory branch is pruned, no dead filter is registered
+      assert.strictEqual(query.filters.length, 0);
+      assert.strictEqual(world.filters.byId.size, 0);
+      assert.deepStrictEqual(collectEntities(world, query), []);
+    });
   });
 
   describe("Query with Filter Registry", () => {
@@ -778,6 +793,19 @@ describe("Query", () => {
 
       assert.notStrictEqual(queryA.filters[0], queryB.filters[0]);
       assert.strictEqual(world.filters.byId.size, 2);
+    });
+
+    it("shares filter when exclusions are duplicated", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Dead = createEntity(world);
+
+      const queryA = ensureQuery(world, [Position, not(Dead), not(Dead)]);
+      const queryB = ensureQuery(world, [Position, not(Dead)]);
+
+      // Exclusions are deduped before filter creation, so the filter is shared
+      assert.strictEqual(queryA.filters[0], queryB.filters[0]);
+      assert.strictEqual(world.filters.byId.size, 1);
     });
   });
 
