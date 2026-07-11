@@ -11,6 +11,9 @@ React bindings for Iris ECS.
 | `useComponentValue.ts` | Single component field reactive read |
 | `useComponentEffect.ts` | Side-effect callback on component changes |
 | `useHasComponent.ts` | Boolean component presence check |
+| `useResourceValue.ts` | Single resource field reactive read |
+| `useResourceEffect.ts` | Side-effect callback on resource changes |
+| `useHasResource.ts` | Boolean resource presence check |
 | `useQueryEntities.ts` | Reactive entity query with dirty-flag optimization |
 | `useQueryFirstEntity.ts` | First-match wrapper around useQueryEntities |
 

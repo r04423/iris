@@ -207,6 +207,38 @@ function ShieldIndicator({ entity }: { entity: EntityId }) {
 }
 ```
 
+### `useHasResource(resource)`
+
+Returns whether a resource exists. Updates when the resource is added or removed.
+
+```tsx
+import { useHasResource } from "iris-react";
+
+const hasTime = useHasResource(Time);
+```
+
+### `useResourceValue(resource, field)`
+
+Returns a single resource field value, updating reactively when the resource changes. Returns `undefined` if the resource is absent.
+
+```tsx
+import { useResourceValue } from "iris-react";
+
+const elapsed = useResourceValue(Time, "elapsed");
+```
+
+### `useResourceEffect(resource, callback)`
+
+Registers a side-effect callback that fires when a resource changes, is added, or is removed. The callback can return a cleanup function.
+
+```tsx
+import { useResourceEffect } from "iris-react";
+
+useResourceEffect(Theme, () => {
+  document.body.dataset.theme = getCurrentTheme();
+});
+```
+
 ### `useQueryEntities(...terms)`
 
 Returns a reactive array of entities matching the given query terms. Updates when entities enter or leave the query due to component additions, removals, or entity destruction.

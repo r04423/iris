@@ -19,6 +19,14 @@ export { useComponentValue } from "./useComponentValue.js";
 export { useHasComponent } from "./useHasComponent.js";
 
 // ============================================================================
+// Resource Hooks
+// ============================================================================
+
+export { useHasResource } from "./useHasResource.js";
+export { useResourceEffect } from "./useResourceEffect.js";
+export { useResourceValue } from "./useResourceValue.js";
+
+// ============================================================================
 // Query Hooks
 // ============================================================================
 
