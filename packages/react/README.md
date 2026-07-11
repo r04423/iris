@@ -149,7 +149,7 @@ function SpawnButton() {
 
 ### `useComponentValue(entity, component, field)`
 
-Returns a single field value from a component on an entity, updating reactively when the component changes. Returns `undefined` if the entity doesn't have the component.
+Returns a single field value from a component on an entity, updating reactively when the component changes. Returns `undefined` if the entity is undefined or doesn't have the component.
 
 ```tsx
 import { useComponentValue } from "iris-react";
@@ -173,7 +173,7 @@ const damage = useComponentValue(entity, pair(DamageOver, target), "amount");
 
 ### `useComponentEffect(entity, component, callback)`
 
-Registers a side-effect callback that fires when a component changes on the given entity. The callback can return a cleanup function, mirroring `useEffect` semantics.
+Registers a side-effect callback that fires when a component changes on the given entity. An undefined entity skips observation. The callback can return a cleanup function, mirroring `useEffect` semantics.
 
 ```tsx
 import { useComponentEffect } from "iris-react";
@@ -195,7 +195,7 @@ function DamageFlash({ entity }: { entity: EntityWith<typeof Health> }) {
 
 ### `useHasComponent(entity, component)`
 
-Returns whether an entity has a given component, tag, or pair. Updates when the component is added or removed.
+Returns whether an entity has a given component, tag, or pair. Returns `false` for an undefined entity. Updates when the component is added or removed.
 
 ```tsx
 import { useHasComponent } from "iris-react";

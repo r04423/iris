@@ -11,7 +11,7 @@ import { useResetGeneration, useWorld } from "./context.js";
  * Returns whether an entity has a given component, updating reactively
  * when the component is added to or removed from the entity.
  *
- * @param entityId - The entity to observe
+ * @param entityId - The entity to observe, or `undefined` to skip observation
  * @param componentId - The component, tag, or pair to check
  * @returns `true` if the entity has the component, `false` otherwise
  *
@@ -26,12 +26,16 @@ import { useResetGeneration, useWorld } from "./context.js";
  * }
  * ```
  */
-export function useHasComponent(entityId: EntityId, componentId: EntityId): boolean {
+export function useHasComponent(entityId: EntityId | undefined, componentId: EntityId): boolean {
   const world = useWorld();
   const generation = useResetGeneration();
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
+      if (entityId === undefined) {
+        return () => {};
+      }
+
       const notify = (changedComponentId: EntityId, changedEntityId: EntityId) => {
         if (changedComponentId === componentId && changedEntityId === entityId) {
           onStoreChange();
@@ -51,7 +55,7 @@ export function useHasComponent(entityId: EntityId, componentId: EntityId): bool
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation invalidates memoized snapshot
   const getSnapshot = useCallback(() => {
-    if (!isEntityAlive(world, entityId)) {
+    if (entityId === undefined || !isEntityAlive(world, entityId)) {
       return false;
     }
 

@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { act, renderHook } from "@testing-library/react";
-import type { World } from "iris-ecs";
+import type { EntityId, World } from "iris-ecs";
 import {
   addComponent,
   createEntity,
@@ -62,6 +62,30 @@ describe("useHasComponent", () => {
     const { result } = renderHook(() => useHasComponent(entity, Health), {
       wrapper: createWrapper(world),
     });
+
+    assert.strictEqual(result.current, false);
+  });
+
+  it("tracks an optional entity", () => {
+    const world = createWorld();
+    const entity = createEntity(world);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
+
+    const { result, rerender } = renderHook(
+      ({ entityId }: { entityId: EntityId | undefined }) => useHasComponent(entityId, Health),
+      {
+        wrapper: createWrapper(world),
+        initialProps: { entityId: undefined as EntityId | undefined },
+      }
+    );
+
+    assert.strictEqual(result.current, false);
+
+    rerender({ entityId: entity });
+
+    assert.strictEqual(result.current, true);
+
+    rerender({ entityId: undefined });
 
     assert.strictEqual(result.current, false);
   });

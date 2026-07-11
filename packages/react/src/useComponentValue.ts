@@ -20,7 +20,7 @@ import { useResetGeneration, useWorld } from "./context.js";
  * Returns a single component field value, updating reactively when the
  * component changes on the given entity.
  *
- * @param entityId - The entity to observe
+ * @param entityId - The entity to observe, or `undefined` to skip observation
  * @param componentId - The component (or pair) to read from
  * @param fieldName - The schema field to return
  * @returns The field value, or `undefined` if the component is absent
@@ -47,12 +47,12 @@ export function useComponentValue<S extends SchemaRecord, N extends string, K ex
   fieldName: K
 ): InferSchema<S[K]>;
 export function useComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
-  entityId: EntityId,
+  entityId: EntityId | undefined,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined;
 export function useComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
-  entityId: EntityId,
+  entityId: EntityId | undefined,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined {
@@ -61,6 +61,10 @@ export function useComponentValue<S extends SchemaRecord, K extends ScalarFields
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
+      if (entityId === undefined) {
+        return () => {};
+      }
+
       const notify = (changedComponentId: EntityId, changedEntityId: EntityId) => {
         if (changedComponentId === (componentId as EntityId) && changedEntityId === entityId) {
           onStoreChange();
@@ -82,7 +86,7 @@ export function useComponentValue<S extends SchemaRecord, K extends ScalarFields
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: generation invalidates memoized snapshot
   const getSnapshot = useCallback(() => {
-    if (!isEntityAlive(world, entityId)) {
+    if (entityId === undefined || !isEntityAlive(world, entityId)) {
       return undefined;
     }
 

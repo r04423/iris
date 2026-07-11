@@ -11,7 +11,7 @@ import { useWorld } from "./context.js";
  * Registers a side-effect callback that fires when a component changes,
  * is added to, or is removed from the given entity.
  *
- * @param entityId - The entity to observe
+ * @param entityId - The entity to observe, or `undefined` to skip observation
  * @param componentId - The component (or pair) to watch
  * @param callback - Called on `componentChanged`, `componentAdded`, and `componentRemoved`
  *
@@ -33,7 +33,7 @@ import { useWorld } from "./context.js";
  * ```
  */
 export function useComponentEffect<S extends SchemaRecord>(
-  entityId: EntityId,
+  entityId: EntityId | undefined,
   componentId: Component<S> | Pair<Relation<S>>,
   // biome-ignore lint/suspicious/noConfusingVoidType: matches React's EffectCallback pattern
   callback: () => void | (() => void)
@@ -46,6 +46,10 @@ export function useComponentEffect<S extends SchemaRecord>(
   callbackRef.current = callback;
 
   useEffect(() => {
+    if (entityId === undefined) {
+      return;
+    }
+
     // biome-ignore lint/suspicious/noConfusingVoidType: matches React's EffectCallback pattern
     let cleanup: void | (() => void);
 

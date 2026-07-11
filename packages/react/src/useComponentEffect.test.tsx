@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { act, renderHook } from "@testing-library/react";
-import type { World } from "iris-ecs";
+import type { EntityId, World } from "iris-ecs";
 import {
   addComponent,
   createEntity,
@@ -94,6 +94,48 @@ describe("useComponentEffect", () => {
     });
 
     assert.strictEqual(callCount, 0);
+  });
+
+  it("tracks an optional entity", () => {
+    const world = createWorld();
+    const entity = createEntity(world);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
+
+    let callCount = 0;
+    let cleanupCount = 0;
+
+    const { rerender } = renderHook(
+      ({ entityId }: { entityId: EntityId | undefined }) =>
+        useComponentEffect(entityId, Health, () => {
+          callCount++;
+
+          return () => {
+            cleanupCount++;
+          };
+        }),
+      {
+        wrapper: createWrapper(world),
+        initialProps: { entityId: undefined as EntityId | undefined },
+      }
+    );
+
+    act(() => {
+      setComponentValue(world, entity, Health, "current", 75);
+    });
+
+    assert.strictEqual(callCount, 0);
+
+    rerender({ entityId: entity });
+
+    act(() => {
+      setComponentValue(world, entity, Health, "current", 50);
+    });
+
+    assert.strictEqual(callCount, 1);
+
+    rerender({ entityId: undefined });
+
+    assert.strictEqual(cleanupCount, 1);
   });
 
   it("calls callback on componentAdded", () => {
