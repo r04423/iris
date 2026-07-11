@@ -76,6 +76,7 @@ export {
   changed,
   collectEntities,
   not,
+  or,
   queryColumns,
   queryEntities,
   queryFirstEntity,
@@ -130,6 +131,7 @@ export type {
   ExtractIncluded,
   ModifierType,
   NotModifier,
+  OrModifier,
   QueryMeta,
   QueryModifier,
 } from "./query.js";

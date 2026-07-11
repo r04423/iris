@@ -562,9 +562,29 @@ queryEntities(world, [Position, Velocity, not(Frozen), not(Disabled)], (entity) 
 });
 ```
 
+#### Or Filters
+
+Use `or()` to match entities that have at least one of the given components. Each matching entity is visited exactly once, even when it has several of the alternatives:
+
+```typescript
+import { queryEntities, or, not } from "iris-ecs";
+
+// All entities with Position AND (Velocity OR Acceleration)
+queryEntities(world, [Position, or(Velocity, Acceleration)], (entity) => {
+  // ...
+});
+
+// Combines freely with other modifiers
+queryEntities(world, [or(Velocity, Acceleration), not(Frozen)], (entity) => {
+  // ...
+});
+```
+
+Alternatives must be plain component, tag, or pair IDs -- modifiers are not allowed inside `or()`. Or'd components are match-only: they are not guaranteed present on results, so read them conditionally (e.g. via `hasComponent`) and they produce no columns in `queryColumns`.
+
 #### Filters and Archetypes (Under the Hood)
 
-Queries match archetypes where all required components are present and no excluded components exist. Matched archetypes are cached and auto-update when archetypes are created or destroyed.
+Queries match archetypes where all required components are present and no excluded components exist. Matched archetypes are cached and auto-update when archetypes are created or destroyed. An `or()` term expands into one cached filter per alternative, built so that no archetype matches more than one -- results stay deduplicated without any extra bookkeeping at iteration time.
 
 #### Column Iteration
 

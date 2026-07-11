@@ -1,9 +1,14 @@
 import type { FieldColumnsOf } from "./archetype.js";
 import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding.js";
-import { assert, InvalidArgument } from "./error.js";
-import type { FilterMeta } from "./filters.js";
+import { assert, InvalidArgument, LimitExceeded } from "./error.js";
+import type { FilterMeta, FilterTerms } from "./filters.js";
 import { ensureFilter } from "./filters.js";
 import type { World } from "./world.js";
+
+/**
+ * Maximum number of disjunctive filter branches a single query may expand to.
+ */
+const MAX_QUERY_BRANCHES = 32;
 
 // ============================================================================
 // Query Metadata
@@ -36,9 +41,9 @@ export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (Enti
   exclude: EntityId[];
 
   /**
-   * Direct reference to underlying filter.
+   * Underlying filter branches. Queries without or() terms have exactly one.
    */
-  filter: FilterMeta;
+  filters: FilterMeta[];
 
   /**
    * Components with added() modifier.
@@ -80,11 +85,12 @@ export type QueryTrieNode = {
 // Query Modifiers
 // ============================================================================
 
-export type ModifierType = "not" | "added" | "changed";
+export type ModifierType = "not" | "added" | "changed" | "or";
 export type NotModifier<C extends EntityId = EntityId> = { type: "not"; componentId: C };
 export type AddedModifier<C extends EntityId = EntityId> = { type: "added"; componentId: C };
 export type ChangedModifier<C extends EntityId = EntityId> = { type: "changed"; componentId: C };
-export type QueryModifier = NotModifier | AddedModifier | ChangedModifier;
+export type OrModifier<C extends EntityId = EntityId> = { type: "or"; componentIds: C[] };
+export type QueryModifier = NotModifier | AddedModifier | ChangedModifier | OrModifier;
 
 /**
  * Create exclusion modifier for query.
@@ -132,6 +138,23 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
 }
 
 /**
+ * Create disjunction modifier for query.
+ *
+ * Matches entities that have at least one of the given components.
+ *
+ * @param componentIds - Alternative components (at least one must be present)
+ * @returns Or modifier
+ *
+ * @example
+ * queryEntities(world, [Position, or(Velocity, Acceleration)], (entity) => { ... });
+ */
+export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[number]> {
+  assert(componentIds.length > 0, InvalidArgument, { expected: "at least one component in or()" });
+
+  return { type: "or", componentIds };
+}
+
+/**
  * Extract union of guaranteed-present component IDs from query terms tuple.
  */
 export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...infer Tail]
@@ -147,10 +170,10 @@ export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...inf
   : never;
 
 /**
- * Check if argument is a query modifier (not, added, changed) vs plain component ID.
+ * Check if argument is a query modifier (not, added, changed, or) vs plain component ID.
  */
 function isModifier(arg: unknown): arg is QueryModifier {
-  return typeof arg === "object" && arg !== null && "type" in arg && "componentId" in arg;
+  return typeof arg === "object" && arg !== null && "type" in arg;
 }
 
 // ============================================================================
@@ -161,7 +184,7 @@ function isModifier(arg: unknown): arg is QueryModifier {
  * Map a query terms tuple to a tuple of field column types.
  *
  * Data-bearing terms (Components, Pairs with schema) produce a `FieldColumnsOf` entry.
- * Non-data terms (Tags, data-less Pairs, NotModifiers) are skipped.
+ * Non-data terms (Tags, data-less Pairs, NotModifiers, OrModifiers) are skipped.
  */
 export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
   ? Head extends NotModifier
@@ -188,18 +211,39 @@ export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer 
  * @param exclude - Component IDs that must not be present
  * @param added - Component IDs to check for recent addition
  * @param changed - Component IDs to check for recent modification
- * @returns Query ID in format "+include|-exclude|~+added|~>changed"
+ * @param orGroups - Groups of alternative component IDs (one per or() term)
+ * @returns Query ID in format "+include|-exclude|~+added|~>changed" with an
+ *   "|vA:B,C:D" segment appended when or() groups are present
  *
  * @example
  * ```typescript
  * const id = hashQuery([Position, Velocity], [Dead], [], []);
  * ```
  */
-export function hashQuery(include: EntityId[], exclude: EntityId[], added: EntityId[], changed: EntityId[]): string {
+export function hashQuery(
+  include: EntityId[],
+  exclude: EntityId[],
+  added: EntityId[],
+  changed: EntityId[],
+  orGroups: EntityId[][] = []
+): string {
   // Sort to ensure consistent hashing regardless of term order
   const join = (arr: EntityId[]) => arr.toSorted((a, b) => a - b).join(":");
 
-  return `+${join(include)}|-${join(exclude)}|~+${join(added)}|~>${join(changed)}`;
+  const hash = `+${join(include)}|-${join(exclude)}|~+${join(added)}|~>${join(changed)}`;
+
+  if (orGroups.length === 0) {
+    return hash;
+  }
+
+  // Groups hash independently to preserve boundaries: or(A,B)+or(C,D) must
+  // differ from or(A,C)+or(B,D) despite containing the same four IDs
+  const orHash = orGroups
+    .map((group) => join(group))
+    .toSorted()
+    .join(",");
+
+  return `${hash}|v${orHash}`;
 }
 
 // ============================================================================
@@ -225,6 +269,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
   const changed: EntityId[] = [];
+  const orGroups: EntityId[][] = [];
 
   // Separate terms into categories based on modifier type
   for (const term of terms) {
@@ -239,6 +284,10 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
         case "changed":
           changed.push(term.componentId);
           break;
+        case "or":
+          // Canonicalize alternatives by sorting + deduping
+          orGroups.push([...new Set(term.componentIds)].sort((a, b) => a - b));
+          break;
       }
     } else {
       include.push(term);
@@ -248,21 +297,21 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   // Filter must include added/changed components since they must be present on entity
   const filterInclude = include.concat(added, changed);
 
-  assert(filterInclude.length > 0, InvalidArgument, { expected: "at least one component in query" });
+  assert(filterInclude.length > 0 || orGroups.length > 0, InvalidArgument, {
+    expected: "at least one component in query",
+  });
 
-  const queryId = hashQuery(include, exclude, added, changed);
+  const queryId = hashQuery(include, exclude, added, changed, orGroups);
 
   let queryMeta = world.queries.byId.get(queryId);
 
   if (!queryMeta) {
-    const filterMeta = ensureFilter(world, { include: filterInclude, exclude });
-
     queryMeta = {
       include,
       exclude,
       added,
       changed,
-      filter: filterMeta,
+      filters: buildQueryFilters(world, filterInclude, exclude, orGroups),
       lastTick: new Map(),
     } as QueryMeta;
 
@@ -270,6 +319,78 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   }
 
   return queryMeta as unknown as QueryMeta<ExtractIncluded<T>, T>;
+}
+
+/**
+ * Expand or() groups into disjoint conjunctive filter branches.
+ *
+ * Each or() group contributes one branch per alternative; multiple groups
+ * multiply (cartesian product).
+ *
+ * Each branch is an ordinary filter that flows through the existing
+ * ensureFilter cache and archetype dispatch.
+ *
+ * @internal
+ */
+function buildQueryFilters(
+  world: World,
+  include: EntityId[],
+  exclude: EntityId[],
+  orGroups: EntityId[][]
+): FilterMeta[] {
+  // Fast path: no or() terms, single conjunctive filter (existing behavior)
+  if (orGroups.length === 0) {
+    return [ensureFilter(world, { include, exclude })];
+  }
+
+  let branches: FilterTerms[] = [{ include, exclude }];
+
+  for (let g = 0; g < orGroups.length; g++) {
+    const group = orGroups[g]!;
+
+    // Group already satisfied by a guaranteed-present component - skip it
+    if (group.some((id) => include.includes(id))) {
+      continue;
+    }
+
+    const next: FilterTerms[] = [];
+
+    for (let b = 0; b < branches.length; b++) {
+      const branch = branches[b]!;
+
+      for (let i = 0; i < group.length; i++) {
+        next.push({
+          include: branch.include.concat(group[i]!),
+          exclude: branch.exclude.concat(group.slice(0, i)),
+        });
+      }
+    }
+
+    branches = next;
+  }
+
+  assert(branches.length <= MAX_QUERY_BRANCHES, LimitExceeded, {
+    resource: "Query filter branches",
+    max: MAX_QUERY_BRANCHES,
+  });
+
+  const filters: FilterMeta[] = [];
+
+  for (let b = 0; b < branches.length; b++) {
+    const branch = branches[b]!;
+
+    // Prune contradictory branches (an included component is also excluded);
+    // they can never match, so registering them would only waste cache entries
+    if (branch.include.some((id) => branch.exclude.includes(id))) {
+      continue;
+    }
+
+    // Dedupe exclusions: a synthesized alternative exclusion may repeat a user
+    // not() term, and duplicates would fragment the filter cache by hash
+    filters.push(ensureFilter(world, { include: branch.include, exclude: [...new Set(branch.exclude)] }));
+  }
+
+  return filters;
 }
 
 /**
@@ -382,16 +503,20 @@ export function cacheQuery(
  */
 function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (entity: EntityId) => unknown): void {
   const hasChangeModifiers = queryMeta.added.length > 0 || queryMeta.changed.length > 0;
+  const filters = queryMeta.filters;
 
   // Fast path: no change modifiers
   if (!hasChangeModifiers) {
-    const archetypes = queryMeta.filter.archetypes;
+    for (let f = 0; f < filters.length; f++) {
+      const archetypes = filters[f]!.archetypes;
 
-    for (let a = 0; a < archetypes.length; a++) {
-      const entities = archetypes[a]!.entities;
-      for (let i = entities.length - 1; i >= 0; i--) {
-        if (callback(entities[i]!) === false) {
-          return;
+      for (let a = 0; a < archetypes.length; a++) {
+        const entities = archetypes[a]!.entities;
+
+        for (let i = entities.length - 1; i >= 0; i--) {
+          if (callback(entities[i]!) === false) {
+            return;
+          }
         }
       }
     }
@@ -406,8 +531,8 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
     return;
   }
 
+  // Read lastTick once for the whole traversal
   const lastTick = queryMeta.lastTick.get(systemId) ?? 0;
-  const archetypes = queryMeta.filter.archetypes;
 
   // Pre-allocated arrays reused across archetypes to avoid allocation in hot loop
   const addedTickArrays: Uint32Array[] = [];
@@ -415,45 +540,59 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
 
   // Use try/finally to ensure lastTick updates even on early exit
   try {
-    for (let a = 0; a < archetypes.length; a++) {
-      const archetype = archetypes[a]!;
-      const entities = archetype.entities;
+    for (let f = 0; f < filters.length; f++) {
+      const archetypes = filters[f]!.archetypes;
 
-      // Pre-fetch tick arrays for this archetype
-      addedTickArrays.length = 0;
-      for (let j = 0; j < queryMeta.added.length; j++) {
-        const ticks = archetype.ticks.get(queryMeta.added[j]!);
-        if (ticks) addedTickArrays.push(ticks.added);
-      }
+      for (let a = 0; a < archetypes.length; a++) {
+        const archetype = archetypes[a]!;
+        const entities = archetype.entities;
 
-      changedTickArrays.length = 0;
-      for (let j = 0; j < queryMeta.changed.length; j++) {
-        const ticks = archetype.ticks.get(queryMeta.changed[j]!);
-        if (ticks) changedTickArrays.push(ticks.changed);
-      }
+        // Pre-fetch tick arrays for this archetype
+        addedTickArrays.length = 0;
 
-      // Iterate entities backward (deletion-safe)
-      entityLoop: for (let i = entities.length - 1; i >= 0; i--) {
-        const entityId = entities[i]!;
+        for (let j = 0; j < queryMeta.added.length; j++) {
+          const ticks = archetype.ticks.get(queryMeta.added[j]!);
 
-        // Check added modifiers: skip if component wasn't added in (lastTick, tick] range
-        for (let j = 0; j < addedTickArrays.length; j++) {
-          const addedTick = addedTickArrays[j]![i]!;
-          if (addedTick <= lastTick || addedTick > tick) {
-            continue entityLoop;
+          if (ticks) {
+            addedTickArrays.push(ticks.added);
           }
         }
 
-        // Check changed modifiers: skip if component wasn't modified in (lastTick, tick] range
-        for (let j = 0; j < changedTickArrays.length; j++) {
-          const changedTick = changedTickArrays[j]![i]!;
-          if (changedTick <= lastTick || changedTick > tick) {
-            continue entityLoop;
+        changedTickArrays.length = 0;
+
+        for (let j = 0; j < queryMeta.changed.length; j++) {
+          const ticks = archetype.ticks.get(queryMeta.changed[j]!);
+
+          if (ticks) {
+            changedTickArrays.push(ticks.changed);
           }
         }
 
-        if (callback(entityId) === false) {
-          return;
+        // Iterate entities backward (deletion-safe)
+        entityLoop: for (let i = entities.length - 1; i >= 0; i--) {
+          const entityId = entities[i]!;
+
+          // Check added modifiers: skip if component wasn't added in (lastTick, tick] range
+          for (let j = 0; j < addedTickArrays.length; j++) {
+            const addedTick = addedTickArrays[j]![i]!;
+
+            if (addedTick <= lastTick || addedTick > tick) {
+              continue entityLoop;
+            }
+          }
+
+          // Check changed modifiers: skip if component wasn't modified in (lastTick, tick] range
+          for (let j = 0; j < changedTickArrays.length; j++) {
+            const changedTick = changedTickArrays[j]![i]!;
+
+            if (changedTick <= lastTick || changedTick > tick) {
+              continue entityLoop;
+            }
+          }
+
+          if (callback(entityId) === false) {
+            return;
+          }
         }
       }
     }
@@ -609,8 +748,9 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * The callback fires once per matching archetype with the archetype's live entities
  * array and column parameters for each data-bearing term.
  *
- * Only `not()` modifiers are supported. `added()` and `changed()` are rejected —
- * use `queryEntities` for change detection.
+ * Only `not()` and `or()` modifiers are supported. `added()` and `changed()` are
+ * rejected, use `queryEntities` for change detection. Or'd components produce
+ * no columns since they are not guaranteed present in every matching archetype.
  *
  * The `entities` array is the archetype's live backing store. If mutating
  * (destroying entities, adding/removing components) during iteration,
@@ -644,7 +784,7 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * });
  * ```
  */
-export function queryColumns<T extends (EntityId | NotModifier)[]>(
+export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
   world: World,
   terms: [...T],
   callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
@@ -668,34 +808,40 @@ export function queryColumns(
     expected: "queryColumns does not support added() or changed() modifiers",
   });
 
-  const archetypes = queryMeta.filter.archetypes;
+  const filters = queryMeta.filters;
   const include = queryMeta.include;
 
   // Single allocation reused across all archetype iterations
   const columns: unknown[] = [];
 
-  for (let a = 0; a < archetypes.length; a++) {
-    const archetype = archetypes[a]!;
+  for (let f = 0; f < filters.length; f++) {
+    const archetypes = filters[f]!.archetypes;
 
-    if (archetype.entities.length === 0) {
-      continue;
-    }
+    for (let a = 0; a < archetypes.length; a++) {
+      const archetype = archetypes[a]!;
 
-    // Resolve columns for each included term. Tags and data-less pairs have
-    // no entry in archetype.columns, so they are naturally skipped, and only
-    // data-bearing components and pairs produce callback parameters
-    columns.length = 0;
-
-    for (let t = 0; t < include.length; t++) {
-      const cols = archetype.columns.get(include[t]!);
-
-      if (cols) {
-        columns.push(cols);
+      if (archetype.entities.length === 0) {
+        continue;
       }
-    }
 
-    if (callback(archetype.entities, columns) === false) {
-      return;
+      // Resolve columns for each included term. Tags and data-less pairs have
+      // no entry in archetype.columns, so they are naturally skipped, and only
+      // data-bearing components and pairs produce callback parameters. Or'd
+      // components never enter include, so column positions stay aligned
+      // across all filter branches
+      columns.length = 0;
+
+      for (let t = 0; t < include.length; t++) {
+        const cols = archetype.columns.get(include[t]!);
+
+        if (cols) {
+          columns.push(cols);
+        }
+      }
+
+      if (callback(archetype.entities, columns) === false) {
+        return;
+      }
     }
   }
 }

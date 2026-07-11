@@ -4,8 +4,9 @@ import { createAndRegisterArchetype } from "./archetype.js";
 import { addComponent, getComponentValue, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
-import { InvalidArgument, InvalidState } from "./error.js";
+import { InvalidArgument, InvalidState, LimitExceeded } from "./error.js";
 import { hashFilterTerms } from "./filters.js";
+import type { OrModifier } from "./query.js";
 import {
   added,
   cacheQuery,
@@ -14,6 +15,7 @@ import {
   ensureQuery,
   hashQuery,
   not,
+  or,
   queryColumns,
   queryEntities,
   queryFirstEntity,
@@ -515,7 +517,7 @@ describe("Query", () => {
       assert.ok(query);
       assert.deepStrictEqual(query.include, [Position]);
       assert.deepStrictEqual(query.exclude, []);
-      assert.ok(query.filter);
+      assert.strictEqual(query.filters.length, 1);
     });
 
     it("reuses cached query on subsequent calls", () => {
@@ -720,7 +722,7 @@ describe("Query", () => {
 
       // Query persists, it just has zero matching archetypes
       assert.strictEqual(world.queries.byId.size, 1);
-      assert.strictEqual(query.filter.archetypes.length, 0);
+      assert.strictEqual(query.filters[0]!.archetypes.length, 0);
     });
 
     it("re-matches after new pair target established", () => {
@@ -762,7 +764,7 @@ describe("Query", () => {
       const queryA = ensureQuery(world, [Position, Velocity]);
       const queryB = ensureQuery(world, [Position, Velocity]);
 
-      assert.strictEqual(queryA.filter, queryB.filter);
+      assert.strictEqual(queryA.filters[0], queryB.filters[0]);
       assert.strictEqual(world.filters.byId.size, 1);
     });
 
@@ -774,8 +776,326 @@ describe("Query", () => {
       const queryA = ensureQuery(world, [Position]);
       const queryB = ensureQuery(world, [Position, Velocity]);
 
-      assert.notStrictEqual(queryA.filter, queryB.filter);
+      assert.notStrictEqual(queryA.filters[0], queryB.filters[0]);
       assert.strictEqual(world.filters.byId.size, 2);
+    });
+  });
+
+  describe("Or Queries", () => {
+    it("matches entities with any alternative present", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const mover = createEntity(world);
+      const accelerator = createEntity(world);
+      const bystander = createEntity(world);
+
+      addComponent(world, mover, Velocity);
+      addComponent(world, accelerator, Acceleration);
+
+      const result = collectEntities(world, [or(Velocity, Acceleration)]);
+
+      // Union of both alternatives; bystander (neither component) is absent
+      assert.deepStrictEqual(result.toSorted(), [mover, accelerator].toSorted());
+      assert.ok(isEntityAlive(world, bystander));
+    });
+
+    it("visits entity with multiple alternatives exactly once", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const both = createEntity(world);
+      addComponent(world, both, Velocity);
+      addComponent(world, both, Acceleration);
+
+      const result = collectEntities(world, [or(Velocity, Acceleration)]);
+
+      assert.deepStrictEqual(result, [both]);
+    });
+
+    it("combines base components with or() alternatives", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const positionOnly = createEntity(world);
+      const positionMover = createEntity(world);
+
+      addComponent(world, positionOnly, Position);
+      addComponent(world, positionMover, Position);
+      addComponent(world, positionMover, Velocity);
+      addComponent(world, positionMover, Acceleration);
+
+      const result = collectEntities(world, [Position, or(Velocity, Acceleration)]);
+
+      assert.deepStrictEqual(result, [positionMover]);
+    });
+
+    it("combines or() with exclusion modifiers", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+      const Dead = createEntity(world);
+
+      const alive = createEntity(world);
+      const dead = createEntity(world);
+
+      addComponent(world, alive, Velocity);
+      addComponent(world, dead, Acceleration);
+      addComponent(world, dead, Dead);
+
+      const result = collectEntities(world, [or(Velocity, Acceleration), not(Dead)]);
+
+      assert.deepStrictEqual(result, [alive]);
+    });
+
+    it("canonicalizes alternative order to share query metadata", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const queryA = ensureQuery(world, [or(Velocity, Acceleration)]);
+      const queryB = ensureQuery(world, [or(Acceleration, Velocity)]);
+
+      assert.strictEqual(queryA, queryB);
+      assert.strictEqual(world.queries.byId.size, 1);
+    });
+
+    it("expands to disjoint filter branches", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const query = ensureQuery(world, [or(Velocity, Acceleration)]);
+
+      // Branch 1: [Velocity], Branch 2: [Acceleration, not(Velocity)]
+      assert.strictEqual(query.filters.length, 2);
+      assert.deepStrictEqual(query.filters[1]!.terms.exclude, [Velocity]);
+    });
+
+    it("matches archetypes created after query is cached", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const query = ensureQuery(world, [or(Velocity, Acceleration)]);
+
+      const late = createEntity(world);
+      addComponent(world, late, Acceleration);
+
+      assert.deepStrictEqual(collectEntities(world, query), [late]);
+    });
+
+    it("treats single-alternative or() as plain inclusion", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+
+      const plain = ensureQuery(world, [Position]);
+      const orQuery = ensureQuery(world, [or(Position)]);
+
+      // Same branch terms means the underlying filter is shared
+      assert.strictEqual(orQuery.filters.length, 1);
+      assert.strictEqual(orQuery.filters[0], plain.filters[0]);
+    });
+
+    it("drops or() group already satisfied by base include", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Velocity = createEntity(world);
+
+      const query = ensureQuery(world, [Position, or(Position, Velocity)]);
+
+      assert.strictEqual(query.filters.length, 1);
+    });
+
+    it("prunes contradictory branches from excluded alternatives", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const query = ensureQuery(world, [not(Velocity), or(Velocity, Acceleration)]);
+
+      // Velocity branch contradicts not(Velocity), only Acceleration branch remains
+      assert.strictEqual(query.filters.length, 1);
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Acceleration);
+
+      assert.deepStrictEqual(collectEntities(world, query), [entity]);
+    });
+
+    it("returns no entities when all branches are contradictory", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Velocity);
+
+      const query = ensureQuery(world, [not(Velocity), not(Acceleration), or(Velocity, Acceleration)]);
+
+      assert.strictEqual(query.filters.length, 0);
+      assert.deepStrictEqual(collectEntities(world, query), []);
+      assert.strictEqual(queryFirstEntity(world, query), undefined);
+    });
+
+    it("dedupes duplicate alternatives within a group", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Velocity = createEntity(world);
+
+      const queryA = ensureQuery(world, [or(Position, Position, Velocity)]);
+      const queryB = ensureQuery(world, [or(Position, Velocity)]);
+
+      assert.strictEqual(queryA, queryB);
+      assert.strictEqual(queryA.filters.length, 2);
+    });
+
+    it("drops or() group satisfied by a change detection component", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Velocity = createEntity(world);
+
+      // added(Position) guarantees Position on the filter, so the group is redundant
+      const query = ensureQuery(world, [added(Position), or(Position, Velocity)]);
+
+      assert.strictEqual(query.filters.length, 1);
+    });
+
+    it("shares branch filters with equivalent conjunctive queries", () => {
+      const world = createWorld();
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      // Surviving branch [Acceleration, not(Velocity)] dedupes the synthesized
+      // exclusion against the user's not() and shares the conjunctive filter
+      const orQuery = ensureQuery(world, [not(Velocity), or(Velocity, Acceleration)]);
+      const plain = ensureQuery(world, [Acceleration, not(Velocity)]);
+
+      assert.strictEqual(orQuery.filters[0], plain.filters[0]);
+    });
+
+    it("distinguishes queries with same alternatives grouped differently", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+      const D = createEntity(world);
+
+      const queryA = ensureQuery(world, [or(A, B), or(C, D)]);
+      const queryB = ensureQuery(world, [or(A, C), or(B, D)]);
+
+      assert.notStrictEqual(queryA, queryB);
+      assert.strictEqual(world.queries.byId.size, 2);
+    });
+
+    it("expands multiple or() groups as cartesian product", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const C = createEntity(world);
+      const D = createEntity(world);
+
+      const matching = createEntity(world);
+      const partial = createEntity(world);
+
+      addComponent(world, matching, A);
+      addComponent(world, matching, D);
+      addComponent(world, partial, A);
+
+      const query = ensureQuery(world, [or(A, B), or(C, D)]);
+
+      assert.strictEqual(query.filters.length, 4);
+      assert.deepStrictEqual(collectEntities(world, query), [matching]);
+    });
+
+    it("matches wildcard pair alternatives", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("OrQueryChildOf");
+      const Orphan = createEntity(world);
+
+      const parent = createEntity(world);
+      const child = createEntity(world);
+      const orphan = createEntity(world);
+
+      addComponent(world, child, pair(ChildOf, parent));
+      addComponent(world, orphan, Orphan);
+
+      const result = collectEntities(world, [or(pair(ChildOf, Wildcard), Orphan)]);
+
+      assert.deepStrictEqual(result.toSorted(), [child, orphan].toSorted());
+    });
+
+    it("shares one change detection window across branches", async () => {
+      const world = createWorld();
+      const Health = createEntity(world);
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const mover = createEntity(world);
+      const accelerator = createEntity(world);
+
+      addComponent(world, mover, Health);
+      addComponent(world, mover, Velocity);
+      addComponent(world, accelerator, Health);
+      addComponent(world, accelerator, Acceleration);
+
+      const seen: EntityId[] = [];
+
+      addSystem(world, function orChangeChecker() {
+        queryEntities(world, [added(Health), or(Velocity, Acceleration)], (entity) => {
+          seen.push(entity);
+        });
+      });
+
+      await runOnce(world);
+
+      // Both branches report their addition despite sharing one lastTick
+      assert.deepStrictEqual(seen.toSorted(), [mover, accelerator].toSorted());
+    });
+
+    it("provides aligned columns across branches in queryColumns", () => {
+      const world = createWorld();
+      const Position = defineComponent("or_qc_Position", { x: Type.f32() });
+      const Velocity = createEntity(world);
+      const Acceleration = createEntity(world);
+
+      const mover = createEntity(world);
+      const accelerator = createEntity(world);
+
+      addComponent(world, mover, Position, { x: 1 });
+      addComponent(world, mover, Velocity);
+      addComponent(world, accelerator, Position, { x: 2 });
+      addComponent(world, accelerator, Acceleration);
+
+      let sum = 0;
+
+      queryColumns(world, [Position, or(Velocity, Acceleration)], (entities, [pos]) => {
+        for (let i = 0; i < entities.length; i++) {
+          sum += pos.x[i]!;
+        }
+      });
+
+      assert.strictEqual(sum, 3);
+    });
+
+    it("throws for empty or()", () => {
+      assert.throws(() => or(), InvalidArgument);
+    });
+
+    it("throws when branch expansion exceeds the limit", () => {
+      const world = createWorld();
+      const groups: OrModifier[] = [];
+
+      // 6 groups of 2 alternatives = 64 branches > 32 limit
+      for (let i = 0; i < 6; i++) {
+        groups.push(or(createEntity(world), createEntity(world)));
+      }
+
+      assert.throws(() => ensureQuery(world, groups), LimitExceeded);
     });
   });
 
