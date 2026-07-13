@@ -78,13 +78,14 @@ export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
 
   const relevantIds = useMemo(() => {
     const set = new Set<EntityId>();
+    const meta = query.meta;
 
-    for (let i = 0; i < query.include.length; i++) {
-      set.add(query.include[i]!);
+    for (let i = 0; i < meta.include.length; i++) {
+      set.add(meta.include[i]!);
     }
 
-    for (let i = 0; i < query.exclude.length; i++) {
-      set.add(query.exclude[i]!);
+    for (let i = 0; i < meta.exclude.length; i++) {
+      set.add(meta.exclude[i]!);
     }
 
     return set;

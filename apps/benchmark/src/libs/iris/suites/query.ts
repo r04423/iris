@@ -3,7 +3,7 @@ import {
   cacheQuery,
   type EntityId,
   getComponentValue,
-  type QueryMeta,
+  type Query,
   queryColumns,
   queryEntities,
   setComponentValue,
@@ -23,7 +23,7 @@ const narrowPresets: PresetName[] = ["small", "medium", "large"];
 // World extension for cached query state
 // ============================================================================
 
-type QueryPoolWorld = World & { __queryMeta: QueryMeta<Component>; __sink: number };
+type QueryPoolWorld = World & { __queryMeta: Query<Component>; __sink: number };
 
 // ============================================================================
 // Shorthand alias
@@ -35,9 +35,9 @@ const C = GENERATED_COMPONENTS;
 // Helpers
 // ============================================================================
 
-function countMatches(world: World, meta: QueryMeta<Component>): number {
+function countMatches(world: World, query: Query<Component>): number {
   let count = 0;
-  queryEntities(world, meta, () => {
+  queryEntities(world, query, () => {
     count++;
   });
   return count;

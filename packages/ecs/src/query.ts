@@ -15,23 +15,27 @@ const MAX_QUERY_BRANCHES = 32;
 // ============================================================================
 
 /**
- * Phantom brand for carrying guaranteed-present component types on QueryMeta.
+ * Phantom brand for carrying guaranteed-present component types on Query.
  */
 declare const QUERY_COMPONENTS_BRAND: unique symbol;
 
 /**
- * Phantom brand for carrying original query terms tuple on QueryMeta (covariant).
+ * Phantom brand for carrying original query terms tuple on Query (covariant).
  */
 declare const QUERY_TERMS_BRAND: unique symbol;
 
 /**
- * Query metadata for registry caching.
+ * Query matching state stored by a world and shared by queries with the same terms.
  *
- * Stores required and excluded components with reference to underlying filter.
+ * @example
+ * ```typescript
+ * const query = cacheQuery(world, [Position, Velocity]);
+ * const meta = query.meta;
+ * ```
  */
-export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (EntityId | QueryModifier)[]> = {
+export type QueryMeta = {
   /**
-   * Required components.
+   * Required component IDs.
    */
   include: EntityId[];
 
@@ -59,6 +63,27 @@ export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (Enti
    * Per-system execution ticks for change detection: systemId -> tick.
    */
   lastTick: Map<string, number>;
+};
+
+/**
+ * Query that preserves the caller's component order.
+ *
+ * @example
+ * ```typescript
+ * const movers = cacheQuery(world, [Position, Velocity]);
+ * queryEntities(world, movers, (entity) => { ... });
+ * ```
+ */
+export type Query<C extends EntityId = never, T extends unknown[] = (EntityId | QueryModifier)[]> = {
+  /**
+   * Shared query matching state.
+   */
+  meta: QueryMeta;
+
+  /**
+   * Included component IDs in the order supplied by the caller.
+   */
+  requested: EntityId[];
 
   /**
    * Phantom field carrying guaranteed-present component types via contravariance.
@@ -77,7 +102,7 @@ export type QueryMeta<C extends EntityId = EntityId, T extends unknown[] = (Enti
  * @internal
  */
 export type QueryTrieNode = {
-  meta?: QueryMeta;
+  query?: Query;
   children?: Map<EntityId, QueryTrieNode>;
 };
 
@@ -255,7 +280,7 @@ export function hashQuery(
  *
  * @param world - World instance
  * @param terms - Components and modifiers
- * @returns Query metadata
+ * @returns Query with the requested component order
  * @throws {InvalidArgument} If no included components (query must match something)
  *
  * @example
@@ -264,7 +289,7 @@ export function hashQuery(
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
   terms: [...T]
-): QueryMeta<ExtractIncluded<T>, T> {
+): Query<ExtractIncluded<T>, T> {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
@@ -285,7 +310,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
           changed.push(term.componentId);
           break;
         case "or":
-          // Canonicalize alternatives by sorting + deduping
+          // Sort and remove duplicate alternatives so order does not affect query lookup
           orGroups.push([...new Set(term.componentIds)].sort((a, b) => a - b));
           break;
       }
@@ -313,12 +338,12 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
       changed,
       filters: buildQueryFilters(world, filterInclude, exclude, orGroups),
       lastTick: new Map(),
-    } as QueryMeta;
+    };
 
     world.queries.byId.set(queryId, queryMeta);
   }
 
-  return queryMeta as unknown as QueryMeta<ExtractIncluded<T>, T>;
+  return { meta: queryMeta, requested: include } as Query<ExtractIncluded<T>, T>;
 }
 
 /**
@@ -396,8 +421,8 @@ function buildQueryFilters(
 export function ensureQueryGetter(
   world: World,
   builder: (...args: EntityId[]) => (EntityId | QueryModifier)[]
-): (...args: EntityId[]) => QueryMeta {
-  return (...args: EntityId[]): QueryMeta => {
+): (...args: EntityId[]) => Query {
+  return (...args: EntityId[]): Query => {
     let node: QueryTrieNode;
 
     const root = world.queries.byBuilder.get(builder);
@@ -427,14 +452,14 @@ export function ensureQueryGetter(
       node = next;
     }
 
-    let meta = node.meta;
+    let query = node.query;
 
-    if (!meta) {
-      meta = ensureQuery(world, builder(...args)) as QueryMeta;
-      node.meta = meta;
+    if (!query) {
+      query = ensureQuery(world, builder(...args));
+      node.query = query;
     }
 
-    return meta;
+    return query;
   };
 }
 
@@ -459,14 +484,14 @@ export function ensureQueryGetter(
 export function cacheQuery<A extends EntityId[], const T extends (EntityId | QueryModifier)[]>(
   world: World,
   builder: (...args: [...A]) => T
-): (...args: [...A]) => QueryMeta<ExtractIncluded<T>, T>;
+): (...args: [...A]) => Query<ExtractIncluded<T>, T>;
 
 /**
  * Cache a query in the registry, creating it if necessary.
  *
  * @param world - World instance
  * @param terms - Components and modifiers
- * @returns Query metadata
+ * @returns Cached query
  *
  * @example
  * ```typescript
@@ -476,12 +501,12 @@ export function cacheQuery<A extends EntityId[], const T extends (EntityId | Que
 export function cacheQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
   terms: [...T]
-): QueryMeta<ExtractIncluded<T>, T>;
+): Query<ExtractIncluded<T>, T>;
 
 export function cacheQuery(
   world: World,
   termsOrBuilder: (EntityId | QueryModifier)[] | ((...args: EntityId[]) => (EntityId | QueryModifier)[])
-): QueryMeta<never> | ((...args: EntityId[]) => QueryMeta<never>) {
+): Query<never> | ((...args: EntityId[]) => Query<never>) {
   if (typeof termsOrBuilder === "function") {
     return ensureQueryGetter(world, termsOrBuilder);
   }
@@ -599,14 +624,14 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
 }
 
 /**
- * Resolve terms-or-query argument to QueryMeta.
+ * Resolve terms-or-query argument to Query.
  */
-function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta): QueryMeta {
+function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] | Query): Query {
   if (!Array.isArray(termsOrQuery)) {
     return termsOrQuery;
   }
 
-  return ensureQuery(world, termsOrQuery) as QueryMeta;
+  return ensureQuery(world, termsOrQuery);
 }
 
 // ============================================================================
@@ -620,7 +645,7 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
  * Creates/reuses cached query internally.
  *
  * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
  * @param callback - Called for each matching entity. Return `false` to stop iteration early
  *
  * @example
@@ -648,17 +673,17 @@ export function queryEntities<T extends (EntityId | QueryModifier)[]>(
 
 export function queryEntities<C extends EntityId>(
   world: World,
-  query: QueryMeta<C>,
+  query: Query<C>,
   callback: (entity: EntityWith<C>) => unknown
 ): void;
 
 export function queryEntities(
   world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
+  termsOrQuery: (EntityId | QueryModifier)[] | Query,
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entity: any) => unknown
 ): void {
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), callback);
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, callback);
 }
 
 /**
@@ -667,7 +692,7 @@ export function queryEntities(
  * Useful for singleton patterns or when only one match is expected.
  *
  * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
  * @returns First matching entity ID, or undefined if no matches
  *
  * @example
@@ -683,15 +708,15 @@ export function queryFirstEntity<T extends (EntityId | QueryModifier)[]>(
   terms: [...T]
 ): EntityWith<ExtractIncluded<T>> | undefined;
 
-export function queryFirstEntity<C extends EntityId>(world: World, query: QueryMeta<C>): EntityWith<C> | undefined;
+export function queryFirstEntity<C extends EntityId>(world: World, query: Query<C>): EntityWith<C> | undefined;
 
 export function queryFirstEntity(
   world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta
+  termsOrQuery: (EntityId | QueryModifier)[] | Query
 ): EntityId | undefined {
   let result: EntityId | undefined;
 
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), (entity) => {
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, (entity) => {
     result = entity;
     return false;
   });
@@ -703,7 +728,7 @@ export function queryFirstEntity(
  * Collect all matching entities into an array.
  *
  * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built QueryMeta
+ * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
  * @returns Array of matching entity IDs
  *
  * @example
@@ -720,12 +745,12 @@ export function collectEntities<T extends (EntityId | QueryModifier)[]>(
   terms: [...T]
 ): EntityWith<ExtractIncluded<T>>[];
 
-export function collectEntities<C extends EntityId>(world: World, query: QueryMeta<C>): EntityWith<C>[];
+export function collectEntities<C extends EntityId>(world: World, query: Query<C>): EntityWith<C>[];
 
-export function collectEntities(world: World, termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta): EntityId[] {
+export function collectEntities(world: World, termsOrQuery: (EntityId | QueryModifier)[] | Query): EntityId[] {
   const result: EntityId[] = [];
 
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery), (entity) => {
+  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, (entity) => {
     result.push(entity);
   });
 
@@ -752,7 +777,7 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * iterate backward to avoid skipping entities due to swap-and-pop.
  *
  * @param world - World instance
- * @param termsOrQuery - Array of component IDs and not() modifiers, or pre-built QueryMeta
+ * @param termsOrQuery - Array of component IDs and not() modifiers, or pre-built Query
  * @param callback - Called for each matching archetype. Return `false` to stop iteration
  *
  * @example
@@ -787,24 +812,25 @@ export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
 
 export function queryColumns<C extends EntityId, T extends unknown[]>(
   world: World,
-  query: QueryMeta<C, T>,
+  query: Query<C, T>,
   callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
 ): void;
 
 export function queryColumns(
   world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | QueryMeta,
+  termsOrQuery: (EntityId | QueryModifier)[] | Query,
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entities: any, columns: any) => unknown
 ): void {
-  const queryMeta = resolveQuery(world, termsOrQuery);
+  const query = resolveQuery(world, termsOrQuery);
+  const queryMeta = query.meta;
 
   assert(queryMeta.added.length === 0 && queryMeta.changed.length === 0, InvalidArgument, {
     expected: "queryColumns does not support added() or changed() modifiers",
   });
 
   const filters = queryMeta.filters;
-  const include = queryMeta.include;
+  const requested = query.requested;
 
   // Single allocation reused across all archetype iterations
   const columns: unknown[] = [];
@@ -819,15 +845,15 @@ export function queryColumns(
         continue;
       }
 
-      // Resolve columns for each included term. Tags and data-less pairs have
+      // Resolve columns for each requested term. Tags and data-less pairs have
       // no entry in archetype.columns, so they are naturally skipped, and only
       // data-bearing components and pairs produce callback parameters. Or'd
-      // components never enter include, so column positions stay aligned
+      // components never enter requested, so column positions stay aligned
       // across all filter branches
       columns.length = 0;
 
-      for (let t = 0; t < include.length; t++) {
-        const cols = archetype.columns.get(include[t]!);
+      for (let t = 0; t < requested.length; t++) {
+        const cols = archetype.columns.get(requested[t]!);
 
         if (cols) {
           columns.push(cols);

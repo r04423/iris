@@ -132,6 +132,7 @@ export type {
   ModifierType,
   NotModifier,
   OrModifier,
+  Query,
   QueryMeta,
   QueryModifier,
 } from "./query.js";
