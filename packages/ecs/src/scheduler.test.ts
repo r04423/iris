@@ -27,7 +27,7 @@ import {
   Update,
 } from "./scheduler.js";
 import { Type } from "./schema.js";
-import { createWorld } from "./world.js";
+import { createWorld, resetWorld } from "./world.js";
 
 describe("Scheduler", () => {
   describe("System Registration", () => {
@@ -719,21 +719,26 @@ describe("Scheduler", () => {
       assert.strictEqual(shutdownCount, 2);
     });
 
-    it("stop without prior runOnce runs shutdown", async () => {
+    it("stop without prior runOnce initializes and runs a shutdown factory", async () => {
       const world = createWorld();
+      let initCount = 0;
       let shutdownCount = 0;
 
       addSystem(
         world,
-        function shutdownSys() {
-          shutdownCount++;
-        },
+        defineSystem("shutdownSys", () => {
+          initCount++;
+          return () => {
+            shutdownCount++;
+          };
+        }),
         { schedule: Shutdown }
       );
 
-      // No runOnce call -- stop directly
+      assert.strictEqual(initCount, 0);
       await stop(world);
 
+      assert.strictEqual(initCount, 1);
       assert.strictEqual(shutdownCount, 1);
     });
   });
@@ -791,7 +796,7 @@ describe("Scheduler", () => {
   });
 
   describe("defineSystem", () => {
-    it("init runs at addSystem time, not at runOnce time", () => {
+    it("defers init from addSystem until the first runOnce", async () => {
       const world = createWorld();
       let initCount = 0;
 
@@ -802,7 +807,36 @@ describe("Scheduler", () => {
 
       assert.strictEqual(initCount, 0);
       addSystem(world, factory);
+      assert.strictEqual(initCount, 0);
+
+      await runOnce(world);
+
       assert.strictEqual(initCount, 1);
+    });
+
+    it("initializes factories in registration order across schedules", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(
+        world,
+        defineSystem("updateInit", () => {
+          calls.push("update");
+          return () => {};
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("firstInit", () => {
+          calls.push("first");
+          return () => {};
+        }),
+        { schedule: First }
+      );
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["update", "first"]);
     });
 
     it("init runs once, tick runs many", async () => {
@@ -931,6 +965,59 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.deepStrictEqual(values, [1, 2, 3]);
+    });
+
+    it("reinitializes factory local state after reset", async () => {
+      const world = createWorld();
+      const values: number[] = [];
+      let initCount = 0;
+
+      addSystem(
+        world,
+        defineSystem("resetCounter", () => {
+          initCount++;
+          let count = 0;
+          return () => {
+            values.push(++count);
+          };
+        })
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+      resetWorld(world);
+
+      assert.strictEqual(initCount, 1);
+      await runOnce(world);
+
+      assert.strictEqual(initCount, 2);
+      assert.deepStrictEqual(values, [1, 2, 1]);
+    });
+
+    it("initializes a factory added by another initializer in the same frame", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+      const child = defineSystem("child", () => {
+        calls.push("child init");
+        return () => {
+          calls.push("child tick");
+        };
+      });
+
+      addSystem(
+        world,
+        defineSystem("parent", (systemWorld) => {
+          calls.push("parent init");
+          addSystem(systemWorld, child);
+          return () => {
+            calls.push("parent tick");
+          };
+        })
+      );
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["parent init", "child init", "parent tick", "child tick"]);
     });
   });
 

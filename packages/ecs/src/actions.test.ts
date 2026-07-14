@@ -5,8 +5,9 @@ import { addComponent, getComponentValue, hasComponent } from "./component.js";
 import type { Entity } from "./encoding.js";
 import { createEntity } from "./entity.js";
 import { defineComponent } from "./registry.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
-import { createWorld } from "./world.js";
+import { createWorld, resetWorld } from "./world.js";
 
 // ============================================================================
 // Test Components
@@ -453,6 +454,36 @@ describe("Actions", () => {
       // All share the same state
       assert.strictEqual(systemA.getCount(), 3);
       assert.strictEqual(systemB.getCount(), 3);
+    });
+
+    it("reinitializes closure state retained by a system after reset", async () => {
+      const counterActions = defineActions(() => {
+        let count = 0;
+        return {
+          next(): number {
+            return ++count;
+          },
+        };
+      });
+      const world = createWorld();
+      const values: number[] = [];
+
+      addSystem(
+        world,
+        defineSystem("actionCounter", (systemWorld) => {
+          const counter = counterActions(systemWorld);
+          return () => {
+            values.push(counter.next());
+          };
+        })
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+      resetWorld(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual(values, [1, 2, 1]);
     });
 
     it("closure can hold complex state", () => {

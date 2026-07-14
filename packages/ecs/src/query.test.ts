@@ -26,6 +26,8 @@ import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
 
+const FactoryResetQueryTag = defineTag("FactoryResetQueryTag");
+
 describe("Query", () => {
   describe("Query Hashing", () => {
     const empty: EntityId[] = [];
@@ -717,12 +719,39 @@ describe("Query", () => {
         })
       );
 
-      assert.strictEqual(queryMetas[0], queryMetas[1]);
-
       await runOnce(world);
 
+      assert.strictEqual(queryMetas[0], queryMetas[1]);
       assert.deepStrictEqual(systemAResults, [child]);
       assert.deepStrictEqual(systemBResults, [child]);
+    });
+
+    it("reacquires a factory's static query after world reset", async () => {
+      const world = createWorld();
+      const counts: number[] = [];
+
+      addSystem(
+        world,
+        defineSystem("factoryResetQuery", (systemWorld) => {
+          const query = cacheQuery(systemWorld, [FactoryResetQueryTag]);
+          return () => {
+            counts.push(collectEntities(systemWorld, query).length);
+          };
+        })
+      );
+
+      const oldEntity = createEntity(world);
+      addComponent(world, oldEntity, FactoryResetQueryTag);
+      await runOnce(world);
+
+      resetWorld(world);
+      await runOnce(world);
+
+      const newEntity = createEntity(world);
+      addComponent(world, newEntity, FactoryResetQueryTag);
+      await runOnce(world);
+
+      assert.deepStrictEqual(counts, [1, 0, 1]);
     });
 
     it("rebuilds a pre-existing getter after world reset", () => {

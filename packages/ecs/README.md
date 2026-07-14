@@ -634,7 +634,7 @@ Return `false` from the callback to stop iteration early (same as `queryEntities
 
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
-Use `defineSystem()` to create systems with init / tick separation. The init function runs once at registration time -- use it to cache queries with `cacheQuery()`, cache action getters, and perform one-time setup. The returned tick function runs every frame.
+Use `defineSystem()` to create systems with init / tick separation. The init function runs before the first execution and again after `resetWorld()` -- use it to cache queries, cache action getters, and set up local state for the current world contents. It must be safe to repeat. The returned tick function runs every frame.
 
 Systems are registered with `addSystem()` and executed automatically when the world runs.
 
@@ -651,7 +651,7 @@ import {
 } from "iris-ecs";
 
 const movementSystem = defineSystem("movementSystem", (world) => {
-  // Init: cache queries and action getters once
+  // Init: cache queries and action getters for the current world contents
   const movers = cacheQuery(world, [Position, Velocity]);
 
   return () => {
@@ -677,7 +677,7 @@ await stop(world);
 
 #### Plain Function Systems
 
-For simple systems that don't need one-time setup, plain functions also work, and the function's name becomes the system identifier.
+For simple systems that don't need separate initialization or local state, plain functions also work, and the function's name becomes the system identifier.
 
 ```typescript
 function debugSystem(world) {

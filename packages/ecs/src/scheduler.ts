@@ -187,15 +187,18 @@ export type SystemTick = () => void | Promise<void>;
 /**
  * System factory with init/tick separation.
  *
- * Created via `defineSystem()`. The init function runs once at registration
- * time (`addSystem`), the returned tick function runs every frame.
+ * Created via `defineSystem()`. The init function runs before first execution
+ * and after a world reset. The returned tick function runs every frame.
  */
 export type SystemFactory = {
   /** @internal Runtime brand for discriminating SystemFactory from SystemRunner. */
   readonly __systemFactory: true;
   /** System name for scheduling constraints and execution context. */
   readonly name: string;
-  /** Init function. Receives world, returns tick function. */
+  /**
+   * Init function. Runs before first execution and again after `resetWorld()`.
+   * It receives the world, returns a tick function, and must be safe to repeat.
+   */
   readonly init: (world: World) => SystemTick;
 };
 
@@ -248,9 +251,14 @@ export type SystemOptions = SystemOptionsBase &
  */
 export type SystemMeta = {
   /**
-   * Function to execute.
+   * Function to execute, or null while a factory awaits initialization.
    */
-  runner: SystemRunner;
+  runner: SystemRunner | null;
+
+  /**
+   * Factory used to create the runner before execution and after a world reset.
+   */
+  factory: SystemFactory | null;
 
   /**
    * Schedule this system belongs to.
@@ -359,8 +367,8 @@ function resolveReference(ref: SystemReference): string {
  * Registers a system in the world for later scheduling.
  *
  * Accepts either a `SystemRunner` function or a `SystemFactory` created by
- * `defineSystem()`. When a factory is passed, its init function runs
- * immediately and the returned tick function is registered as the runner.
+ * `defineSystem()`. Factory initialization is deferred until the next
+ * `runOnce()` or `stop()` call, immediately before schedules execute.
  *
  * @param world - World instance
  * @param system - System function or factory (must be named unless name option provided)
@@ -374,15 +382,17 @@ function resolveReference(ref: SystemReference): string {
  * ```
  */
 export function addSystem(world: World, system: SystemRunner | SystemFactory, options?: SystemOptions): void {
-  let runner: SystemRunner;
+  let runner: SystemRunner | null;
+  let factory: SystemFactory | null;
   let name: string;
 
   if (isSystemFactory(system)) {
-    const tick = system.init(world);
-    runner = tick;
+    runner = null;
+    factory = system;
     name = options?.name ?? system.name;
   } else {
     runner = system;
+    factory = null;
     name = options?.name ?? system.name;
   }
 
@@ -409,6 +419,7 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
 
   world.systems.byId.set(name, {
     runner,
+    factory,
     schedule,
     index: world.systems.nextIndex++,
     before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
@@ -431,8 +442,10 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
 /**
  * Define a system with separate init and tick phases.
  *
- * The init function runs once when the system is registered via `addSystem()`.
- * Use it to cache query references, action getters, and other one-time setup.
+ * The init function runs before the system's first execution and again after
+ * `resetWorld()`. Initialization is deferred from `addSystem()` until the next
+ * `runOnce()` or `stop()` and must be safe to repeat. Use it to cache query
+ * references, action getters, and other setup tied to the current world state.
  * The returned tick function runs every frame during schedule execution.
  *
  * Local state can be declared as variables in the init closure — use it for
@@ -446,7 +459,7 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
  * @example
  * ```typescript
  * const movementSystem = defineSystem("movementSystem", (world) => {
- *   // Init: runs once at addSystem() time
+ *   // Init: runs before the first execution and after each reset
  *   const movers = cacheQuery(world, [Position, Velocity]);
  *
  *   // Tick: runs every frame
@@ -681,6 +694,24 @@ function rebuildPipeline(world: World): void {
   world.schedules.dirty = false;
 }
 
+/**
+ * Initializes pending factory systems, then rebuilds dirty schedules.
+ * @internal
+ */
+function prepareSystems(world: World): void {
+  if (!world.schedules.dirty) {
+    return;
+  }
+
+  for (const meta of world.systems.byId.values()) {
+    if (meta.runner === null) {
+      meta.runner = meta.factory!.init(world);
+    }
+  }
+
+  rebuildPipeline(world);
+}
+
 // ============================================================================
 // Schedule Execution (Internal)
 // ============================================================================
@@ -710,7 +741,7 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
       fireObserverEvent(world, "systemStarted", systemId, scheduleLabel);
 
       const meta = world.systems.byId.get(systemId)!;
-      const result = meta.runner(world);
+      const result = meta.runner!(world);
 
       // Await async systems, sync systems pass through unchanged
       if (result instanceof Promise) {
@@ -746,10 +777,7 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
-  // Rebuild all schedules if pipeline is dirty
-  if (world.schedules.dirty) {
-    rebuildPipeline(world);
-  }
+  prepareSystems(world);
 
   // Run startup schedule on first call
   if (!world.execution.startupRan) {
@@ -837,10 +865,7 @@ export async function stop(world: World): Promise<void> {
     world.execution.rafHandle = null;
   }
 
-  // Rebuild if needed before shutdown
-  if (world.schedules.dirty) {
-    rebuildPipeline(world);
-  }
+  prepareSystems(world);
 
   if (!world.execution.shutdownRan) {
     await executeSchedule(world, Shutdown);
