@@ -469,7 +469,7 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
  *
  * @param world - World instance
  * @param entityId - Entity to query
- * @param componentId - Data component with vector field
+ * @param componentId - Data component or relation pair with vector field
  * @param fieldName - Vector field name
  * @returns Tuple copy of vector value, or undefined if component/field not present
  *
@@ -486,17 +486,24 @@ export function getComponentVectorValue<S extends SchemaRecord, N extends string
   fieldName: K
 ): InferSchema<S[K]>;
 
+export function getComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityWith<Pair<Relation<S, N>>>,
+  componentId: Pair<Relation<S, N>>,
+  fieldName: K
+): InferSchema<S[K]>;
+
 export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S>,
+  componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined;
 
 export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S>,
+  componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined {
   const { archetype, row } = ensureEntity(world, entityId);
@@ -526,7 +533,7 @@ export function getComponentVectorValue<S extends SchemaRecord, K extends Vector
  *
  * @param world - World instance
  * @param entityId - Entity to modify
- * @param componentId - Data component with vector field
+ * @param componentId - Data component or relation pair with vector field
  * @param fieldName - Vector field name
  * @param value - Tuple of values to set
  *
@@ -544,10 +551,10 @@ export function setComponentVectorValue<S extends SchemaRecord, N extends string
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+export function setComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
   world: World,
-  entityId: EntityId,
-  componentId: Component<S>,
+  entityId: EntityWith<Pair<Relation<S, N>>>,
+  componentId: Pair<Relation<S, N>>,
   fieldName: K,
   value: InferSchema<S[K]>
 ): void;
@@ -555,7 +562,15 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
 export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S>,
+  componentId: Component<S> | Pair<Relation<S>>,
+  fieldName: K,
+  value: InferSchema<S[K]>
+): void;
+
+export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K,
   value: InferSchema<S[K]>
 ): void {
@@ -592,7 +607,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
  *
  * @param world - World instance
  * @param entityId - Entity to query
- * @param componentId - Data component with vector field
+ * @param componentId - Data component or relation pair with vector field
  * @param fieldName - Vector field name
  * @returns Typed array view into the vector, or undefined if component/field not present
  *
@@ -610,17 +625,24 @@ export function getComponentVectorView<S extends SchemaRecord, N extends string,
   fieldName: K
 ): TypedArrayInstance;
 
+export function getComponentVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+  world: World,
+  entityId: EntityWith<Pair<Relation<S, N>>>,
+  componentId: Pair<Relation<S, N>>,
+  fieldName: K
+): TypedArrayInstance;
+
 export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S>,
+  componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): TypedArrayInstance | undefined;
 
 export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S>,
+  componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): TypedArrayInstance | undefined {
   const { archetype, row } = ensureEntity(world, entityId);

@@ -468,6 +468,18 @@ const p = pair(Targets, enemy);
 const priority = getComponentValue(world, turret, p, "priority");
 ```
 
+Vector relation fields use the same vector accessors as components.
+
+```typescript
+const Offset = defineRelation("Offset", {
+  schema: { value: Type.f32(2) },
+});
+
+const p = pair(Offset, target);
+addComponent(world, entity, p, { value: [10, 20] });
+const offset = getComponentVectorView(world, entity, p, "value");
+```
+
 ### Archetypes (Under the Hood)
 
 An **Archetype** groups entities that share the same component set. All entities with `Position` and `Velocity` live in one archetype; entities with `Position`, `Velocity`, and `Health` live in another.

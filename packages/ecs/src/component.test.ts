@@ -1354,6 +1354,61 @@ describe("Component", () => {
       assert.deepStrictEqual(pos, [99, 88]);
     });
 
+    it("gets relation pair vector value", () => {
+      const world = createWorld();
+      const Offset = defineRelation("OffsetGetsRelationPairVectorValue", { schema: { value: Type.f32(2) } });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+      const offset = pair(Offset, target);
+      addComponent(world, entity, offset, { value: [10, 20] });
+
+      assert.ok(hasComponent(world, entity, offset));
+      const value: [number, number] = getComponentVectorValue(world, entity, offset, "value");
+      assert.deepStrictEqual(value, [10, 20]);
+    });
+
+    it("sets relation pair vector value", () => {
+      const world = createWorld();
+      const Offset = defineRelation("OffsetSetsRelationPairVectorValue", { schema: { value: Type.f32(2) } });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+      const offset = pair(Offset, target);
+      addComponent(world, entity, offset, { value: [0, 0] });
+
+      setComponentVectorValue(world, entity, offset, "value", [30, 40]);
+
+      assert.deepStrictEqual(getComponentVectorValue(world, entity, offset, "value"), [30, 40]);
+    });
+
+    it("gets live relation pair vector view", () => {
+      const world = createWorld();
+      const Offset = defineRelation("OffsetGetsLiveRelationPairVectorView", { schema: { value: Type.f32(2) } });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+      const offset = pair(Offset, target);
+      addComponent(world, entity, offset, { value: [10, 20] });
+
+      assert.ok(hasComponent(world, entity, offset));
+      const view: ArrayBufferView = getComponentVectorView(world, entity, offset, "value");
+      assert.ok(view instanceof Float32Array);
+      view[0] = 99;
+
+      assert.deepStrictEqual(getComponentVectorValue(world, entity, offset, "value"), [99, 20]);
+    });
+
+    it("returns undefined for missing relation pair", () => {
+      const world = createWorld();
+      const Offset = defineRelation("OffsetReturnsUndefinedMissingRelationPair", {
+        schema: { value: Type.f32(2) },
+      });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+      const offset = pair(Offset, target);
+
+      assert.strictEqual(getComponentVectorValue(world, entity, offset, "value"), undefined);
+      assert.strictEqual(getComponentVectorView(world, entity, offset, "value"), undefined);
+    });
+
     it("returns undefined for missing component", () => {
       const world = createWorld();
       const Position = defineComponent("PositionReturnsUndefinedMissingComponent14", { value: Type.f32(2) });
