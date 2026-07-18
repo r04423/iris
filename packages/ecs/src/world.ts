@@ -189,6 +189,16 @@ export type World = {
     rafHandle: number | null;
 
     /**
+     * Current RAF frame promise.
+     */
+    activeFrame: Promise<void> | null;
+
+    /**
+     * Current shutdown promise.
+     */
+    shutdownPromise: Promise<void> | null;
+
+    /**
      * Whether startup schedule has been executed.
      */
     startupRan: boolean;
@@ -274,6 +284,8 @@ export function createWorld(): World {
       tick: 1,
       running: false,
       rafHandle: null,
+      activeFrame: null,
+      shutdownPromise: null,
       startupRan: false,
       shutdownRan: false,
     },
@@ -358,6 +370,8 @@ export function resetWorld(world: World): void {
   world.execution.systemId = null;
   world.execution.running = false;
   world.execution.rafHandle = null;
+  world.execution.activeFrame = null;
+  world.execution.shutdownPromise = null;
   world.execution.startupRan = false;
   world.execution.shutdownRan = false;
 

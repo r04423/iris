@@ -819,7 +819,7 @@ export async function runOnce(world: World): Promise<void> {
  * ```
  */
 export function run(world: World): void {
-  if (world.execution.running) {
+  if (world.execution.running || world.execution.shutdownPromise !== null) {
     return;
   }
 
@@ -836,12 +836,19 @@ function scheduleFrame(world: World): void {
       return;
     }
 
+    const frame = runOnce(world);
+    world.execution.activeFrame = frame;
+
     try {
-      await runOnce(world);
+      await frame;
     } catch (error) {
       world.execution.running = false;
       world.execution.rafHandle = null;
       throw error;
+    } finally {
+      if (world.execution.activeFrame === frame) {
+        world.execution.activeFrame = null;
+      }
     }
 
     if (world.execution.running) {
@@ -851,7 +858,47 @@ function scheduleFrame(world: World): void {
 }
 
 /**
- * Stop the main loop and run the shutdown schedule.
+ * Wait for the active frame and execute the shutdown schedule.
+ */
+async function runShutdown(world: World): Promise<void> {
+  const frame = world.execution.activeFrame;
+
+  let frameFailed = false;
+  let frameError: unknown;
+
+  try {
+    try {
+      await frame;
+    } catch (error) {
+      frameFailed = true;
+      frameError = error;
+    }
+
+    try {
+      prepareSystems(world);
+      await executeSchedule(world, Shutdown);
+
+      world.execution.shutdownRan = true;
+      world.execution.startupRan = false;
+    } catch (shutdownError) {
+      if (frameFailed) {
+        throw new AggregateError([frameError, shutdownError], "Frame and shutdown both failed");
+      }
+
+      throw shutdownError;
+    }
+
+    if (frameFailed) {
+      throw frameError;
+    }
+  } finally {
+    world.execution.shutdownPromise = null;
+  }
+}
+
+/**
+ * Stop the main loop, wait for the active frame, and run the shutdown schedule.
+ * Concurrent calls wait for the same shutdown.
  *
  * @param world - World instance
  * @returns Promise that resolves when shutdown completes
@@ -863,7 +910,7 @@ function scheduleFrame(world: World): void {
  * await stop(world);
  * ```
  */
-export async function stop(world: World): Promise<void> {
+export function stop(world: World): Promise<void> {
   world.execution.running = false;
 
   if (world.execution.rafHandle !== null) {
@@ -871,11 +918,17 @@ export async function stop(world: World): Promise<void> {
     world.execution.rafHandle = null;
   }
 
-  prepareSystems(world);
-
-  if (!world.execution.shutdownRan) {
-    await executeSchedule(world, Shutdown);
-    world.execution.shutdownRan = true;
-    world.execution.startupRan = false;
+  if (world.execution.shutdownPromise !== null) {
+    return world.execution.shutdownPromise;
   }
+
+  if (world.execution.shutdownRan) {
+    return Promise.resolve();
+  }
+
+  const shutdown = runShutdown(world);
+
+  world.execution.shutdownPromise = shutdown;
+
+  return shutdown;
 }

@@ -20,6 +20,7 @@ import {
   Last,
   PostUpdate,
   PreUpdate,
+  run,
   runOnce,
   Shutdown,
   Startup,
@@ -28,6 +29,26 @@ import {
 } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
+
+function mockAnimationFrame(): { runFrame: () => Promise<void>; restore: () => void } {
+  const request = globalThis.requestAnimationFrame;
+  const cancel = globalThis.cancelAnimationFrame;
+  let callback: ((time: number) => Promise<void>) | null = null;
+
+  globalThis.requestAnimationFrame = (next) => {
+    callback = next as (time: number) => Promise<void>;
+    return 1;
+  };
+  globalThis.cancelAnimationFrame = () => {};
+
+  return {
+    runFrame: () => callback!(0),
+    restore: () => {
+      globalThis.requestAnimationFrame = request;
+      globalThis.cancelAnimationFrame = cancel;
+    },
+  };
+}
 
 describe("Scheduler", () => {
   describe("System Registration", () => {
@@ -752,6 +773,129 @@ describe("Scheduler", () => {
 
       assert.strictEqual(initCount, 1);
       assert.strictEqual(shutdownCount, 1);
+    });
+
+    it("waits for the active frame before shutdown", async () => {
+      const animationFrame = mockAnimationFrame();
+      let updateStarted!: () => void;
+      let releaseUpdate!: () => void;
+      let shutdownStarted!: () => void;
+      let releaseShutdown!: () => void;
+      const updateStart = new Promise<void>((resolve) => {
+        updateStarted = resolve;
+      });
+      const updateGate = new Promise<void>((resolve) => {
+        releaseUpdate = resolve;
+      });
+      const shutdownStart = new Promise<void>((resolve) => {
+        shutdownStarted = resolve;
+      });
+      const shutdownGate = new Promise<void>((resolve) => {
+        releaseShutdown = resolve;
+      });
+
+      try {
+        const world = createWorld();
+        const calls: string[] = [];
+        addSystem(world, async function updateSys() {
+          calls.push("update-start");
+          updateStarted();
+          await updateGate;
+          calls.push("update-end");
+        });
+        addSystem(
+          world,
+          async function shutdownSys() {
+            calls.push("shutdown-start");
+            shutdownStarted();
+            await shutdownGate;
+            calls.push("shutdown-end");
+          },
+          { schedule: Shutdown }
+        );
+
+        run(world);
+        const frame = animationFrame.runFrame();
+        await updateStart;
+
+        const firstStop = stop(world);
+        const secondStop = stop(world);
+        assert.deepStrictEqual(calls, ["update-start"]);
+
+        releaseUpdate();
+        await shutdownStart;
+        const thirdStop = stop(world);
+        assert.deepStrictEqual(calls, ["update-start", "update-end", "shutdown-start"]);
+
+        releaseShutdown();
+        await Promise.all([frame, firstStop, secondStop, thirdStop]);
+        assert.deepStrictEqual(calls, ["update-start", "update-end", "shutdown-start", "shutdown-end"]);
+      } finally {
+        releaseUpdate();
+        releaseShutdown();
+        animationFrame.restore();
+      }
+    });
+
+    it("runs shutdown after an active frame rejects", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        const error = new Error("frame failed");
+        let shutdownCount = 0;
+        addSystem(world, function updateSys() {
+          throw error;
+        });
+        addSystem(
+          world,
+          function shutdownSys() {
+            shutdownCount++;
+          },
+          { schedule: Shutdown }
+        );
+
+        run(world);
+        const frame = animationFrame.runFrame();
+        const stopping = stop(world);
+
+        await Promise.all([
+          assert.rejects(frame, (actual) => actual === error),
+          assert.rejects(stopping, (actual) => actual === error),
+        ]);
+        assert.strictEqual(shutdownCount, 1);
+        await stop(world);
+        assert.strictEqual(shutdownCount, 1);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("retries shutdown after failure", async () => {
+      const world = createWorld();
+      const error = new Error("shutdown failed");
+      let attempts = 0;
+      addSystem(
+        world,
+        function shutdownSys() {
+          attempts++;
+          if (attempts === 1) {
+            throw error;
+          }
+        },
+        { schedule: Shutdown }
+      );
+
+      const firstStop = stop(world);
+      const secondStop = stop(world);
+      await Promise.all([
+        assert.rejects(firstStop, (actual) => actual === error),
+        assert.rejects(secondStop, (actual) => actual === error),
+      ]);
+      assert.strictEqual(attempts, 1);
+      await stop(world);
+
+      assert.strictEqual(attempts, 2);
     });
   });
 
