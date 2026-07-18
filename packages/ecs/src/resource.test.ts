@@ -43,7 +43,7 @@ describe("Resource", () => {
 
     it("removes global resource", () => {
       const world = createWorld();
-      const Time = defineComponent("Time", { delta: Type.f32() });
+      const Time = defineComponent("TimeRemovesGlobalResource", { delta: Type.f32() });
 
       addResource(world, Time, { delta: 0.016 });
       assert.strictEqual(hasResource(world, Time), true);
@@ -91,7 +91,7 @@ describe("Resource", () => {
 
     it("writes vector resource", () => {
       const world = createWorld();
-      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityWritesVectorResource", { value: Type.f64(3) });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
       setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
@@ -102,7 +102,7 @@ describe("Resource", () => {
 
     it("returns zero-copy typed array view", () => {
       const world = createWorld();
-      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityReturnsZeroCopyTypedArrayView", { value: Type.f64(3) });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
 
@@ -120,7 +120,7 @@ describe("Resource", () => {
 
     it("returns undefined for missing resource", () => {
       const world = createWorld();
-      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityReturnsUndefinedMissingResource", { value: Type.f64(3) });
 
       assert.strictEqual(getResourceVectorValue(world, Gravity, "value"), undefined);
       assert.strictEqual(getResourceVectorView(world, Gravity, "value"), undefined);

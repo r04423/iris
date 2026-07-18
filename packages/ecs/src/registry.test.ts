@@ -10,7 +10,7 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
-import { LimitExceeded } from "./error.js";
+import { Duplicate, LimitExceeded } from "./error.js";
 import { COMPONENT_REGISTRY, defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { Type } from "./schema.js";
 
@@ -133,11 +133,11 @@ describe("Registry", () => {
     });
 
     it("stores metadata without schema for tag relations", () => {
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("MetadataChildOf");
 
       const meta = COMPONENT_REGISTRY.byId.get(ChildOf);
       assert.ok(meta);
-      assert.strictEqual(meta.name, "ChildOf");
+      assert.strictEqual(meta.name, "MetadataChildOf");
       assert.strictEqual(meta.schema, undefined);
     });
 
@@ -217,6 +217,34 @@ describe("Registry", () => {
   // ============================================================================
 
   describe("Registry Isolation", () => {
+    it("rejects names already used by any definition kind without allocating an ID", () => {
+      const name = "SharedDefinitionName";
+      const tag = defineTag(name);
+      const byIdSize = COMPONENT_REGISTRY.byId.size;
+      const nextTagId = COMPONENT_REGISTRY.nextTagId;
+      const nextComponentId = COMPONENT_REGISTRY.nextComponentId;
+      const nextRelationId = COMPONENT_REGISTRY.nextRelationId;
+
+      assert.strictEqual(COMPONENT_REGISTRY.byName.get(name), tag);
+      assert.throws(
+        () => defineComponent(name, { value: Type.i32() }),
+        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+      );
+      assert.throws(
+        () => defineRelation(name),
+        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+      );
+      assert.throws(
+        () => defineTag(name),
+        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+      );
+
+      assert.strictEqual(COMPONENT_REGISTRY.byId.size, byIdSize);
+      assert.strictEqual(COMPONENT_REGISTRY.nextTagId, nextTagId);
+      assert.strictEqual(COMPONENT_REGISTRY.nextComponentId, nextComponentId);
+      assert.strictEqual(COMPONENT_REGISTRY.nextRelationId, nextRelationId);
+    });
+
     it("maintains separate counters for tags, components, and relations", () => {
       const tagStart = COMPONENT_REGISTRY.nextTagId;
       const componentStart = COMPONENT_REGISTRY.nextComponentId;

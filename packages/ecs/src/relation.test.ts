@@ -42,7 +42,7 @@ describe("Relation", () => {
 
     it("creates pair from relation and relation target", () => {
       const DependsOn = defineRelation("DependsOn");
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCreatesPairRelationRelationTarget");
 
       const pairId = pair(DependsOn, ChildOf);
 
@@ -51,7 +51,7 @@ describe("Relation", () => {
 
     it("creates distinct pairs for different targets", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCreatesDistinctPairsDifferentTargets");
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
 
@@ -63,7 +63,7 @@ describe("Relation", () => {
 
     it("creates distinct pairs for different relations", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCreatesDistinctPairsDifferentRelations");
       const Follows = defineRelation("Follows");
       const target = createEntity(world);
 
@@ -75,7 +75,7 @@ describe("Relation", () => {
 
     it("creates same pair for same relation and target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCreatesPairRelationTarget");
       const parent = createEntity(world);
 
       const pair1 = pair(ChildOf, parent);
@@ -88,7 +88,7 @@ describe("Relation", () => {
   describe("getPairRelation()", () => {
     it("extracts relation from pair with entity target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfExtractsRelationPairEntityTarget");
       const parent = createEntity(world);
       const pairId = pair(ChildOf, parent);
 
@@ -98,8 +98,8 @@ describe("Relation", () => {
     });
 
     it("extracts relation from pair with tag target", () => {
-      const Has = defineRelation("Has");
-      const Weapon = defineTag("Weapon");
+      const Has = defineRelation("HasExtractsRelationPairTagTarget");
+      const Weapon = defineTag("WeaponExtractsRelationPairTagTarget");
       const pairId = pair(Has, Weapon);
 
       const relation = getPairRelation(pairId);
@@ -108,8 +108,8 @@ describe("Relation", () => {
     });
 
     it("extracts relation from pair with component target", () => {
-      const Requires = defineRelation("Requires");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Requires = defineRelation("RequiresExtractsRelationPairComponentTarget");
+      const Position = defineComponent("PositionExtractsRelationPairComponentTarget", { x: Type.f32(), y: Type.f32() });
       const pairId = pair(Requires, Position);
 
       const relation = getPairRelation(pairId);
@@ -118,8 +118,8 @@ describe("Relation", () => {
     });
 
     it("extracts relation from pair with relation target", () => {
-      const DependsOn = defineRelation("DependsOn");
-      const ChildOf = defineRelation("ChildOf");
+      const DependsOn = defineRelation("DependsOnExtractsRelationPairRelationTarget");
+      const ChildOf = defineRelation("ChildOfExtractsRelationPairRelationTarget");
       const pairId = pair(DependsOn, ChildOf);
 
       const relation = getPairRelation(pairId);
@@ -141,7 +141,7 @@ describe("Relation", () => {
   describe("getPairTarget()", () => {
     it("extracts entity target from pair", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfExtractsEntityTargetPair");
       const parent = createEntity(world);
       const pairId = pair(ChildOf, parent);
 
@@ -152,8 +152,8 @@ describe("Relation", () => {
 
     it("extracts tag target from pair", () => {
       const world = createWorld();
-      const Has = defineRelation("Has");
-      const Weapon = defineTag("Weapon");
+      const Has = defineRelation("HasExtractsTagTargetPair");
+      const Weapon = defineTag("WeaponExtractsTagTargetPair");
       const pairId = pair(Has, Weapon);
 
       const target = getPairTarget(world, pairId);
@@ -163,8 +163,8 @@ describe("Relation", () => {
 
     it("extracts component target from pair", () => {
       const world = createWorld();
-      const Requires = defineRelation("Requires");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Requires = defineRelation("RequiresExtractsComponentTargetPair");
+      const Position = defineComponent("PositionExtractsComponentTargetPair", { x: Type.f32(), y: Type.f32() });
       const pairId = pair(Requires, Position);
 
       const target = getPairTarget(world, pairId);
@@ -174,8 +174,8 @@ describe("Relation", () => {
 
     it("extracts relation target from pair", () => {
       const world = createWorld();
-      const DependsOn = defineRelation("DependsOn");
-      const ChildOf = defineRelation("ChildOf");
+      const DependsOn = defineRelation("DependsOnExtractsRelationTargetPair");
+      const ChildOf = defineRelation("ChildOfExtractsRelationTargetPair");
       const pairId = pair(DependsOn, ChildOf);
 
       const target = getPairTarget(world, pairId);
@@ -185,7 +185,7 @@ describe("Relation", () => {
 
     it("extracts Wildcard target from pair", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfExtractsWildcardTargetPair");
       const pairId = pair(ChildOf, Wildcard);
 
       const target = getPairTarget(world, pairId);
@@ -195,7 +195,7 @@ describe("Relation", () => {
 
     it("returns current generation for entity target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfReturnsCurrentGenerationEntityTarget");
       const parent = createEntity(world);
       const pairId = pair(ChildOf, parent);
 
@@ -206,7 +206,7 @@ describe("Relation", () => {
 
     it("returns new entity after target destroyed and recycled (weak reference)", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfReturnsNewEntityAfterTargetDestroyedRecycledWeakReference");
 
       // Create and destroy parent to get it recycled
       const parent = createEntity(world);
@@ -250,7 +250,7 @@ describe("Relation", () => {
 
     it("creates pair(relation, Wildcard) for any-target pattern", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCreatesPairRelationWildcardAnyTargetPattern");
       const pairId = pair(ChildOf, Wildcard);
 
       assert.ok(isPair(pairId));
@@ -262,7 +262,7 @@ describe("Relation", () => {
   describe("getRelationTargets()", () => {
     it("returns all targets for a relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfReturnsAllTargetsRelation");
       const entity = createEntity(world);
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
@@ -279,7 +279,7 @@ describe("Relation", () => {
 
     it("returns empty array when no pairs with relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfReturnsEmptyArrayNoPairsRelation");
       const entity = createEntity(world);
 
       const targets = getRelationTargets(world, entity, ChildOf);
@@ -289,7 +289,7 @@ describe("Relation", () => {
 
     it("excludes targets from other relations", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfExcludesTargetsOtherRelations");
       const Likes = defineRelation("Likes");
       const entity = createEntity(world);
       const parent = createEntity(world);
@@ -307,7 +307,7 @@ describe("Relation", () => {
 
     it("excludes wildcard pair from results", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfExcludesWildcardPairResults");
       const entity = createEntity(world);
       const parent = createEntity(world);
 
@@ -322,8 +322,8 @@ describe("Relation", () => {
 
     it("works with tag targets", () => {
       const world = createWorld();
-      const Has = defineRelation("Has");
-      const Weapon = defineTag("Weapon");
+      const Has = defineRelation("HasWorksTagTargets");
+      const Weapon = defineTag("WeaponWorksTagTargets");
       const Armor = defineTag("Armor");
       const entity = createEntity(world);
 
@@ -339,8 +339,8 @@ describe("Relation", () => {
 
     it("works with component targets", () => {
       const world = createWorld();
-      const Requires = defineRelation("Requires");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Requires = defineRelation("RequiresWorksComponentTargets");
+      const Position = defineComponent("PositionWorksComponentTargets", { x: Type.f32(), y: Type.f32() });
       const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
       const entity = createEntity(world);
 
@@ -356,7 +356,7 @@ describe("Relation", () => {
 
     it("updates after removing pairs", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfUpdatesAfterRemovingPairs");
       const entity = createEntity(world);
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
@@ -394,7 +394,7 @@ describe("Relation", () => {
   describe("Target Deletion Cleanup", () => {
     it("removes pair from subject when target is destroyed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfRemovesPairSubjectTargetDestroyed");
       const parent = createEntity(world);
       const child = createEntity(world);
 
@@ -411,8 +411,8 @@ describe("Relation", () => {
 
     it("preserves unaffected pairs when one target is destroyed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
-      const Likes = defineRelation("Likes");
+      const ChildOf = defineRelation("ChildOfPreservesUnaffectedPairsOneTargetDestroyed");
+      const Likes = defineRelation("LikesPreservesUnaffectedPairsOneTargetDestroyed");
       const parent = createEntity(world);
       const friend = createEntity(world);
       const entity = createEntity(world);
@@ -431,7 +431,7 @@ describe("Relation", () => {
 
     it("cleans up multiple subjects targeting the same entity", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCleansUpMultipleSubjectsTargetingEntity");
       const parent = createEntity(world);
       const child1 = createEntity(world);
       const child2 = createEntity(world);
@@ -456,7 +456,7 @@ describe("Relation", () => {
 
     it("orphans children when parent is destroyed in hierarchy", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfOrphansChildrenParentDestroyedHierarchy");
       const grandparent = createEntity(world);
       const parent = createEntity(world);
       const child1 = createEntity(world);
@@ -481,7 +481,7 @@ describe("Relation", () => {
 
     it("cleans up multiple relations to the same target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCleansUpMultipleRelationsTarget");
       const OwnedBy = defineRelation("OwnedBy");
       const Targets = defineRelation("Targets");
       const target = createEntity(world);
@@ -507,7 +507,7 @@ describe("Relation", () => {
 
     it("does nothing when destroyed entity was never a target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfDoesNothingDestroyedEntityWasNeverTarget");
       const parent = createEntity(world);
       const child = createEntity(world);
       const unrelated = createEntity(world);
@@ -527,7 +527,7 @@ describe("Relation", () => {
   describe("Wildcard Pair Lifecycle", () => {
     it("removes target wildcard when last pair to target is removed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfRemovesTargetWildcardLastPairTargetRemoved");
       const parent = createEntity(world);
       const child = createEntity(world);
 
@@ -542,8 +542,8 @@ describe("Relation", () => {
 
     it("preserves target wildcard when other pairs still target same entity", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
-      const Likes = defineRelation("Likes");
+      const ChildOf = defineRelation("ChildOfPreservesTargetWildcardOtherPairsStillTargetEntity");
+      const Likes = defineRelation("LikesPreservesTargetWildcardOtherPairsStillTargetEntity");
       const target = createEntity(world);
       const entity = createEntity(world);
 
@@ -559,7 +559,7 @@ describe("Relation", () => {
 
     it("removes relation wildcard when last pair with relation is removed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfRemovesRelationWildcardLastPairRelationRemoved");
       const parent = createEntity(world);
       const child = createEntity(world);
 
@@ -574,7 +574,7 @@ describe("Relation", () => {
 
     it("preserves relation wildcard when other pairs use same relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfPreservesRelationWildcardOtherPairsUseRelation");
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
       const child = createEntity(world);
@@ -591,8 +591,8 @@ describe("Relation", () => {
 
     it("cleans up both wildcards correctly in multi-relation scenario", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
-      const Likes = defineRelation("Likes");
+      const ChildOf = defineRelation("ChildOfCleansUpBothWildcardsCorrectlyMultiRelationScenario");
+      const Likes = defineRelation("LikesCleansUpBothWildcardsCorrectlyMultiRelationScenario");
       const parent = createEntity(world);
       const friend = createEntity(world);
       const entity = createEntity(world);
@@ -621,7 +621,7 @@ describe("Relation", () => {
 
     it("cleans up wildcards when target is destroyed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfCleansUpWildcardsTargetDestroyed");
       const parent = createEntity(world);
       const child = createEntity(world);
 
@@ -638,7 +638,7 @@ describe("Relation", () => {
 
     it("preserves unaffected wildcards when one target destroyed", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfPreservesUnaffectedWildcardsOneTargetDestroyed");
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
       const child = createEntity(world);
@@ -659,7 +659,7 @@ describe("Relation", () => {
   describe("Exclusive Relations", () => {
     it("removes previous target when adding new pair with exclusive relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf", { exclusive: true });
+      const ChildOf = defineRelation("ChildOfRemovesPreviousTargetAddingNewPairExclusiveRelation", { exclusive: true });
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
       const child = createEntity(world);
@@ -681,8 +681,12 @@ describe("Relation", () => {
 
     it("allows multiple exclusive relations on same entity independently", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf", { exclusive: true });
-      const OwnedBy = defineRelation("OwnedBy", { exclusive: true });
+      const ChildOf = defineRelation("ChildOfAllowsMultipleExclusiveRelationsOnEntityIndependently", {
+        exclusive: true,
+      });
+      const OwnedBy = defineRelation("OwnedByAllowsMultipleExclusiveRelationsOnEntityIndependently", {
+        exclusive: true,
+      });
       const entity = createEntity(world);
       const parent = createEntity(world);
       const owner = createEntity(world);
@@ -697,8 +701,12 @@ describe("Relation", () => {
 
     it("replaces target for one exclusive relation without affecting another", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf", { exclusive: true });
-      const OwnedBy = defineRelation("OwnedBy", { exclusive: true });
+      const ChildOf = defineRelation("ChildOfReplacesTargetOneExclusiveRelationWithoutAffectingAnother", {
+        exclusive: true,
+      });
+      const OwnedBy = defineRelation("OwnedByReplacesTargetOneExclusiveRelationWithoutAffectingAnother", {
+        exclusive: true,
+      });
       const entity = createEntity(world);
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
@@ -741,7 +749,7 @@ describe("Relation", () => {
 
     it("preserves data for new target in exclusive data relation", () => {
       const world = createWorld();
-      const Targets = defineRelation("Targets", {
+      const Targets = defineRelation("TargetsPreservesDataNewTargetExclusiveDataRelation", {
         schema: { priority: Type.i8<10 | 20>() },
         exclusive: true,
       });
@@ -827,7 +835,7 @@ describe("Relation", () => {
     it("preserves other relations when exclusive replacement occurs", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfPreserve", { exclusive: true });
-      const Likes = defineRelation("Likes");
+      const Likes = defineRelation("LikesPreservesOtherRelationsExclusiveReplacementOccurs");
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
       const friend = createEntity(world);

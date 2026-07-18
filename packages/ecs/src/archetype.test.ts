@@ -1123,7 +1123,10 @@ describe("Archetype", () => {
 
     it("handles multiple components with different schemas", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionHandlesMultipleComponentsDifferentSchemas", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
       const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
@@ -1163,7 +1166,7 @@ describe("Archetype", () => {
   describe("Schema Reuse", () => {
     it("reuses archetype with same component set", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionReusesArchetypeComponentSet", { x: Type.f32(), y: Type.f32() });
 
       const e1 = createEntity(world);
       addComponent(world, e1, Position, { x: 10.0, y: 20.0 });
@@ -1180,8 +1183,14 @@ describe("Archetype", () => {
 
     it("preserves schemas during archetype transitions", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionPreservesSchemasDuringArchetypeTransitions", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
+      const Velocity = defineComponent("VelocityPreservesSchemasDuringArchetypeTransitions", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
@@ -1204,8 +1213,8 @@ describe("Archetype", () => {
 
     it("removes schema when component removed", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionRemovesSchemaComponentRemoved", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("VelocityRemovesSchemaComponentRemoved", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
@@ -1228,9 +1237,18 @@ describe("Archetype", () => {
 
     it("preserves schema across multiple transitions", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
-      const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
+      const Position = defineComponent("PositionPreservesSchemaAcrossMultipleTransitions", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
+      const Velocity = defineComponent("VelocityPreservesSchemaAcrossMultipleTransitions", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
+      const Health = defineComponent("HealthPreservesSchemaAcrossMultipleTransitions", {
+        current: Type.i32(),
+        max: Type.i32(),
+      });
 
       const entity = createEntity(world);
 
@@ -1430,7 +1448,7 @@ describe("Archetype", () => {
   describe("Vector Column Storage", () => {
     it("allocates interleaved column for vector schema", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionAllocatesInterleavedColumnVectorSchema", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1444,7 +1462,7 @@ describe("Archetype", () => {
 
     it("preserves vector data during archetype transition", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionPreservesVectorDataDuringArchetypeTransition", { value: Type.f32(2) });
       const Tag = defineTag("Tag");
 
       const entity = createEntity(world);
@@ -1464,8 +1482,8 @@ describe("Archetype", () => {
 
     it("swap-and-pop preserves vector data for swapped entity", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
-      const Tag = defineTag("Tag");
+      const Position = defineComponent("PositionSwapPopPreservesVectorDataSwappedEntity", { value: Type.f32(2) });
+      const Tag = defineTag("TagSwapPopPreservesVectorDataSwappedEntity");
 
       const e1 = createEntity(world);
       const e2 = createEntity(world);
@@ -1493,7 +1511,7 @@ describe("Archetype", () => {
 
     it("clears vector data on entity removal", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionClearsVectorDataOnEntityRemoval", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1511,7 +1529,7 @@ describe("Archetype", () => {
 
     it("resizes vector column correctly when capacity grows", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionResizesVectorColumnCorrectlyCapacityGrows", { value: Type.f32(2) });
 
       // Create enough entities to trigger resize (initial capacity is 16)
       const entities: EntityId[] = [];

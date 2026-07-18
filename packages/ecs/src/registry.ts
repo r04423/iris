@@ -1,6 +1,6 @@
 import type { Component, Relation, Tag } from "./encoding.js";
 import { encodeComponent, encodeRelation, encodeTag, ID_MASK_8, ID_MASK_20 } from "./encoding.js";
-import { assert, LimitExceeded } from "./error.js";
+import { assert, Duplicate, LimitExceeded } from "./error.js";
 import type { SchemaRecord } from "./schema.js";
 
 // ============================================================================
@@ -73,6 +73,10 @@ export type ComponentRegistry = {
    */
   byId: Map<Tag | Component | Relation, ComponentMeta>;
   /**
+   * Definition lookup shared by tags, components, and relations.
+   */
+  byName: Map<string, Tag | Component | Relation>;
+  /**
    * Next raw ID to allocate for tags.
    */
   nextTagId: number;
@@ -91,10 +95,20 @@ export type ComponentRegistry = {
  */
 export const COMPONENT_REGISTRY: ComponentRegistry = {
   byId: new Map(),
+  byName: new Map(),
   nextTagId: 0,
   nextComponentId: 0,
   nextRelationId: 0,
 };
+
+// ============================================================================
+// Definition Name Validation
+// ============================================================================
+
+/** @internal */
+function assertDefinitionNameAvailable(name: string): void {
+  assert(!COMPONENT_REGISTRY.byName.has(name), Duplicate, { resource: "Definition", id: name });
+}
 
 // ============================================================================
 // Tag Definition
@@ -104,12 +118,15 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
  * Defines a tag component. Tags are lightweight markers without data.
  * @param name - Human-readable tag name for debugging
  * @returns Encoded tag ID
+ * @throws {Duplicate} If the name is already used by a tag, component, or relation
  * @throws {LimitExceeded} If tag limit (1,048,576) exceeded
  * @example
  * const Player = defineTag("Player");
  * addTag(world, entity, Player);
  */
 export function defineTag<N extends string>(name: N): Tag<N> {
+  assertDefinitionNameAvailable(name);
+
   const rawId = COMPONENT_REGISTRY.nextTagId;
 
   assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Tag", max: ID_MASK_20 });
@@ -120,6 +137,7 @@ export function defineTag<N extends string>(name: N): Tag<N> {
     name,
     schema: undefined,
   });
+  COMPONENT_REGISTRY.byName.set(name, tagId);
 
   COMPONENT_REGISTRY.nextTagId++;
 
@@ -135,12 +153,15 @@ export function defineTag<N extends string>(name: N): Tag<N> {
  * @param name - Human-readable component name for debugging
  * @param schema - Field schema record defining data layout
  * @returns Encoded component ID with schema type
+ * @throws {Duplicate} If the name is already used by a tag, component, or relation
  * @throws {LimitExceeded} If component limit (1,048,576) exceeded
  * @example
  * const Position = defineComponent("Position", { x: Type.f32, y: Type.f32 });
  * set(world, entity, Position, { x: 10, y: 20 });
  */
 export function defineComponent<N extends string, S extends SchemaRecord>(name: N, schema: S): Component<S, N> {
+  assertDefinitionNameAvailable(name);
+
   const rawId = COMPONENT_REGISTRY.nextComponentId;
 
   assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Component", max: ID_MASK_20 });
@@ -151,6 +172,7 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
     name,
     schema,
   });
+  COMPONENT_REGISTRY.byName.set(name, componentId);
 
   COMPONENT_REGISTRY.nextComponentId++;
 
@@ -166,6 +188,7 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
  * @param name - Human-readable relation name for debugging
  * @param options - Configuration: schema for data, exclusive trait, delete behavior
  * @returns Encoded relation ID with schema type
+ * @throws {Duplicate} If the name is already used by a tag, component, or relation
  * @throws {LimitExceeded} If relation limit (256) exceeded
  * @example
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
@@ -175,6 +198,8 @@ export function defineRelation<N extends string, S extends SchemaRecord = Record
   name: N,
   options?: RelationOptions<S>
 ): Relation<S, N> {
+  assertDefinitionNameAvailable(name);
+
   const rawId = COMPONENT_REGISTRY.nextRelationId;
 
   assert(rawId <= ID_MASK_8, LimitExceeded, { resource: "Relation", max: ID_MASK_8 });
@@ -187,6 +212,7 @@ export function defineRelation<N extends string, S extends SchemaRecord = Record
     exclusive: options?.exclusive,
     onDeleteTarget: options?.onDeleteTarget,
   });
+  COMPONENT_REGISTRY.byName.set(name, relationId);
 
   COMPONENT_REGISTRY.nextRelationId++;
 

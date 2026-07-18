@@ -777,7 +777,7 @@ describe("Component", () => {
 
     it("gets and sets string field values", () => {
       const world = createWorld();
-      const Name = defineComponent("Name", { value: Type.string<"Player" | "Enemy">() });
+      const Name = defineComponent("StringFieldName", { value: Type.string<"Player" | "Enemy">() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Name, { value: "Player" });
@@ -816,7 +816,7 @@ describe("Component", () => {
 
     it("returns undefined for missing component", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionReturnsUndefinedMissingComponent", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
 
@@ -826,7 +826,7 @@ describe("Component", () => {
 
     it("returns undefined for missing field", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionReturnsUndefinedMissingField", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
@@ -838,7 +838,10 @@ describe("Component", () => {
 
     it("preserves values during archetype transitions", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionPreservesValuesDuringArchetypeTransitions", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
       const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
@@ -868,7 +871,7 @@ describe("Component", () => {
     it("adds tags and data components to same entity", () => {
       const world = createWorld();
       const Player = defineTag("Player");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionAddsTagsDataComponentsEntity", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Player);
@@ -882,7 +885,10 @@ describe("Component", () => {
     it("stores tags and data components in same archetype", () => {
       const world = createWorld();
       const Enemy = defineTag("Enemy");
-      const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
+      const Health = defineComponent("HealthStoresTagsDataComponentsArchetype", {
+        current: Type.i32(),
+        max: Type.i32(),
+      });
 
       const entity = createEntity(world);
       addComponent(world, entity, Enemy);
@@ -907,7 +913,7 @@ describe("Component", () => {
     it("queries entities with mixed tags and components", () => {
       const world = createWorld();
       const Alive = defineTag("Alive");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionQueriesEntitiesMixedTagsComponents", { x: Type.f32(), y: Type.f32() });
 
       const e1 = createEntity(world);
       const e2 = createEntity(world);
@@ -930,7 +936,7 @@ describe("Component", () => {
     it("removes tags and components independently", () => {
       const world = createWorld();
       const Active = defineTag("Active");
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("VelocityRemovesTagsComponentsIndependently", { x: Type.f32(), y: Type.f32() });
 
       const entity = createEntity(world);
       addComponent(world, entity, Active);
@@ -1009,7 +1015,10 @@ describe("Component", () => {
 
     it("handles setComponentValue silently for missing component", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionHandlesSetComponentValueSilentlyMissingComponent", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
 
       const entity = createEntity(world);
 
@@ -1021,7 +1030,10 @@ describe("Component", () => {
 
     it("handles setComponentValue silently for missing field", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionHandlesSetComponentValueSilentlyMissingField", {
+        x: Type.f32(),
+        y: Type.f32(),
+      });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
@@ -1081,7 +1093,7 @@ describe("Component", () => {
 
     it("shares wildcard pairs across multiple pairs with same target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfSharesWildcardPairsAcrossMultiplePairsTarget");
       const Likes = defineRelation("Likes");
       const entity = createEntity(world);
       const target = createEntity(world);
@@ -1101,7 +1113,7 @@ describe("Component", () => {
 
     it("shares wildcard pairs across multiple pairs with same relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfSharesWildcardPairsAcrossMultiplePairsRelation");
       const entity = createEntity(world);
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
@@ -1121,7 +1133,7 @@ describe("Component", () => {
 
     it("is idempotent for pair components", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfIdempotentPairComponents");
       const child = createEntity(world);
       const parent = createEntity(world);
 
@@ -1139,7 +1151,7 @@ describe("Component", () => {
   describe("Pair Remove", () => {
     it("removes wildcards when no other pairs need them", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfRemovesWildcardsNoOtherPairsNeedThem");
       const child = createEntity(world);
       const parent = createEntity(world);
 
@@ -1156,8 +1168,8 @@ describe("Component", () => {
 
     it("keeps wildcard target pair when other pairs share target", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
-      const Likes = defineRelation("Likes");
+      const ChildOf = defineRelation("ChildOfKeepsWildcardTargetPairOtherPairsShareTarget");
+      const Likes = defineRelation("LikesKeepsWildcardTargetPairOtherPairsShareTarget");
       const entity = createEntity(world);
       const target = createEntity(world);
 
@@ -1179,7 +1191,7 @@ describe("Component", () => {
 
     it("keeps wildcard relation pair when other pairs share relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfKeepsWildcardRelationPairOtherPairsShareRelation");
       const entity = createEntity(world);
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
@@ -1202,7 +1214,7 @@ describe("Component", () => {
 
     it("is idempotent for pair components", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfIdempotentPairComponents8");
       const child = createEntity(world);
       const parent = createEntity(world);
 
@@ -1277,7 +1289,7 @@ describe("Component", () => {
   describe("Vector Field Access", () => {
     it("gets vector value as tuple copy", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionGetsVectorValueAsTupleCopy", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10.5, 20.5] });
@@ -1288,7 +1300,7 @@ describe("Component", () => {
 
     it("returns a copy, not a reference into the column", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionReturnsCopyNotReferenceIntoColumn", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1302,7 +1314,7 @@ describe("Component", () => {
 
     it("sets vector value from tuple", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionSetsVectorValueTuple", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [0, 0] });
@@ -1315,7 +1327,7 @@ describe("Component", () => {
 
     it("gets vector view as typed array subarray", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionGetsVectorViewAsTypedArraySubarray", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1329,7 +1341,7 @@ describe("Component", () => {
 
     it("view mutations are visible to get", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionViewMutationsAreVisibleGet", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1344,7 +1356,7 @@ describe("Component", () => {
 
     it("returns undefined for missing component", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionReturnsUndefinedMissingComponent14", { value: Type.f32(2) });
 
       const entity = createEntity(world);
 
@@ -1354,7 +1366,7 @@ describe("Component", () => {
 
     it("set updates change detection tick", async () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionSetUpdatesChangeDetectionTick", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [0, 0] });
@@ -1421,8 +1433,8 @@ describe("Component", () => {
 
     it("preserves vector data during archetype transitions", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
-      const Velocity = defineComponent("Velocity", { value: Type.f32(2) });
+      const Position = defineComponent("PositionPreservesVectorDataDuringArchetypeTransitions", { value: Type.f32(2) });
+      const Velocity = defineComponent("VelocityPreservesVectorDataDuringArchetypeTransitions", { value: Type.f32(2) });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
@@ -1443,7 +1455,7 @@ describe("Component", () => {
 
     it("handles multiple entities with vector components", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { value: Type.f32(2) });
+      const Position = defineComponent("PositionHandlesMultipleEntitiesVectorComponents", { value: Type.f32(2) });
 
       const entities: EntityId[] = [];
       for (let i = 0; i < 5; i++) {

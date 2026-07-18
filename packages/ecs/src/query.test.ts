@@ -1363,7 +1363,7 @@ describe("Query", () => {
     describe("Direct pair matching - pair(Relation, target)", () => {
       it("fetches entities with specific pair", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfFetchesEntitiesSpecificPair");
         const parent = createEntity(world);
         const child1 = createEntity(world);
         const child2 = createEntity(world);
@@ -1382,7 +1382,7 @@ describe("Query", () => {
 
       it("distinguishes between different targets", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfDistinguishesBetweenDifferentTargets");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
         const child1 = createEntity(world);
@@ -1403,7 +1403,7 @@ describe("Query", () => {
 
       it("returns empty for non-existent pair", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfReturnsEmptyNonExistentPair");
         const parent = createEntity(world);
         createEntity(world); // child with no pair
 
@@ -1416,7 +1416,7 @@ describe("Query", () => {
     describe("Any-target wildcard - pair(Relation, Wildcard)", () => {
       it("fetches all entities with any target for relation", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfFetchesAllEntitiesAnyTargetRelation");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
         const child1 = createEntity(world);
@@ -1438,7 +1438,7 @@ describe("Query", () => {
 
       it("excludes entities without the relation", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfExcludesEntitiesWithoutRelation");
         const Likes = defineRelation("Likes");
         const target = createEntity(world);
         const entity1 = createEntity(world);
@@ -1455,7 +1455,7 @@ describe("Query", () => {
 
       it("works with entity having multiple targets for same relation", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfWorksEntityHavingMultipleTargetsRelation");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
         const child = createEntity(world);
@@ -1473,8 +1473,8 @@ describe("Query", () => {
     describe("Reverse lookup wildcard - pair(Wildcard, target)", () => {
       it("fetches all entities targeting specific entity", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
-        const Likes = defineRelation("Likes");
+        const ChildOf = defineRelation("ChildOfFetchesAllEntitiesTargetingSpecificEntity");
+        const Likes = defineRelation("LikesFetchesAllEntitiesTargetingSpecificEntity");
         const target = createEntity(world);
         const entity1 = createEntity(world);
         const entity2 = createEntity(world);
@@ -1492,7 +1492,7 @@ describe("Query", () => {
 
       it("excludes entities targeting different entity", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfExcludesEntitiesTargetingDifferentEntity");
         const target1 = createEntity(world);
         const target2 = createEntity(world);
         const entity1 = createEntity(world);
@@ -1526,7 +1526,7 @@ describe("Query", () => {
     describe("Combined query patterns", () => {
       it("combines pair with regular component", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCombinesPairRegularComponent");
         const Active = defineTag("Active");
         const parent = createEntity(world);
         const child1 = createEntity(world);
@@ -1546,7 +1546,7 @@ describe("Query", () => {
 
       it("combines pair with exclusion", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCombinesPairExclusion");
         const Dead = defineTag("Dead");
         const parent = createEntity(world);
         const child1 = createEntity(world);
@@ -1565,8 +1565,8 @@ describe("Query", () => {
 
       it("combines multiple pairs", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
-        const Likes = defineRelation("Likes");
+        const ChildOf = defineRelation("ChildOfCombinesMultiplePairs");
+        const Likes = defineRelation("LikesCombinesMultiplePairs");
         const parent = createEntity(world);
         const friend = createEntity(world);
         const entity1 = createEntity(world);
@@ -1586,7 +1586,7 @@ describe("Query", () => {
 
       it("combines wildcard pair with exclusion pair", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCombinesWildcardPairExclusionPair");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
         const child1 = createEntity(world);
@@ -1606,7 +1606,7 @@ describe("Query", () => {
     describe("Query caching with pairs", () => {
       it("caches query with pair", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCachesQueryPair");
         const parent = createEntity(world);
 
         const query1 = ensureQuery(world, [pair(ChildOf, parent)]);
@@ -1618,7 +1618,7 @@ describe("Query", () => {
 
       it("creates separate queries for different pairs", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCreatesSeparateQueriesDifferentPairs");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
 
@@ -1631,7 +1631,7 @@ describe("Query", () => {
 
       it("creates separate queries for different wildcard patterns", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfCreatesSeparateQueriesDifferentWildcardPatterns");
         const parent = createEntity(world);
 
         const query1 = ensureQuery(world, [pair(ChildOf, Wildcard)]);
@@ -1645,7 +1645,7 @@ describe("Query", () => {
     describe("Dynamic pair queries", () => {
       it("updates results when pair added", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfUpdatesResultsPairAdded");
         const parent = createEntity(world);
         const child = createEntity(world);
 
@@ -1661,7 +1661,7 @@ describe("Query", () => {
 
       it("updates results when pair removed", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfUpdatesResultsPairRemoved");
         const parent = createEntity(world);
         const child = createEntity(world);
 
@@ -1678,7 +1678,7 @@ describe("Query", () => {
 
       it("updates wildcard query when pair added/removed", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfUpdatesWildcardQueryPairAddedRemoved");
         const parent = createEntity(world);
         const child = createEntity(world);
 
@@ -1697,7 +1697,7 @@ describe("Query", () => {
     describe("Practical use cases", () => {
       it("hierarchy: find all children of a parent", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfHierarchyFindAllChildrenParent");
 
         const root = createEntity(world);
         const branch1 = createEntity(world);
@@ -1746,8 +1746,8 @@ describe("Query", () => {
 
       it("reverse lookup: find all relationships to an entity", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
-        const Likes = defineRelation("Likes");
+        const ChildOf = defineRelation("ChildOfReverseLookupFindAllRelationshipsEntity");
+        const Likes = defineRelation("LikesReverseLookupFindAllRelationshipsEntity");
         const Owns = defineRelation("Owns");
 
         const target = createEntity(world);
@@ -1772,7 +1772,7 @@ describe("Query", () => {
     describe("Deletion safety with pairs", () => {
       it("safely destroys entities during pair query iteration", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfSafelyDestroysEntitiesDuringPairQueryIteration");
         const parent = createEntity(world);
 
         const child1 = createEntity(world);
@@ -1797,7 +1797,7 @@ describe("Query", () => {
 
       it("safely removes pairs during wildcard query iteration", () => {
         const world = createWorld();
-        const ChildOf = defineRelation("ChildOf");
+        const ChildOf = defineRelation("ChildOfSafelyRemovesPairsDuringWildcardQueryIteration");
         const parent1 = createEntity(world);
         const parent2 = createEntity(world);
 

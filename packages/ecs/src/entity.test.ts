@@ -499,7 +499,7 @@ describe("Entity", () => {
 
     it("stores schema for multiple component types", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionStoresSchemaMultipleComponentTypes", { x: Type.f32(), y: Type.f32() });
       const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
 
       ensureEntity(world, Position);
@@ -562,7 +562,9 @@ describe("Entity", () => {
 
     it("auto-registers pair with inherited schema from relation", () => {
       const world = createWorld();
-      const Amount = defineRelation("Amount", { schema: { value: Type.f32() } });
+      const Amount = defineRelation("AmountAutoRegistersPairInheritedSchemaRelation", {
+        schema: { value: Type.f32() },
+      });
       const target = createEntity(world);
       const pairId = pair(Amount, target);
 
@@ -575,7 +577,7 @@ describe("Entity", () => {
 
     it("auto-registers pair without schema for tag relation", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfAutoRegistersPairWithoutSchemaTagRelation");
       const target = createEntity(world);
       const pairId = pair(ChildOf, target);
 
@@ -587,7 +589,7 @@ describe("Entity", () => {
 
     it("auto-registers relation when pair is registered", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfAutoRegistersRelationPairRegistered");
       const target = createEntity(world);
       const pairId = pair(ChildOf, target);
 
@@ -603,7 +605,7 @@ describe("Entity", () => {
 
     it("returns existing meta for already-registered pair", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
+      const ChildOf = defineRelation("ChildOfReturnsExistingMetaAlreadyRegisteredPair");
       const target = createEntity(world);
       const pairId = pair(ChildOf, target);
 
