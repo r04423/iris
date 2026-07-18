@@ -134,6 +134,18 @@ describe("Scheduler", () => {
       assert.throws(() => addSystem(world, physicsSystem), Duplicate);
     });
 
+    it("throws Duplicate when system name matches a system set", () => {
+      const world = createWorld();
+      const Shared = defineSystemSet("shared");
+      addSystemSet(world, Shared, { schedule: PostUpdate });
+
+      assert.throws(
+        () => addSystem(world, () => {}, { name: "shared" }),
+        (error: unknown) => error instanceof Duplicate && error.resource === "SystemSet" && error.id === "shared"
+      );
+      assert.strictEqual(world.systems.byId.has("shared"), false);
+    });
+
     it("throws InvalidArgument for factory with empty name", () => {
       const world = createWorld();
 
@@ -1220,6 +1232,18 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
         assert.throws(() => addSystemSet(world, PhysicsSet), Duplicate);
+      });
+
+      it("throws Duplicate when set label matches a system name", () => {
+        const world = createWorld();
+        addSystem(world, function shared() {}, { schedule: PostUpdate });
+        const Shared = defineSystemSet("shared");
+
+        assert.throws(
+          () => addSystemSet(world, Shared),
+          (error: unknown) => error instanceof Duplicate && error.resource === "System" && error.id === "shared"
+        );
+        assert.strictEqual(world.systemSets.byId.has(Shared), false);
       });
 
       it("marks schedules dirty", () => {

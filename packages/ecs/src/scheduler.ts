@@ -317,7 +317,8 @@ export function defineSystemSet(name: string): SystemSetLabel {
  * Register a system set in the world with optional ordering constraints.
  *
  * Must be called before any `addSystem()` call that references this set
- * via the `set` option.
+ * via the `set` option. Its label must be unique among all systems and system
+ * sets registered in the world.
  *
  * @param world - World instance
  * @param set - System set label from `defineSystemSet()`
@@ -333,6 +334,7 @@ export function defineSystemSet(name: string): SystemSetLabel {
  */
 export function addSystemSet(world: World, set: SystemSetLabel, options?: SystemSetOptions): void {
   assert(!world.systemSets.byId.has(set), Duplicate, { resource: "SystemSet", id: set });
+  assert(!world.systems.byId.has(set), Duplicate, { resource: "System", id: set });
 
   const before = options?.before;
   const after = options?.after;
@@ -369,6 +371,8 @@ function resolveReference(ref: SystemReference): string {
  * Accepts either a `SystemRunner` function or a `SystemFactory` created by
  * `defineSystem()`. Factory initialization is deferred until the next
  * `runOnce()` or `stop()` call, immediately before schedules execute.
+ * Its effective name must be unique among all systems and system sets
+ * registered in the world.
  *
  * @param world - World instance
  * @param system - System function or factory (must be named unless name option provided)
@@ -398,6 +402,7 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
 
   assert(name && name !== "anonymous", InvalidArgument, { expected: "named system function or name option" });
   assert(!world.systems.byId.has(name), Duplicate, { resource: "System", id: name });
+  assert(!world.systemSets.byId.has(name as SystemSetLabel), Duplicate, { resource: "SystemSet", id: name });
 
   const setLabel = options?.set;
 
