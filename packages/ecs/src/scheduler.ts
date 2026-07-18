@@ -465,11 +465,12 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
  *   // Tick: runs every frame
  *   return () => {
  *     const dt = getResourceValue(world, Time, "delta") ?? 0;
- *     queryEntities(world, movers, (entity) => {
+ *     const entities = collectEntities(world, movers);
+ *     for (const entity of entities) {
  *       const x = getComponentValue(world, entity, Position, "x")!;
  *       const vx = getComponentValue(world, entity, Velocity, "vx")!;
  *       setComponentValue(world, entity, Position, "x", x + vx * dt);
- *     });
+ *     }
  *   };
  * });
  *

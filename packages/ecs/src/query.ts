@@ -71,7 +71,7 @@ export type QueryMeta = {
  * @example
  * ```typescript
  * const movers = cacheQuery(world, [Position, Velocity]);
- * queryEntities(world, movers, (entity) => { ... });
+ * const entities = collectEntities(world, movers);
  * ```
  */
 export type Query<C extends EntityId = never, T extends unknown[] = (EntityId | QueryModifier)[]> = {
@@ -125,7 +125,7 @@ export type QueryModifier = NotModifier | AddedModifier | ChangedModifier | OrMo
  *
  * @example
  * ```typescript
- * queryEntities(world, [Position, not(Dead)], (entity) => { ... });
+ * const living = collectEntities(world, [Position, not(Dead)]);
  * ```
  */
 export function not<C extends EntityId>(componentId: C): NotModifier<C> {
@@ -141,7 +141,7 @@ export function not<C extends EntityId>(componentId: C): NotModifier<C> {
  * @returns Added modifier
  *
  * @example
- * queryEntities(world, [added(Enemy)], (entity) => { ... });
+ * const enemies = collectEntities(world, [added(Enemy)]);
  */
 export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
   return { type: "added", componentId };
@@ -156,7 +156,7 @@ export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
  * @returns Changed modifier
  *
  * @example
- * queryEntities(world, [changed(Health)], (entity) => { ... });
+ * const damaged = collectEntities(world, [changed(Health)]);
  */
 export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> {
   return { type: "changed", componentId };
@@ -171,7 +171,7 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
  * @returns Or modifier
  *
  * @example
- * queryEntities(world, [Position, or(Velocity, Acceleration)], (entity) => { ... });
+ * const moving = collectEntities(world, [Position, or(Velocity, Acceleration)]);
  */
 export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[number]> {
   assert(componentIds.length > 0, InvalidArgument, { expected: "at least one component in or()" });
@@ -210,6 +210,8 @@ function isModifier(arg: unknown): arg is QueryModifier {
  *
  * Data-bearing terms (Components, Pairs with schema) produce a `FieldColumnsOf` entry.
  * Non-data terms (Tags, data-less Pairs, NotModifiers, OrModifiers) are skipped.
+ *
+ * @experimental Associated with the experimental live-column traversal API.
  */
 export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
   ? Head extends NotModifier
@@ -478,7 +480,7 @@ export function ensureQueryGetter(
  * @example
  * ```typescript
  * const childrenOf = cacheQuery(world, (parent: EntityId) => [pair(ChildOf, parent)]);
- * queryEntities(world, childrenOf(root), (child) => { ... });
+ * const children = collectEntities(world, childrenOf(root));
  * ```
  */
 export function cacheQuery<A extends EntityId[], const T extends (EntityId | QueryModifier)[]>(
@@ -635,35 +637,21 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
 }
 
 // ============================================================================
-// Query Iteration (Public)
+// Query Iteration
 // ============================================================================
 
 /**
  * Iterate entities matching components and modifiers via callback.
  *
- * Iterates backward for safe entity destruction during iteration.
- * Creates/reuses cached query internally.
+ * Traverses live archetype storage. Structural world mutation during the
+ * callback is unsupported: it can duplicate or skip visits, or prevent
+ * traversal from terminating. Use `collectEntities()` before structural
+ * mutation.
  *
  * @param world - World instance
  * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
  * @param callback - Called for each matching entity. Return `false` to stop iteration early
- *
- * @example
- * ```typescript
- * // With inline terms
- * queryEntities(world, [Position, Velocity, not(Dead)], (entity) => {
- *   const pos = getComponentValue(world, entity, Position, "x");
- * });
- *
- * // With pre-built query
- * const q = cacheQuery(world, [Position, Velocity]);
- * queryEntities(world, q, (entity) => { ... });
- *
- * // Early exit
- * queryEntities(world, [Position], (entity) => {
- *   if (done) return false;
- * });
- * ```
+ * @experimental This API may change or be removed without notice.
  */
 export function queryEntities<T extends (EntityId | QueryModifier)[]>(
   world: World,
@@ -769,40 +757,17 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
  * array and column parameters for each data-bearing term.
  *
  * Only `not()` and `or()` modifiers are supported. `added()` and `changed()` are
- * rejected, use `queryEntities` for change detection. Or'd components produce
+ * rejected; use `collectEntities` for change detection. Or'd components produce
  * no columns since they are not guaranteed present in every matching archetype.
  *
- * The `entities` array is the archetype's live backing store. If mutating
- * (destroying entities, adding/removing components) during iteration,
- * iterate backward to avoid skipping entities due to swap-and-pop.
+ * The entities and columns are borrowed live backing stores. Do not retain or
+ * mutate the entities array, or structurally mutate the world during the
+ * callback.
  *
  * @param world - World instance
  * @param termsOrQuery - Array of component IDs and not() modifiers, or pre-built Query
  * @param callback - Called for each matching archetype. Return `false` to stop iteration
- *
- * @example
- * ```typescript
- * // Direct column access for high-performance iteration
- * queryColumns(world, [Position, Velocity, not(Dead)], (entities, [pos, vel]) => {
- *   for (let i = 0; i < entities.length; i++) {
- *     pos.x[i] += vel.x[i]!;
- *     pos.y[i] += vel.y[i]!;
- *   }
- * });
- *
- * // Pre-cached query
- * const q = cacheQuery(world, [Position, Velocity, not(Dead)]);
- * queryColumns(world, q, (entities, [pos, vel]) => { ... });
- *
- * // Mutation-safe backward iteration
- * queryColumns(world, [Position, Health], (entities, [pos, health]) => {
- *   for (let i = entities.length - 1; i >= 0; i--) {
- *     if (health.hp[i]! <= 0) {
- *       destroyEntity(world, entities[i]!);
- *     }
- *   }
- * });
- * ```
+ * @experimental This API may change or be removed without notice.
  */
 export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
   world: World,

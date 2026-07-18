@@ -2,12 +2,12 @@ import type { Entity, World } from "iris-ecs";
 import {
   addResource,
   cacheQuery,
+  collectEntities,
   defineSystem,
   getRelationTargets,
   getResourceValue,
   hasComponent,
   isEntityAlive,
-  queryEntities,
   readEvents,
   setResourceValue,
 } from "iris-ecs";
@@ -90,14 +90,14 @@ export const followPlayer = defineSystem("followPlayer", (world) => {
   const { getVelocity, setVelocity, getThrust, getDamping } = movementActions(world);
 
   return () => {
-    queryEntities(world, enemies, (entity) => {
+    for (const entity of collectEntities(world, enemies)) {
       const targets = getRelationTargets(world, entity, Targeting);
       const target = targets[0];
       if (target === undefined) {
-        return;
+        continue;
       }
       if (!hasComponent(world, target, Transform)) {
-        return;
+        continue;
       }
 
       const [x, y] = getPosition(entity);
@@ -120,7 +120,7 @@ export const followPlayer = defineSystem("followPlayer", (world) => {
       }
 
       setVelocity(entity, vx, vy);
-    });
+    }
   };
 });
 
@@ -137,7 +137,7 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
     const map = getResourceValue(world, SpatialHash, "map")!;
     const nearby = getResourceValue(world, ScratchEntities, "entities")!;
 
-    queryEntities(world, avoiders, (entity) => {
+    for (const entity of collectEntities(world, avoiders)) {
       const range = getAvoidanceRange(entity);
       const [x, y] = getPosition(entity);
 
@@ -147,8 +147,7 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
       let avoidY = 0;
       let count = 0;
 
-      for (let i = 0; i < nearby.length; i++) {
-        const neighbor = nearby[i]!;
+      for (const neighbor of nearby) {
         if (neighbor === entity) {
           continue;
         }
@@ -188,7 +187,7 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
         const [vx, vy] = getVelocity(entity);
         setVelocity(entity, vx + avoidX, vy + avoidY);
       }
-    });
+    }
   };
 });
 
@@ -201,12 +200,12 @@ export const updateAutoRotate = defineSystem("updateAutoRotate", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    queryEntities(world, rotators, (entity) => {
+    for (const entity of collectEntities(world, rotators)) {
       const speed = getAutoRotateSpeed(entity);
       const rotation = getRotation(entity);
 
       setRotation(entity, rotation + delta * speed);
-    });
+    }
   };
 });
 
@@ -228,7 +227,7 @@ export const tickExplosion = defineSystem("tickExplosion", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    queryEntities(world, explosions, (entity) => {
+    for (const entity of collectEntities(world, explosions)) {
       const [duration, prevCurrent] = getExplosionProgress(entity);
       const current = prevCurrent + delta * 1000;
 
@@ -237,6 +236,6 @@ export const tickExplosion = defineSystem("tickExplosion", (world) => {
       if (current >= duration) {
         despawnExplosion(entity);
       }
-    });
+    }
   };
 });

@@ -4,8 +4,8 @@ import {
   type EntityId,
   getComponentValue,
   type Query,
-  queryColumns,
-  queryEntities,
+  EXPERIMENTAL_queryColumns as queryColumns,
+  EXPERIMENTAL_queryEntities as queryEntities,
   setComponentValue,
   type World,
 } from "iris-ecs";

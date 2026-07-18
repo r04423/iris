@@ -56,7 +56,7 @@ Each benchmark runs against one or more **world presets** -- pre-populated world
 | medium | 10,000   | 40%     | 40%     | 20%     | ~213        | 400     |
 | large  | 100,000  | 30%     | 40%     | 30%     | ~229        | 1,000   |
 
-Entities follow power-law weights within each group. Template-derived queries are pre-executed to populate internal caches -- each picks a random template and selects 1-3 of its types as terms, with a chance of adding a modifier (include or `not()`).
+Entities follow power-law weights within each group. Template-derived queries are pre-cached to populate internal caches -- each picks a random template and selects 1-3 of its types as terms, with a chance of adding a modifier (include or `not()`).
 
 ## Commands
 
@@ -270,7 +270,7 @@ alloc/op (retained):
 
 Iterate all matching entities through a pre-cached query. `ent/sec` = ops/sec x matching entity count.
 
-**Entity callback** -- `queryEntities` calls the callback once per entity. Pure iteration with no component access.
+> **Experimental traversal APIs:** The callback and column results below measure the traversal performance of `EXPERIMENTAL_queryEntities` and `EXPERIMENTAL_queryColumns`. These APIs are experimental, not part of the stable public API, and may change or be removed. The benchmark labels retain their original names so historical results remain comparable.
 
 Latency -- avg (P99):
 
@@ -304,7 +304,7 @@ alloc/op (retained):
 | iter selective | 2.6 KB (-8 B) | 18.0 KB (-8 B) | 170.1 KB (-8 B) | 1.7 MB (-0 B) |
 | iter narrow | -- | 2.5 KB (-8 B) | 20.2 KB (-0 B) | 284.0 KB (-0 B) |
 
-**Column callback** -- `queryColumns` calls the callback once per archetype with direct column access. Pure iteration with no data access.
+**Experimental column callback** -- `EXPERIMENTAL_queryColumns` calls the callback once per archetype with direct column access. Pure iteration with no data access.
 
 Latency -- avg (P99):
 
@@ -330,7 +330,7 @@ ent/sec (ent/frame):
 | columns iter selective | 93.5 M (1,557,701) | 129.2 M (2,153,989) | 160.7 M (2,678,274) | 173.5 M (2,890,976) |
 | columns iter narrow | -- | 137.7 M (2,294,833) | 161.3 M (2,687,552) | 173.3 M (2,887,717) |
 
-**Data access** -- Increment a scalar component field on every matching entity. Compares per-entity `getComponentValue`/`setComponentValue` against direct TypedArray mutation via `queryColumns`.
+**Experimental traversal data access** -- Increment a scalar component field on every matching entity. Compares per-entity `getComponentValue`/`setComponentValue` through `EXPERIMENTAL_queryEntities` against direct TypedArray mutation via `EXPERIMENTAL_queryColumns`.
 
 Latency -- avg (P99):
 

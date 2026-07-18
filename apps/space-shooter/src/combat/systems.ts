@@ -2,13 +2,13 @@ import type { Entity, EntityWith, World } from "iris-ecs";
 import {
   addResource,
   cacheQuery,
+  collectEntities,
   defineSystem,
   emitEvent,
   getResourceValue,
   hasComponent,
   hasEvents,
   isEntityAlive,
-  queryEntities,
   queryFirstEntity,
   readEvents,
 } from "iris-ecs";
@@ -115,7 +115,7 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    queryEntities(world, bullets, (entity) => {
+    for (const entity of collectEntities(world, bullets)) {
       const speed = getBulletSpeed(entity);
       const [dx, dy] = getBulletDirection(entity);
       const [lifetime, timeAlive] = getBulletLifetime(entity);
@@ -129,7 +129,7 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
       if (newTimeAlive >= lifetime) {
         despawnBullet(entity);
       }
-    });
+    }
   };
 });
 
@@ -149,16 +149,14 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
     const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
     const hitRadius = bulletRadius + enemyRadius;
 
-    queryEntities(world, bullets, (bullet) => {
+    for (const bullet of collectEntities(world, bullets)) {
       const [bx, by] = getPosition(bullet);
 
       map.getNearbyEntities(bx, by, hitRadius, nearby);
 
       let hitEnemy: EntityWith<typeof Transform> | undefined;
 
-      for (let i = 0; i < nearby.length; i++) {
-        const entity = nearby[i]!;
-
+      for (const entity of nearby) {
         if (!isEntityAlive(world, entity)) {
           continue;
         }
@@ -187,7 +185,7 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
         despawnEnemy(hitEnemy);
         despawnBullet(bullet);
       }
-    });
+    }
   };
 });
 
@@ -208,7 +206,7 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
     const pushStrength = getResourceValue(world, PlayerConfig, "pushStrength") ?? 0.5;
     const collisionRadius = playerRadius + enemyRadius;
 
-    queryEntities(world, players, (player) => {
+    for (const player of collectEntities(world, players)) {
       const [px, py] = getPosition(player);
       const [pvx, pvy] = getVelocity(player);
       const playerSpeed = Math.sqrt(pvx * pvx + pvy * pvy);
@@ -217,8 +215,7 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
 
       let hasCollision = false;
 
-      for (let i = 0; i < nearby.length; i++) {
-        const entity = nearby[i]!;
+      for (const entity of nearby) {
         if (!isEntityAlive(world, entity)) {
           continue;
         }
@@ -249,7 +246,7 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
       if (hasCollision) {
         emitEvent(world, PlayerHit);
       }
-    });
+    }
   };
 });
 
@@ -287,7 +284,7 @@ export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world)
     const delta = getResourceValue(world, Time, "delta") ?? 0;
     const blinkFrequency = getResourceValue(world, CombatConfig, "shieldBlinkFrequency") ?? 250;
 
-    queryEntities(world, shields, (entity) => {
+    for (const entity of collectEntities(world, shields)) {
       const [duration, prevCurrent] = getShieldProgress(entity);
       const current = prevCurrent + delta * 1000;
       setShieldCurrent(entity, current);
@@ -303,6 +300,6 @@ export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world)
           hideShield(entity);
         }
       }
-    });
+    }
   };
 });

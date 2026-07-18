@@ -1,4 +1,4 @@
-import { createEntity, createWorld, type EntityId, not, queryEntities, type World } from "iris-ecs";
+import { cacheQuery, createEntity, createWorld, type EntityId, not, type World } from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
 import {
   addEntityTypes,
@@ -86,7 +86,7 @@ function activateQueries(world: World, count: number, seed: number): void {
     }
 
     // biome-ignore lint/suspicious/noExplicitAny: benchmark infrastructure
-    queryEntities(world, terms as any, () => undefined);
+    cacheQuery(world, terms as any);
   }
 }
 

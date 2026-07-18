@@ -1,10 +1,10 @@
 import {
   addResource,
   cacheQuery,
+  collectEntities,
   defineSystem,
   emitEvent,
   getResourceValue,
-  queryEntities,
   readEvents,
   type World,
 } from "iris-ecs";
@@ -81,7 +81,7 @@ export const writeInput = defineSystem("writeInput", (world) => {
   return () => {
     const state = getResourceValue(world, InputState, "state")!;
 
-    queryEntities(world, players, (entity) => {
+    for (const entity of collectEntities(world, players)) {
       const thrust =
         (state.keys.has("w") || state.keys.has("arrowup") ? 1 : 0) -
         (state.keys.has("s") || state.keys.has("arrowdown") ? 1 : 0);
@@ -91,7 +91,7 @@ export const writeInput = defineSystem("writeInput", (world) => {
       const fire = state.keys.has(" ") || state.mouseButton ? 1 : 0;
 
       setInput(entity, thrust, turn, fire);
-    });
+    }
   };
 });
 
@@ -109,7 +109,7 @@ export const applyInput = defineSystem("applyInput", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    queryEntities(world, players, (entity) => {
+    for (const entity of collectEntities(world, players)) {
       const thrustInput = getInputThrust(entity);
       const turnInput = getInputTurn(entity);
 
@@ -139,7 +139,7 @@ export const applyInput = defineSystem("applyInput", (world) => {
 
         setVelocity(entity, vx, vy);
       }
-    });
+    }
   };
 });
 
@@ -150,7 +150,7 @@ export const dampPlayerMovement = defineSystem("dampPlayerMovement", (world) => 
   const { getInputThrust } = inputActions(world);
 
   return () => {
-    queryEntities(world, entities, (entity) => {
+    for (const entity of collectEntities(world, entities)) {
       const thrustInput = getInputThrust(entity);
 
       if (thrustInput === 0) {
@@ -159,6 +159,6 @@ export const dampPlayerMovement = defineSystem("dampPlayerMovement", (world) => 
 
         setVelocity(entity, vx * damping, vy * damping);
       }
-    });
+    }
   };
 });

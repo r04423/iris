@@ -352,8 +352,8 @@ export function readEvents<S extends EventSchema>(
  * @example
  * ```typescript
  * const events = collectEvents(world, DamageDealt);
- * for (let i = 0; i < events.length; i++) {
- *   applyDamage(events[i]!.target, events[i]!.amount);
+ * for (const event of events) {
+ *   applyDamage(event.target, event.amount);
  * }
  * ```
  */

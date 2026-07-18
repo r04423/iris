@@ -1,5 +1,5 @@
 import type { World } from "iris-ecs";
-import { addResource, cacheQuery, defineSystem, getResourceValue, queryEntities } from "iris-ecs";
+import { addResource, cacheQuery, collectEntities, defineSystem, getResourceValue } from "iris-ecs";
 import { combatActions } from "../combat/actions.js";
 import { Bullet, CombatConfig, IsBullet } from "../combat/components.js";
 import { enemyActions } from "../enemy/actions.js";
@@ -46,24 +46,24 @@ export const render = defineSystem("render", (world) => {
     renderer.beginFrame();
 
     // Enemies
-    queryEntities(world, enemyQuery, (entity) => {
+    for (const entity of collectEntities(world, enemyQuery)) {
       const [x, y] = getPosition(entity);
       const rotation = getRotation(entity);
       const [hue, scale] = getVisual(entity);
 
       renderer.drawEnemy(x, y, rotation, hue, scale);
-    });
+    }
 
     // Bullets
-    queryEntities(world, bulletQuery, (entity) => {
+    for (const entity of collectEntities(world, bulletQuery)) {
       const [x, y] = getPosition(entity);
       const [dx, dy] = getBulletDirection(entity);
 
       renderer.drawBullet(x, y, dx, dy);
-    });
+    }
 
     // Explosions
-    queryEntities(world, explosionQuery, (entity) => {
+    for (const entity of collectEntities(world, explosionQuery)) {
       const [x, y] = getPosition(entity);
       const [duration, current] = getExplosionProgress(entity);
       const rotationOffset = getExplosionRotationOffset(entity);
@@ -72,10 +72,10 @@ export const render = defineSystem("render", (world) => {
       const progress = current / duration;
 
       renderer.drawExplosion(x, y, progress, rotationOffset, maxRadius);
-    });
+    }
 
     // Player
-    queryEntities(world, playerQuery, (entity) => {
+    for (const entity of collectEntities(world, playerQuery)) {
       const [x, y] = getPosition(entity);
       const rotation = getRotation(entity);
       const [vx, vy] = getVelocity(entity);
@@ -86,7 +86,7 @@ export const render = defineSystem("render", (world) => {
       if (isShieldVisible(entity)) {
         renderer.drawShield(x, y, shieldRadius);
       }
-    });
+    }
 
     renderer.endFrame();
   };

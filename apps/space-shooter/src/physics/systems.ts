@@ -1,5 +1,13 @@
 import type { World } from "iris-ecs";
-import { addResource, cacheQuery, defineSystem, getResourceValue, queryEntities, readEvents, removed } from "iris-ecs";
+import {
+  addResource,
+  cacheQuery,
+  collectEntities,
+  defineSystem,
+  getResourceValue,
+  readEvents,
+  removed,
+} from "iris-ecs";
 import { movementActions, transformActions } from "../shared/actions.js";
 import { Movement, Time, Transform } from "../shared/components.js";
 import { SpatialHashMap } from "../utils/spatial-hash.js";
@@ -33,7 +41,7 @@ export const updateMovement = defineSystem("updateMovement", (world) => {
     const forceDamping = getResourceValue(world, PhysicsConfig, "forceDamping") ?? 0.95;
     const forceThreshold = getResourceValue(world, PhysicsConfig, "forceThreshold") ?? 0.01;
 
-    queryEntities(world, movers, (entity) => {
+    for (const entity of collectEntities(world, movers)) {
       let [vx, vy] = getVelocity(entity);
       const [fx, fy] = getForce(entity);
       const maxSpeed = getMaxSpeed(entity);
@@ -59,7 +67,7 @@ export const updateMovement = defineSystem("updateMovement", (world) => {
       } else {
         setForce(entity, 0, 0);
       }
-    });
+    }
   };
 });
 
@@ -71,11 +79,11 @@ export const updateSpatialHashing = defineSystem("updateSpatialHashing", (world)
   return () => {
     const map = getResourceValue(world, SpatialHash, "map")!;
 
-    queryEntities(world, transforms, (entity) => {
+    for (const entity of collectEntities(world, transforms)) {
       const [x, y] = getPosition(entity);
 
       map.setEntity(entity, x, y);
-    });
+    }
   };
 });
 

@@ -77,8 +77,8 @@ export {
   collectEntities,
   not,
   or,
-  queryColumns,
-  queryEntities,
+  queryColumns as EXPERIMENTAL_queryColumns,
+  queryEntities as EXPERIMENTAL_queryEntities,
   queryFirstEntity,
 } from "./query.js";
 
@@ -127,7 +127,7 @@ export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observe
 export type {
   AddedModifier,
   ChangedModifier,
-  ColumnsTuple,
+  ColumnsTuple as EXPERIMENTAL_ColumnsTuple,
   ExtractIncluded,
   ModifierType,
   NotModifier,
