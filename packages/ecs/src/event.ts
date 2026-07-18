@@ -1,3 +1,4 @@
+import { assert, LimitExceeded } from "./error.js";
 import type { Schema, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -86,9 +87,9 @@ export type PendingEvent<E extends Event> = E & {
 };
 
 /**
- * Internal event entry with tick.
+ * Internal event entry with an observation revision.
  *
- * Stores event data along with the tick it was emitted at.
+ * Stores event data along with the revision at which it was emitted.
  */
 export type EventEntry<T extends EventSchema = EventSchema> = {
   /**
@@ -96,9 +97,9 @@ export type EventEntry<T extends EventSchema = EventSchema> = {
    */
   data: EventData<T>;
   /**
-   * Tick when event was emitted.
+   * Revision when the event was emitted.
    */
-  tick: number;
+  revision: number;
 };
 
 /**
@@ -119,9 +120,9 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
    */
   previous: EventEntry<T>[];
   /**
-   * Per-system consumption ticks: systemId -> tick.
+   * Per-system consumed observation revisions.
    */
-  lastTick: Map<string, number>;
+  lastRevision: Map<string, number>;
 };
 
 // ============================================================================
@@ -219,7 +220,7 @@ export function ensureEventQueue<S extends EventSchema>(world: World, event: Eve
       event: event as Event,
       current: [],
       previous: [],
-      lastTick: new Map(),
+      lastRevision: new Map(),
     };
 
     world.events.byId.set(event.id, queue);
@@ -249,9 +250,9 @@ export function emitEvent<S extends EventSchema>(
 ): void {
   const queue = ensureEventQueue(world, event);
   const data = args[0] as EventData<S>;
-  const tick = world.execution.tick;
+  const revision = world.revision;
 
-  queue.current.push({ data, tick });
+  queue.current.push({ data, revision });
 }
 
 // ============================================================================
@@ -259,30 +260,34 @@ export function emitEvent<S extends EventSchema>(
 // ============================================================================
 
 /**
- * Update lastTick for current system.
- *
- * Internal helper shared by readEvents, readLastEvent, and clearEvents.
- *
- * @param world - World instance
- * @param queue - Event queue metadata
+ * Commits one validated event consumption window and returns its previous boundary.
  */
-function markEventsRead(world: World, queue: EventQueueMeta): void {
-  const { systemId, tick } = world.execution;
-  queue.lastTick.set(systemId!, tick);
+function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: string, boundary: number): number {
+  const previous = queue.lastRevision.get(systemId) ?? 0;
+
+  assert(boundary < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+    resource: "World revision",
+    max: Number.MAX_SAFE_INTEGER,
+  });
+
+  queue.lastRevision.set(systemId, boundary);
+  world.revision = boundary + 1;
+
+  return previous;
 }
 
 /**
  * Core event iteration over a resolved queue.
  *
- * Iterates both buffers (previous then current) forward with tick filtering.
+ * Iterates both buffers (previous then current) with revision filtering.
  * Snapshots buffer lengths so events emitted during iteration are not visible.
  *
  * @internal
  */
 function iterateEventQueue<S extends EventSchema>(
   queue: EventQueueMeta<S>,
-  lastTick: number,
-  tick: number,
+  lastRevision: number,
+  boundary: number,
   callback: (data: EventData<S>) => unknown
 ): void {
   const prevLen = queue.previous.length;
@@ -290,14 +295,14 @@ function iterateEventQueue<S extends EventSchema>(
 
   for (let i = 0; i < prevLen; i++) {
     const entry = queue.previous[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
+    if (entry.revision > lastRevision && entry.revision <= boundary) {
       if (callback(entry.data) === false) return;
     }
   }
 
   for (let i = 0; i < currLen; i++) {
     const entry = queue.current[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
+    if (entry.revision > lastRevision && entry.revision <= boundary) {
       if (callback(entry.data) === false) return;
     }
   }
@@ -325,21 +330,18 @@ export function readEvents<S extends EventSchema>(
   event: Event<S>,
   callback: (data: EventData<S>) => unknown
 ): void {
-  const { systemId, tick } = world.execution;
+  const { systemId } = world.execution;
 
   // Outside system context: no-op
   if (systemId === null) {
     return;
   }
 
+  const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
-  const lastTick = queue.lastTick.get(systemId) ?? 0;
+  const previous = consumeEventWindow(world, queue, systemId, boundary);
 
-  try {
-    iterateEventQueue(queue, lastTick, tick, callback);
-  } finally {
-    markEventsRead(world, queue);
-  }
+  iterateEventQueue(queue, previous, boundary, callback);
 }
 
 /**
@@ -359,9 +361,11 @@ export function readEvents<S extends EventSchema>(
  */
 export function collectEvents<S extends EventSchema>(world: World, event: Event<S>): EventData<S>[] {
   const result: EventData<S>[] = [];
+
   readEvents(world, event, (data) => {
     result.push(data);
   });
+
   return result;
 }
 
@@ -372,7 +376,7 @@ export function collectEvents<S extends EventSchema>(world: World, event: Event<
 /**
  * Check if there are unread events for current context.
  *
- * Does not mark events as read or trigger cleanup.
+ * Peeks without consuming or advancing revisions; outside systems returns false.
  *
  * @param world - World instance
  * @param event - Event definition
@@ -390,7 +394,7 @@ export function hasEvents<S extends EventSchema>(
   world: World,
   event: Event<S>
 ): event is Event<S> & PendingEvent<Event<S>> {
-  const { systemId, tick } = world.execution;
+  const { systemId } = world.execution;
 
   // Outside system context: always false
   if (systemId === null) {
@@ -398,11 +402,11 @@ export function hasEvents<S extends EventSchema>(
   }
 
   const queue = ensureEventQueue(world, event);
-  const lastTick = queue.lastTick.get(systemId) ?? 0;
+  const lastRevision = queue.lastRevision.get(systemId) ?? 0;
 
   let found = false;
 
-  iterateEventQueue(queue, lastTick, tick, () => {
+  iterateEventQueue(queue, lastRevision, world.revision, () => {
     found = true;
     return false;
   });
@@ -413,7 +417,7 @@ export function hasEvents<S extends EventSchema>(
 /**
  * Count unread events for current context.
  *
- * Does not mark events as read or trigger cleanup.
+ * Peeks without consuming or advancing revisions; outside systems returns zero.
  *
  * @param world - World instance
  * @param event - Event definition
@@ -426,7 +430,7 @@ export function hasEvents<S extends EventSchema>(
  * ```
  */
 export function countEvents<S extends EventSchema>(world: World, event: Event<S>): number {
-  const { systemId, tick } = world.execution;
+  const { systemId } = world.execution;
 
   // Outside system context: always 0
   if (systemId === null) {
@@ -434,11 +438,11 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
   }
 
   const queue = ensureEventQueue(world, event);
-  const lastTick = queue.lastTick.get(systemId) ?? 0;
+  const lastRevision = queue.lastRevision.get(systemId) ?? 0;
 
   let count = 0;
 
-  iterateEventQueue(queue, lastTick, tick, () => {
+  iterateEventQueue(queue, lastRevision, world.revision, () => {
     count++;
   });
 
@@ -468,22 +472,23 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Pendin
 export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined;
 
 export function readLastEvent<S extends EventSchema>(world: World, event: Event<S>): EventData<S> | undefined {
-  const { systemId, tick } = world.execution;
+  const { systemId } = world.execution;
 
   // Outside system context: always undefined
   if (systemId === null) {
     return undefined;
   }
 
+  const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
-  const lastTick = queue.lastTick.get(systemId) ?? 0;
+  const lastRevision = consumeEventWindow(world, queue, systemId, boundary);
 
   let result: EventData<S> | undefined;
 
   // Search current buffer backwards first, then previous
   for (let i = queue.current.length - 1; i >= 0; i--) {
     const entry = queue.current[i]!;
-    if (entry.tick > lastTick && entry.tick <= tick) {
+    if (entry.revision > lastRevision && entry.revision <= boundary) {
       result = entry.data;
       break;
     }
@@ -492,14 +497,12 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Event<
   if (result === undefined) {
     for (let i = queue.previous.length - 1; i >= 0; i--) {
       const entry = queue.previous[i]!;
-      if (entry.tick > lastTick && entry.tick <= tick) {
+      if (entry.revision > lastRevision && entry.revision <= boundary) {
         result = entry.data;
         break;
       }
     }
   }
-
-  markEventsRead(world, queue);
 
   return result;
 }
@@ -529,8 +532,10 @@ export function clearEvents<S extends EventSchema>(world: World, event: Event<S>
     return;
   }
 
+  const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
-  markEventsRead(world, queue);
+
+  consumeEventWindow(world, queue, systemId, boundary);
 }
 
 /**

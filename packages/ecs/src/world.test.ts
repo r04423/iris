@@ -151,13 +151,15 @@ describe("World", () => {
       assert.strictEqual(world.queries.byId.size, 0);
     });
 
-    it("resets execution tick to 1", () => {
+    it("resets execution tick and observation revision", () => {
       const world = createWorld();
       world.execution.tick = 100;
+      world.revision = 100;
 
       resetWorld(world);
 
-      assert.strictEqual(world.execution.tick, 1);
+      assert.strictEqual(world.execution.tick, 0);
+      assert.strictEqual(world.revision, 1);
     });
 
     it("clears event queues", () => {

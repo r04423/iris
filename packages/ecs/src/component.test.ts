@@ -1050,21 +1050,21 @@ describe("Component", () => {
       const world = createWorld();
       const Position = defineComponent("PositionTick", { x: Type.f32() });
 
-      world.execution.tick = 10;
+      world.revision = 2 ** 32 + 10;
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
 
       const meta = world.entities.byId.get(entity)!;
       const ticks = meta.archetype.ticks.get(Position)!;
 
-      assert.strictEqual(ticks.added[meta.row], 10);
-      assert.strictEqual(ticks.changed[meta.row], 10);
+      assert.strictEqual(ticks.added[meta.row], 2 ** 32 + 10);
+      assert.strictEqual(ticks.changed[meta.row], 2 ** 32 + 10);
 
-      world.execution.tick = 25;
+      world.revision = 2 ** 32 + 25;
       setComponentValue(world, entity, Position, "x", 5);
 
-      assert.strictEqual(ticks.added[meta.row], 10);
-      assert.strictEqual(ticks.changed[meta.row], 25);
+      assert.strictEqual(ticks.added[meta.row], 2 ** 32 + 10);
+      assert.strictEqual(ticks.changed[meta.row], 2 ** 32 + 25);
     });
   });
 
@@ -1265,7 +1265,7 @@ describe("Component", () => {
       const world = createWorld();
       const Position = defineComponent("PositionEmitTick", { x: Type.f32() });
 
-      world.execution.tick = 10;
+      world.revision = 10;
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
 
@@ -1274,7 +1274,7 @@ describe("Component", () => {
 
       assert.strictEqual(ticks.changed[meta.row], 10);
 
-      world.execution.tick = 30;
+      world.revision = 30;
       emitComponentChanged(world, entity, Position);
 
       assert.strictEqual(ticks.added[meta.row], 10);

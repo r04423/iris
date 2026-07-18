@@ -7,7 +7,7 @@ import {
   removeNode as removeDagNode,
   topologicalSort,
 } from "./directed-acyclic-graph.js";
-import { assert, Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
+import { assert, Duplicate, InvalidArgument, InvalidState, LimitExceeded, NotFound } from "./error.js";
 import { flushEvents } from "./event.js";
 import { fireObserverEvent } from "./observer.js";
 import type { World } from "./world.js";
@@ -744,7 +744,6 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
     fireObserverEvent(world, "scheduleStarted", scheduleLabel);
 
     for (const systemId of order) {
-      world.execution.tick++;
       world.execution.systemId = systemId;
 
       const systemStart = performance.now();
@@ -764,7 +763,6 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
     firstError = error;
     failed = true;
   } finally {
-    world.execution.tick++;
     world.execution.scheduleLabel = null;
     world.execution.systemId = null;
 
@@ -801,6 +799,12 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
+  assert(world.execution.tick < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+    resource: "World frame tick",
+    max: Number.MAX_SAFE_INTEGER,
+  });
+
+  world.execution.tick++;
   prepareSystems(world);
 
   // Run startup schedule on first call

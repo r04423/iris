@@ -121,7 +121,7 @@ export function addComponent<S extends SchemaRecord>(
 
       const ticks = entityMeta.archetype.ticks.get(componentId);
       if (ticks) {
-        ticks.changed[entityMeta.row] = world.execution.tick;
+        ticks.changed[entityMeta.row] = world.revision;
       }
 
       fireObserverEvent(world, "componentChanged", componentId, entityId);
@@ -430,7 +430,7 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
 
   const ticks = archetype.ticks.get(componentId);
   if (ticks) {
-    ticks.changed[row] = world.execution.tick;
+    ticks.changed[row] = world.revision;
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
@@ -451,7 +451,7 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
 
   const ticks = archetype.ticks.get(componentId);
   if (ticks) {
-    ticks.changed[row] = world.execution.tick;
+    ticks.changed[row] = world.revision;
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
@@ -591,7 +591,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
 
   const ticks = archetype.ticks.get(componentId);
   if (ticks) {
-    ticks.changed[row] = world.execution.tick;
+    ticks.changed[row] = world.revision;
   }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);

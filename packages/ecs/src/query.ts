@@ -60,9 +60,9 @@ export type QueryMeta = {
   changed: EntityId[];
 
   /**
-   * Per-system execution ticks for change detection: systemId -> tick.
+   * Per-system observation revisions for change detection.
    */
-  lastTick: Map<string, number>;
+  lastRevision: Map<string, number>;
 };
 
 /**
@@ -135,7 +135,8 @@ export function not<C extends EntityId>(componentId: C): NotModifier<C> {
 /**
  * Create added modifier for change detection.
  *
- * Matches entities where component was added since last query execution.
+ * Matches additions in the consuming query's per-system revision window. See
+ * `queryEntities` for window-consumption semantics.
  *
  * @param componentId - Component to check for addition
  * @returns Added modifier
@@ -150,7 +151,8 @@ export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
 /**
  * Create changed modifier for change detection.
  *
- * Matches entities where component was modified or added since last query execution.
+ * Matches modifications or additions in the consuming query's per-system
+ * revision window. See `queryEntities` for window-consumption semantics.
  *
  * @param componentId - Component to check for changes
  * @returns Changed modifier
@@ -339,7 +341,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
       added,
       changed,
       filters: buildQueryFilters(world, filterInclude, exclude, orGroups),
-      lastTick: new Map(),
+      lastRevision: new Map(),
     };
 
     world.queries.byId.set(queryId, queryMeta);
@@ -547,81 +549,82 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
   }
 
   // Slow path: change detection requires system context
-  const { systemId, tick } = world.execution;
+  const { systemId } = world.execution;
 
   if (systemId === null) {
     return;
   }
 
-  // Read lastTick once for the whole traversal
-  const lastTick = queryMeta.lastTick.get(systemId) ?? 0;
+  const boundary = world.revision;
+  const lastRevision = queryMeta.lastRevision.get(systemId) ?? 0;
+
+  assert(boundary < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+    resource: "World revision",
+    max: Number.MAX_SAFE_INTEGER,
+  });
+
+  queryMeta.lastRevision.set(systemId, boundary);
+  world.revision = boundary + 1;
 
   // Pre-allocated arrays reused across archetypes to avoid allocation in hot loop
-  const addedTickArrays: Uint32Array[] = [];
-  const changedTickArrays: Uint32Array[] = [];
+  const addedRevisionArrays: Float64Array[] = [];
+  const changedRevisionArrays: Float64Array[] = [];
 
-  // Use try/finally to ensure lastTick updates even on early exit
-  try {
-    for (let f = 0; f < filters.length; f++) {
-      const archetypes = filters[f]!.archetypes;
+  for (let f = 0; f < filters.length; f++) {
+    const archetypes = filters[f]!.archetypes;
 
-      for (let a = 0; a < archetypes.length; a++) {
-        const archetype = archetypes[a]!;
-        const entities = archetype.entities;
+    for (let a = 0; a < archetypes.length; a++) {
+      const archetype = archetypes[a]!;
+      const entities = archetype.entities;
 
-        // Pre-fetch tick arrays for this archetype
-        addedTickArrays.length = 0;
+      // Pre-fetch revision arrays for this archetype
+      addedRevisionArrays.length = 0;
 
-        for (let j = 0; j < queryMeta.added.length; j++) {
-          const ticks = archetype.ticks.get(queryMeta.added[j]!);
+      for (let j = 0; j < queryMeta.added.length; j++) {
+        const ticks = archetype.ticks.get(queryMeta.added[j]!);
 
-          if (ticks) {
-            addedTickArrays.push(ticks.added);
+        if (ticks) {
+          addedRevisionArrays.push(ticks.added);
+        }
+      }
+
+      changedRevisionArrays.length = 0;
+
+      for (let j = 0; j < queryMeta.changed.length; j++) {
+        const ticks = archetype.ticks.get(queryMeta.changed[j]!);
+
+        if (ticks) {
+          changedRevisionArrays.push(ticks.changed);
+        }
+      }
+
+      // Iterate entities backward (deletion-safe)
+      entityLoop: for (let i = entities.length - 1; i >= 0; i--) {
+        const entityId = entities[i]!;
+
+        // Check added modifiers against the captured (lastRevision, boundary] window
+        for (let j = 0; j < addedRevisionArrays.length; j++) {
+          const addedRevision = addedRevisionArrays[j]![i]!;
+
+          if (addedRevision <= lastRevision || addedRevision > boundary) {
+            continue entityLoop;
           }
         }
 
-        changedTickArrays.length = 0;
+        // Check changed modifiers against the captured (lastRevision, boundary] window
+        for (let j = 0; j < changedRevisionArrays.length; j++) {
+          const changedRevision = changedRevisionArrays[j]![i]!;
 
-        for (let j = 0; j < queryMeta.changed.length; j++) {
-          const ticks = archetype.ticks.get(queryMeta.changed[j]!);
-
-          if (ticks) {
-            changedTickArrays.push(ticks.changed);
+          if (changedRevision <= lastRevision || changedRevision > boundary) {
+            continue entityLoop;
           }
         }
 
-        // Iterate entities backward (deletion-safe)
-        entityLoop: for (let i = entities.length - 1; i >= 0; i--) {
-          const entityId = entities[i]!;
-
-          // Check added modifiers: skip if component wasn't added in (lastTick, tick] range
-          for (let j = 0; j < addedTickArrays.length; j++) {
-            const addedTick = addedTickArrays[j]![i]!;
-
-            if (addedTick <= lastTick || addedTick > tick) {
-              continue entityLoop;
-            }
-          }
-
-          // Check changed modifiers: skip if component wasn't modified in (lastTick, tick] range
-          for (let j = 0; j < changedTickArrays.length; j++) {
-            const changedTick = changedTickArrays[j]![i]!;
-
-            if (changedTick <= lastTick || changedTick > tick) {
-              continue entityLoop;
-            }
-          }
-
-          if (callback(entityId) === false) {
-            return;
-          }
+        if (callback(entityId) === false) {
+          return;
         }
       }
     }
-  } finally {
-    // Update lastTick after iteration completes or on early exit, this ensures
-    // subsequent iterations only see changes since this execution
-    queryMeta.lastTick.set(systemId!, tick);
   }
 }
 

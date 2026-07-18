@@ -127,8 +127,8 @@ describe("Archetype", () => {
 
       // Add entity triggers allocation
       const entityId = createEntity(world);
-      const tick = 42;
-      const row = addEntityToArchetype(archetype, entityId, tick);
+      const revision = 2 ** 32 + 42;
+      const row = addEntityToArchetype(archetype, entityId, revision);
 
       // After entity: columns and ticks allocated
       assert.ok(archetype.capacity > 0);
@@ -143,9 +143,9 @@ describe("Archetype", () => {
 
       // Ticks initialized with provided value
       const posTicks = archetype.ticks.get(positionId);
-      assert.ok(posTicks?.added instanceof Uint32Array);
-      assert.strictEqual(posTicks?.added[row], tick);
-      assert.strictEqual(posTicks?.changed[row], tick);
+      assert.ok(posTicks?.added instanceof Float64Array);
+      assert.strictEqual(posTicks?.added[row], revision);
+      assert.strictEqual(posTicks?.changed[row], revision);
     });
 
     it("creates archetype with no columns for tag components", () => {

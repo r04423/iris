@@ -57,13 +57,13 @@ export type FieldColumnsOf<S extends SchemaRecord> = {
 };
 
 /**
- * Component tick storage for change detection.
+ * Component revision stamp storage for change detection.
  *
  * Parallel arrays to entity rows tracking when components were added/changed.
  */
 export type ComponentTicks = {
-  added: Uint32Array;
-  changed: Uint32Array;
+  added: Float64Array;
+  changed: Float64Array;
 };
 
 // ============================================================================
@@ -97,9 +97,9 @@ export type Archetype = {
 const INITIAL_CAPACITY = 16;
 
 /**
- * Schema for tick columns (Uint32Array).
+ * Schema for revision stamp columns (Float64Array).
  */
-const TICK_SCHEMA = Type.u32();
+const REVISION_SCHEMA = Type.f64();
 
 // ============================================================================
 // Column Utilities
@@ -270,7 +270,7 @@ export function createAndRegisterArchetype(
 
 /**
  * Ensures archetype has capacity for requiredCapacity entities.
- * Allocates columns and tick arrays on first entity, grows 4x thereafter.
+ * Allocates columns and revision arrays on first entity, grows 4x thereafter.
  */
 function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number): void {
   if (archetype.capacity >= requiredCapacity) return;
@@ -290,8 +290,8 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
 
     for (const componentId of archetype.types) {
       archetype.ticks.set(componentId, {
-        added: allocateColumn(TICK_SCHEMA, initialCapacity) as Uint32Array,
-        changed: allocateColumn(TICK_SCHEMA, initialCapacity) as Uint32Array,
+        added: allocateColumn(REVISION_SCHEMA, initialCapacity) as Float64Array,
+        changed: allocateColumn(REVISION_SCHEMA, initialCapacity) as Float64Array,
       });
     }
 
@@ -311,8 +311,8 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
   }
 
   for (const componentTicks of archetype.ticks.values()) {
-    componentTicks.added = resizeColumn(componentTicks.added, archetype.capacity, newCapacity) as Uint32Array;
-    componentTicks.changed = resizeColumn(componentTicks.changed, archetype.capacity, newCapacity) as Uint32Array;
+    componentTicks.added = resizeColumn(componentTicks.added, archetype.capacity, newCapacity) as Float64Array;
+    componentTicks.changed = resizeColumn(componentTicks.changed, archetype.capacity, newCapacity) as Float64Array;
   }
 
   archetype.capacity = newCapacity;
@@ -323,26 +323,26 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
 // ============================================================================
 
 /**
- * Adds an entity to an archetype, initializing tick tracking for change detection.
+ * Adds an entity to an archetype, initializing revision tracking for change detection.
  *
  * @param archetype - Target archetype
  * @param entityId - Entity to add
- * @param tick - Current world tick for change detection (defaults to 0)
+ * @param revision - Current world revision for change detection (defaults to 0)
  * @returns Row index where entity was inserted
  *
  * @example
  * ```ts
- * const row = addEntityToArchetype(archetype, entityId, world.tick);
+ * const row = addEntityToArchetype(archetype, entityId, world.revision);
  * ```
  */
-export function addEntityToArchetype(archetype: Archetype, entityId: EntityId, tick = 0): number {
+export function addEntityToArchetype(archetype: Archetype, entityId: EntityId, revision = 0): number {
   const row = archetype.entities.length;
   ensureArchetypeCapacity(archetype, row + 1);
   archetype.entities.push(entityId);
 
   for (const componentTicks of archetype.ticks.values()) {
-    componentTicks.added[row] = tick;
-    componentTicks.changed[row] = tick;
+    componentTicks.added[row] = revision;
+    componentTicks.changed[row] = revision;
   }
 
   return row;
@@ -412,19 +412,19 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
 }
 
 /**
- * Transfers an entity between archetypes, copying shared component data and ticks.
+ * Transfers an entity between archetypes, copying shared data and revision stamps.
  * Used when adding/removing components causes an entity to move archetypes.
  *
  * @param fromArchetype - Source archetype
  * @param fromRow - Row index in source archetype
  * @param toArchetype - Target archetype
- * @param tick - Current world tick for new component ticks (defaults to 0)
+ * @param revision - Current world revision for new component stamps (defaults to 0)
  * @returns New row index and swapped entity ID (if any was moved during removal)
  *
  * @example
  * ```ts
  * const { toRow, swappedEntityId } = transferEntityToArchetypeByRow(
- *   fromArchetype, fromRow, toArchetype, world.tick
+ *   fromArchetype, fromRow, toArchetype, world.revision
  * );
  * ```
  */
@@ -432,10 +432,10 @@ export function transferEntityToArchetypeByRow(
   fromArchetype: Archetype,
   fromRow: number,
   toArchetype: Archetype,
-  tick = 0
+  revision = 0
 ): { toRow: number; swappedEntityId: EntityId | undefined } {
   const entityId = fromArchetype.entities[fromRow]!;
-  const toRow = addEntityToArchetype(toArchetype, entityId, tick);
+  const toRow = addEntityToArchetype(toArchetype, entityId, revision);
 
   for (let t = 0; t < toArchetype.types.length; t++) {
     const type = toArchetype.types[t]!;

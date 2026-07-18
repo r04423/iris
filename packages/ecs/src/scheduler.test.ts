@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, getComponentValue } from "./component.js";
 import { createEntity } from "./entity.js";
-import { Duplicate, InvalidArgument, InvalidState, NotFound } from "./error.js";
+import { Duplicate, InvalidArgument, InvalidState, LimitExceeded, NotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { ensureQuery, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
@@ -377,23 +377,20 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(calls, ["first", "second", "third"]);
     });
 
-    it("increments tick per system", async () => {
+    it("increments the frame tick once per runOnce", async () => {
       const world = createWorld();
 
       function noop() {}
       addSystem(world, noop);
 
-      assert.strictEqual(world.execution.tick, 1);
-
+      assert.strictEqual(world.execution.tick, 0);
       await runOnce(world);
-
-      // 1 system in Update: tick advances by 2 (per-system + post-bump)
-      // But Startup also ran (empty, no tick change)
-      // Tick: start=1, Update system tick+1=2, post-bump tick+1=3
-      assert.strictEqual(world.execution.tick, 3);
+      assert.strictEqual(world.execution.tick, 1);
+      await runOnce(world);
+      assert.strictEqual(world.execution.tick, 2);
     });
 
-    it("tick advances per system within a schedule", async () => {
+    it("keeps the frame tick stable within a schedule", async () => {
       const world = createWorld();
       const ticks: number[] = [];
 
@@ -409,9 +406,8 @@ describe("Scheduler", () => {
 
       await runOnce(world);
 
-      // 3 systems see ticks 2, 3, 4; final tick is 5 (post-bump)
-      assert.deepStrictEqual(ticks, [2, 3, 4]);
-      assert.strictEqual(world.execution.tick, 5);
+      assert.deepStrictEqual(ticks, [1, 1, 1]);
+      assert.strictEqual(world.execution.tick, 1);
     });
 
     it("sets execution context during system run", async () => {
@@ -803,6 +799,65 @@ describe("Scheduler", () => {
   });
 
   describe("Startup and Shutdown", () => {
+    it("shares one tick across Startup and pipeline and excludes Shutdown", async () => {
+      const world = createWorld();
+      const ticks: number[] = [];
+      addSystem(
+        world,
+        () => {
+          ticks.push(world.execution.tick);
+        },
+        { name: "startupTick", schedule: Startup }
+      );
+      addSystem(
+        world,
+        () => {
+          ticks.push(world.execution.tick);
+        },
+        { name: "firstTick", schedule: First }
+      );
+      addSystem(
+        world,
+        () => {
+          ticks.push(world.execution.tick);
+        },
+        { name: "updateTick" }
+      );
+      addSystem(
+        world,
+        () => {
+          ticks.push(world.execution.tick);
+        },
+        { name: "shutdownTick", schedule: Shutdown }
+      );
+      await runOnce(world);
+      await runOnce(world);
+      await stop(world);
+      assert.deepStrictEqual(ticks, [1, 1, 1, 2, 2, 2]);
+      assert.strictEqual(world.execution.tick, 2);
+    });
+
+    it("retains empty and failed attempts and guards the maximum tick", async () => {
+      const empty = createWorld();
+      await runOnce(empty);
+      assert.strictEqual(empty.execution.tick, 1);
+
+      const failed = createWorld();
+      addSystem(
+        failed,
+        () => {
+          throw new Error("failed attempt");
+        },
+        { name: "failure" }
+      );
+      await assert.rejects(runOnce(failed));
+      assert.strictEqual(failed.execution.tick, 1);
+
+      empty.execution.tick = Number.MAX_SAFE_INTEGER;
+      await assert.rejects(runOnce(empty), LimitExceeded);
+      assert.strictEqual(empty.execution.tick, Number.MAX_SAFE_INTEGER);
+    });
+
     it("startup runs once before first frame", async () => {
       const world = createWorld();
       let startupCount = 0;
@@ -914,10 +969,12 @@ describe("Scheduler", () => {
       );
 
       assert.strictEqual(initCount, 0);
+      assert.strictEqual(world.execution.tick, 0);
       await stop(world);
 
       assert.strictEqual(initCount, 1);
       assert.strictEqual(shutdownCount, 1);
+      assert.strictEqual(world.execution.tick, 0);
     });
 
     it("waits for the active frame before shutdown", async () => {

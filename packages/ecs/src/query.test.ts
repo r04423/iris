@@ -1838,11 +1838,11 @@ describe("Query", () => {
       let secondCount = 0;
 
       addSystem(world, function checker() {
-        // First query: entity1 was added at tick 1, lastTick is 0, should match
+        // First query consumes the initial addition revision
         queryEntities(world, [added(Health)], () => {
           firstCount++;
         });
-        // Second query at same tick: lastTick updated, no match
+        // Second query has no intervening addition
         queryEntities(world, [added(Health)], () => {
           secondCount++;
         });
@@ -2147,8 +2147,8 @@ describe("Query", () => {
     });
   });
 
-  describe("Change Detection - Query lastTick Isolation", () => {
-    it("shares lastTick across differently ordered queries", async () => {
+  describe("Change Detection - Query Revision Isolation", () => {
+    it("shares a cursor across differently ordered queries", async () => {
       const world = createWorld();
       const Position = defineComponent("OrderedViewTickPosition", { x: Type.f32() });
       const Velocity = defineComponent("OrderedViewTickVelocity", { vx: Type.f32() });
@@ -2175,7 +2175,7 @@ describe("Query", () => {
       assert.strictEqual(velocityFirstCount, 0);
     });
 
-    it("different queries maintain independent lastTick in systems", async () => {
+    it("different queries maintain independent cursors in systems", async () => {
       const world = createWorld();
       const Health = createEntity(world);
       const Mana = createEntity(world);
@@ -2197,7 +2197,7 @@ describe("Query", () => {
         queryEntities(world, [added(Mana)], () => {
           manaCount++;
         });
-        // Query 1 again: should be empty (its own lastTick was updated)
+        // Query 1 again: should be empty (its own cursor was updated)
         queryEntities(world, [added(Health)], () => {
           healthCount2++;
         });
@@ -2212,7 +2212,7 @@ describe("Query", () => {
   });
 
   describe("Change Detection - Per-System Isolation", () => {
-    it("same query in different systems maintains independent lastTick", async () => {
+    it("same query in different systems maintains independent cursors", async () => {
       const world = createWorld();
       const Health = defineComponent("HealthPSI", { value: Type.f32() });
 
@@ -2237,12 +2237,12 @@ describe("Query", () => {
 
       await runOnce(world);
 
-      // Both systems should see the entity (independent lastTick per system)
+      // Both systems should see the entity (independent cursor per system)
       assert.strictEqual(systemAResults.length, 1);
       assert.strictEqual(systemBResults.length, 1);
     });
 
-    it("systems do not see changes from prior ticks after lastTick updates", async () => {
+    it("systems do not see changes from consumed revisions", async () => {
       const world = createWorld();
       const Health = defineComponent("HealthPSI2", { value: Type.f32() });
 
@@ -2260,14 +2260,14 @@ describe("Query", () => {
         results.push(count);
       });
 
-      await runOnce(world); // sees 1 (entity added at tick 1)
-      await runOnce(world); // sees 0 (lastTick updated)
+      await runOnce(world); // sees the initial addition
+      await runOnce(world); // sees 0 (cursor updated)
       await runOnce(world); // sees 0
 
       assert.deepStrictEqual(results, [1, 0, 0]);
     });
 
-    it("system sees changes made by earlier system in same tick", async () => {
+    it("system sees changes made by an earlier system in the same frame", async () => {
       const world = createWorld();
       const Health = defineComponent("HealthSameTickVis", { value: Type.f32() });
 
@@ -2291,7 +2291,7 @@ describe("Query", () => {
 
       await runOnce(world);
 
-      // systemB runs after systemA in same tick - should see the added entity
+      // systemB runs after systemA and should see the added entity
       assert.strictEqual(systemBSawEntity, true);
     });
 
@@ -2342,25 +2342,106 @@ describe("Query", () => {
 
       await runOnce(world);
 
-      // systemA sees initial add (tick 1 change, lastTick was 0)
-      // systemA then modifies Position (stamps change at current tick)
-      // systemB sees the change from systemA (lastTick was 0)
+      // systemA sees the initial add, then modifies Position in the revision
+      // opened by its read. systemB independently sees that change.
       assert.strictEqual(systemAResults.length, 1);
       assert.strictEqual(systemBResults.length, 1);
 
       // Run again
       await runOnce(world);
 
-      // systemA should NOT see change (its lastTick was updated past change tick)
-      // But systemA modifies again (stamps change at new tick)
-      // systemB should see the new change
-      assert.strictEqual(systemAResults.length, 1); // no new additions
+      // systemA sees its post-read write and writes again. systemB sees the new
+      // write through its independent cursor.
+      assert.strictEqual(systemAResults.length, 2); // sees its post-read write
       assert.strictEqual(systemBResults.length, 2); // saw new change
     });
   });
 
   describe("Change Detection - Edge Cases", () => {
-    it("updates lastTick even when callback returns false early", async () => {
+    it("advances revisions once for tracked APIs and never for ordinary APIs", async () => {
+      const world = createWorld();
+      const Health = createEntity(world);
+      const entity = createEntity(world);
+      addComponent(world, entity, Health);
+
+      addSystem(world, function reader() {
+        const initial = world.revision;
+        queryEntities(world, [Health], () => {});
+        queryFirstEntity(world, [Health]);
+        collectEntities(world, [Health]);
+        assert.strictEqual(world.revision, initial);
+
+        queryEntities(world, [added(Health)], () => {});
+        assert.strictEqual(world.revision, initial + 1);
+        queryFirstEntity(world, [added(Health)]);
+        assert.strictEqual(world.revision, initial + 2);
+        collectEntities(world, [added(Health)]);
+        assert.strictEqual(world.revision, initial + 3);
+      });
+
+      await runOnce(world);
+    });
+
+    it("detects revisions above the uint32 range", async () => {
+      const world = createWorld();
+      const Health = createEntity(world);
+      world.revision = 2 ** 32 + 1;
+      const entity = createEntity(world);
+      addComponent(world, entity, Health);
+      let seen = false;
+
+      addSystem(world, function reader() {
+        seen = queryFirstEntity(world, [added(Health)]) === entity;
+      });
+
+      await runOnce(world);
+      assert.strictEqual(seen, true);
+    });
+
+    it("nested reads see callback writes and throwing reads consume their window", async () => {
+      const world = createWorld();
+      const Position = defineComponent("NestedRevisionPosition", { x: Type.f32() });
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { x: 0 });
+      const counts: number[] = [];
+
+      addSystem(world, function reader() {
+        let outer = 0;
+        let nested = 0;
+        queryEntities(world, [changed(Position)], () => {
+          outer++;
+          setComponentValue(world, entity, Position, "x", 1);
+          queryEntities(world, [changed(Position)], () => nested++);
+        });
+        counts.push(outer, nested, collectEntities(world, [changed(Position)]).length);
+        setComponentValue(world, entity, Position, "x", 2);
+        assert.throws(() =>
+          queryEntities(world, [changed(Position)], () => {
+            throw new Error("query callback");
+          })
+        );
+        counts.push(collectEntities(world, [changed(Position)]).length);
+      });
+
+      await runOnce(world);
+      assert.deepStrictEqual(counts, [1, 1, 0, 0]);
+    });
+
+    it("guards revision overflow without changing the query cursor", async () => {
+      const world = createWorld();
+      const Tracked = defineTag("QueryRevisionOverflow");
+      const query = ensureQuery(world, [added(Tracked)]);
+      addSystem(world, function reader() {
+        const cursor = query.meta.lastRevision.get("reader");
+        world.revision = Number.MAX_SAFE_INTEGER;
+        assert.throws(() => collectEntities(world, query), LimitExceeded);
+        assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
+        assert.strictEqual(query.meta.lastRevision.get("reader"), cursor);
+      });
+      await runOnce(world);
+    });
+
+    it("updates the revision cursor when callback returns false early", async () => {
       const world = createWorld();
       const Health = createEntity(world);
 
@@ -2376,13 +2457,13 @@ describe("Query", () => {
       let secondCount = 0;
 
       addSystem(world, function checker() {
-        // Return false after first entity - should still update lastTick
+        // Return false after first entity - should still consume the window
         queryEntities(world, [added(Health)], () => {
           breakCount++;
           return breakCount === 1 ? false : undefined;
         });
 
-        // Second query should see nothing (lastTick was updated despite early exit)
+        // Second query should see nothing (cursor was updated despite early exit)
         queryEntities(world, [added(Health)], () => {
           secondCount++;
         });
@@ -2401,7 +2482,7 @@ describe("Query", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Shield);
       removeComponent(world, entity, Shield);
-      addComponent(world, entity, Shield); // re-add in same tick
+      addComponent(world, entity, Shield); // re-add in the same revision
 
       let count = 0;
 

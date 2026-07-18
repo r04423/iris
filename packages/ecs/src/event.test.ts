@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { LimitExceeded } from "./error.js";
 import {
   clearEvents,
   collectEvents,
@@ -174,7 +175,7 @@ describe("Event", () => {
         readEvents(world, Event, () => {
           firstCount++;
         });
-        // Second read (same tick) sees nothing - already read
+        // Second read without an intervening emission sees nothing
         readEvents(world, Event, () => {
           secondCount++;
         });
@@ -437,7 +438,7 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Same-System Multiple Calls", () => {
-    it("lastTick updates after first read", async () => {
+    it("lastRevision updates after first read", async () => {
       const world = createWorld();
       const Event = defineEvent("LastTickUpdate");
 
@@ -445,17 +446,17 @@ describe("Event", () => {
         const queue = world.events.byId.get(Event.id);
         assert.ok(queue);
 
-        // Before read, lastTick for this system should be 0 (unset)
-        const beforeTick = queue.lastTick.get("checker") ?? 0;
+        // Before read, the cursor should be 0 (unset)
+        const beforeRevision = queue.lastRevision.get("checker") ?? 0;
 
         readEvents(world, Event, () => {
           // consume
         });
 
-        // After read, lastTick should be current tick
-        const afterTick = queue.lastTick.get("checker");
-        assert.strictEqual(afterTick, world.execution.tick);
-        assert.notStrictEqual(beforeTick, afterTick);
+        // After read, the cursor should equal the captured boundary
+        const afterRevision = queue.lastRevision.get("checker");
+        assert.strictEqual(afterRevision, world.revision - 1);
+        assert.notStrictEqual(beforeRevision, afterRevision);
       });
 
       emitEvent(world, Event);
@@ -498,6 +499,79 @@ describe("Event", () => {
       assert.deepStrictEqual(emitterSeen, [1]);
       assert.deepStrictEqual(readerSeen, [1, 11]);
     });
+
+    it("nested reads defer callback emissions and consume throwing and empty windows", async () => {
+      const world = createWorld();
+      const Event = defineEvent("NestedRevisionEvent", { value: Type.i32() });
+      const seen: number[][] = [];
+
+      addSystem(world, function reader() {
+        const outer: number[] = [];
+        const nested: number[] = [];
+        readEvents(world, Event, (event) => {
+          outer.push(event.value);
+          emitEvent(world, Event, { value: 2 });
+          readEvents(world, Event, (emitted) => nested.push(emitted.value));
+        });
+        assert.deepStrictEqual(collectEvents(world, Event), []);
+        emitEvent(world, Event, { value: 4 });
+        assert.throws(() =>
+          readEvents(world, Event, () => {
+            throw new Error("event callback");
+          })
+        );
+        readEvents(world, Event, () => {});
+        emitEvent(world, Event, { value: 3 });
+        seen.push(
+          outer,
+          nested,
+          collectEvents(world, Event).map((event) => event.value)
+        );
+      });
+
+      emitEvent(world, Event, { value: 1 });
+      await runOnce(world);
+      assert.deepStrictEqual(seen, [[1], [2], [3]]);
+    });
+
+    it("guards revision overflow without consuming events", async () => {
+      const world = createWorld();
+      const Event = defineEvent("EventRevisionOverflow");
+      addSystem(world, function reader() {
+        const queue = world.events.byId.get(Event.id)!;
+        const cursor = queue.lastRevision.get("reader");
+        world.revision = Number.MAX_SAFE_INTEGER;
+        assert.throws(() => readEvents(world, Event, () => {}), LimitExceeded);
+        assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
+        assert.strictEqual(queue.lastRevision.get("reader"), cursor);
+      });
+      emitEvent(world, Event);
+      await runOnce(world);
+    });
+
+    it("advances consuming APIs once while peeking APIs do not advance", async () => {
+      const world = createWorld();
+      const Event = defineEvent("EventRevisionAccounting", { value: Type.i32() });
+
+      addSystem(world, function reader() {
+        const initial = world.revision;
+        hasEvents(world, Event);
+        countEvents(world, Event);
+        assert.strictEqual(world.revision, initial);
+
+        readEvents(world, Event, () => {});
+        assert.strictEqual(world.revision, initial + 1);
+        collectEvents(world, Event);
+        assert.strictEqual(world.revision, initial + 2);
+        readLastEvent(world, Event);
+        assert.strictEqual(world.revision, initial + 3);
+        clearEvents(world, Event);
+        assert.strictEqual(world.revision, initial + 4);
+      });
+
+      emitEvent(world, Event, { value: 1 });
+      await runOnce(world);
+    });
   });
 
   // ============================================================================
@@ -510,6 +584,7 @@ describe("Event", () => {
       const Event = defineEvent("OutsideAll", { value: Type.i32() });
 
       emitEvent(world, Event, { value: 42 });
+      const revision = world.revision;
 
       // readEvents invokes nothing
       let readCount = 0;
@@ -527,6 +602,7 @@ describe("Event", () => {
       assert.strictEqual(readLastEvent(world, Event), undefined);
       // clearEvents is a no-op (should not throw)
       clearEvents(world, Event);
+      assert.strictEqual(world.revision, revision);
     });
 
     it("emitEvent works outside system context", async () => {
@@ -591,7 +667,7 @@ describe("Event", () => {
           return;
         });
 
-        // lastTick should still be updated (finally block runs)
+        // The captured revision window is consumed despite early exit
         readEvents(world, Event, () => {
           secondReadCount++;
         });

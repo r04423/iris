@@ -31,7 +31,7 @@ export class IrisError extends Error {
 // ============================================================================
 
 /**
- * Thrown when an ID space is exhausted.
+ * Thrown when an ID space or another finite library counter is exhausted.
  *
  * @example
  * ```typescript

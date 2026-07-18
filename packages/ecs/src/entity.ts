@@ -315,7 +315,7 @@ export function moveEntityToArchetype(world: World, meta: EntityMeta, toArchetyp
     meta.archetype,
     meta.row,
     toArchetype,
-    world.execution.tick
+    world.revision
   );
 
   meta.archetype = toArchetype;

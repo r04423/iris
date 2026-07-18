@@ -174,7 +174,8 @@ export type World = {
     systemId: string | null;
 
     /**
-     * Execution tick counter.
+     * Frame counter. Starts and resets at 0, then increments once per `runOnce()`
+     * attempt, including empty and failed attempts.
      */
     tick: number;
 
@@ -228,6 +229,11 @@ export type World = {
      */
     byInitializer: Map<ActionInitializer<Actions>, Actions>;
   };
+
+  /**
+   * Structural observation revision.
+   */
+  revision: number;
 };
 
 /**
@@ -281,7 +287,7 @@ export function createWorld(): World {
     execution: {
       scheduleLabel: null,
       systemId: null,
-      tick: 1,
+      tick: 0,
       running: false,
       rafHandle: null,
       activeFrame: null,
@@ -310,6 +316,7 @@ export function createWorld(): World {
       systemStarted: { callbacks: [] },
       systemFinished: { callbacks: [] },
     },
+    revision: 1,
   };
 
   initFilterDispatch(world);
@@ -339,6 +346,8 @@ export function createWorld(): World {
  * ```
  */
 export function resetWorld(world: World): void {
+  world.revision = 1;
+
   // 1. Clear filters and reverse index
   world.filters.byId.clear();
   world.filters.byType.clear();
@@ -365,7 +374,7 @@ export function resetWorld(world: World): void {
   registerArchetype(world, newRoot);
 
   // 6. Reset execution state
-  world.execution.tick = 1;
+  world.execution.tick = 0;
   world.execution.scheduleLabel = null;
   world.execution.systemId = null;
   world.execution.running = false;
