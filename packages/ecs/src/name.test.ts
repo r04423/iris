@@ -37,6 +37,8 @@ describe("Name", () => {
       const entity = createEntity(world);
 
       assert.throws(() => setName(world, entity, ""), InvalidArgument);
+      assert.strictEqual(getName(world, entity), undefined);
+      assert.strictEqual(hasComponent(world, entity, Name), false);
     });
 
     it("throws on name collision", () => {
@@ -47,6 +49,9 @@ describe("Name", () => {
       setName(world, entity1, "player");
 
       assert.throws(() => setName(world, entity2, "player"), Duplicate);
+      assert.strictEqual(getName(world, entity2), undefined);
+      assert.strictEqual(hasComponent(world, entity2, Name), false);
+      assert.strictEqual(lookupByName(world, "player"), entity1);
     });
 
     it("updates name and registry on change", () => {
@@ -134,6 +139,38 @@ describe("Name", () => {
       assert.strictEqual(getName(world, entity), "updated");
       assert.strictEqual(lookupByName(world, "original"), undefined);
       assert.strictEqual(lookupByName(world, "updated"), entity);
+    });
+
+    it("rolls back rejected direct name addition", () => {
+      const world = createWorld();
+      const winner = createEntity(world);
+      const empty = createEntity(world);
+      const duplicate = createEntity(world);
+      setName(world, winner, "shared");
+
+      assert.throws(() => addComponent(world, empty, Name, { value: "" }), InvalidArgument);
+      assert.throws(() => addComponent(world, duplicate, Name, { value: "shared" }), Duplicate);
+
+      assert.strictEqual(hasComponent(world, empty, Name), false);
+      assert.strictEqual(hasComponent(world, duplicate, Name), false);
+      assert.strictEqual(lookupByName(world, "shared"), winner);
+    });
+
+    it("rolls back rejected direct name change", () => {
+      const world = createWorld();
+      const winner = createEntity(world);
+      const entity = createEntity(world);
+      setName(world, winner, "shared");
+      setName(world, entity, "original");
+
+      assert.throws(() => setComponentValue(world, entity, Name, "value", ""), InvalidArgument);
+      assert.strictEqual(getName(world, entity), "original");
+      assert.strictEqual(lookupByName(world, "original"), entity);
+
+      assert.throws(() => setComponentValue(world, entity, Name, "value", "shared"), Duplicate);
+      assert.strictEqual(getName(world, entity), "original");
+      assert.strictEqual(lookupByName(world, "original"), entity);
+      assert.strictEqual(lookupByName(world, "shared"), winner);
     });
 
     it("destroying entity without name does not error", () => {

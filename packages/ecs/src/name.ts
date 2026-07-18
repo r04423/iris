@@ -56,7 +56,11 @@ export function initNameSystem(world: World): void {
 
     const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
     const entityToName = getResourceValue(world, NameRegistry, "entityToName")!;
-    const name = entityToName.get(entityId)!;
+    const name = entityToName.get(entityId);
+
+    if (name === undefined) {
+      return;
+    }
 
     nameToEntity.delete(name);
     entityToName.delete(entityId);
@@ -78,8 +82,18 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    assert(current, InvalidArgument, { expected: "non-empty name" });
-    assert(!nameToEntity.has(current), Duplicate, { resource: "Name", id: current });
+    try {
+      assert(current, InvalidArgument, { expected: "non-empty name" });
+      assert(!nameToEntity.has(current), Duplicate, { resource: "Name", id: current });
+    } catch (error) {
+      if (previous === undefined) {
+        removeComponent(world, entityId, Name);
+      } else {
+        setComponentValue(world, entityId, Name, "value", previous);
+      }
+
+      throw error;
+    }
 
     // Remove old mapping if renaming an entity
     if (previous !== undefined) {
