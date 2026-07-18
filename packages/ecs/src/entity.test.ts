@@ -5,6 +5,7 @@ import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { LimitExceeded, NotFound } from "./error.js";
+import { registerObserverCallback, unregisterObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
@@ -166,6 +167,62 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, e1), true);
       assert.strictEqual(isEntityAlive(world, e2), false);
       assert.strictEqual(isEntityAlive(world, e3), true);
+    });
+
+    it("finalizes committed destruction when an observer throws", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const swappedEntity = createEntity(world);
+      const meta = world.entities.byId.get(entity)!;
+      const archetype = meta.archetype;
+      const row = meta.row;
+      const rawId = extractId(entity);
+      const error = new Error("failed");
+
+      registerObserverCallback(world, "entityDestroyed", () => {
+        throw error;
+      });
+
+      assert.throws(
+        () => {
+          destroyEntity(world, entity);
+        },
+        (thrown) => thrown === error
+      );
+
+      assert.strictEqual(isEntityAlive(world, entity), false);
+      assert.strictEqual(archetype.entities.includes(entity), false);
+      assert.strictEqual(world.entities.byId.get(swappedEntity)!.row, row);
+      assert.strictEqual(world.entities.generations.get(rawId), extractMeta(entity) + 1);
+      assert.strictEqual(world.entities.freeIds.filter((id) => id === rawId).length, 1);
+    });
+
+    it("clears the destruction latch when cleanup fails before row removal", () => {
+      const world = createWorld();
+      const component = createEntity(world);
+      const subject = createEntity(world);
+      const error = new Error("failed");
+      const callback = (componentId: EntityId) => {
+        if (componentId === component) throw error;
+      };
+
+      addComponent(world, subject, component);
+      registerObserverCallback(world, "componentRemoved", callback);
+
+      assert.throws(
+        () => {
+          destroyEntity(world, component);
+        },
+        (thrown) => thrown === error
+      );
+
+      const meta = world.entities.byId.get(component)!;
+      assert.strictEqual(meta.archetype.entities[meta.row], component);
+      assert.strictEqual(meta.destroying, false);
+
+      unregisterObserverCallback(world, "componentRemoved", callback);
+      destroyEntity(world, component);
+      assert.strictEqual(isEntityAlive(world, component), false);
     });
   });
 

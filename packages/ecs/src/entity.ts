@@ -241,33 +241,39 @@ export function destroyEntity(world: World, entityId: EntityId): void {
   }
   meta.destroying = true;
 
-  // Clean up pairs targeting this entity (handles cascade delete)
-  cleanupPairsTargetingEntity(world, entityId);
+  try {
+    // Clean up pairs targeting this entity (handles cascade delete)
+    cleanupPairsTargetingEntity(world, entityId);
 
-  // Remove this entity from any entities that have it as a component
-  cascadeRemoveComponent(world, entityId);
+    // Remove this entity from any entities that have it as a component
+    cascadeRemoveComponent(world, entityId);
 
-  const swappedEntityId = removeEntityFromArchetypeByRow(meta.archetype, meta.row);
+    const swappedEntityId = removeEntityFromArchetypeByRow(meta.archetype, meta.row);
 
-  // Swap-remove updates: entity swapped into our slot needs row update
-  if (swappedEntityId !== undefined) {
-    const swappedMeta = world.entities.byId.get(swappedEntityId)!;
-    swappedMeta.row = meta.row;
-  }
+    // Swap-remove updates: entity swapped into our slot needs row update
+    if (swappedEntityId !== undefined) {
+      const swappedMeta = world.entities.byId.get(swappedEntityId)!;
+      swappedMeta.row = meta.row;
+    }
 
-  fireObserverEvent(world, "entityDestroyed", entityId);
+    try {
+      fireObserverEvent(world, "entityDestroyed", entityId);
+    } finally {
+      world.entities.byId.delete(entityId);
 
-  world.entities.byId.delete(entityId);
+      // Only entity IDs are recycled; component/tag/relation IDs are permanent
+      if (extractType(entityId) === ENTITY_TYPE) {
+        const rawId = extractId(entityId);
+        const oldGeneration = extractMeta(entityId);
+        // Increment generation so stale references become detectable
+        const newGeneration = (oldGeneration + 1) & ID_MASK_8;
 
-  // Only entity IDs are recycled; component/tag/relation IDs are permanent
-  if (extractType(entityId) === ENTITY_TYPE) {
-    const rawId = extractId(entityId);
-    const oldGeneration = extractMeta(entityId);
-    // Increment generation so stale references become detectable
-    const newGeneration = (oldGeneration + 1) & ID_MASK_8;
-
-    world.entities.generations.set(rawId, newGeneration);
-    world.entities.freeIds.push(rawId);
+        world.entities.generations.set(rawId, newGeneration);
+        world.entities.freeIds.push(rawId);
+      }
+    }
+  } finally {
+    meta.destroying = false;
   }
 }
 

@@ -291,12 +291,12 @@ describe("useQueryEntities", () => {
 
   it("removes cascaded children when relation target is destroyed", () => {
     const world = createWorld();
-    const ChildOf = defineRelation("ChildOf", { onDeleteTarget: "delete" });
+    const CascadeChildOf = defineRelation("CascadeChildOf", { onDeleteTarget: "delete" });
 
     const parent = createEntity(world);
     const child = createEntity(world);
     addComponent(world, child, Position, { x: 0, y: 0 });
-    addComponent(world, child, pair(ChildOf, parent));
+    addComponent(world, child, pair(CascadeChildOf, parent));
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),

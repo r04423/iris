@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { Archetype } from "./archetype.js";
 import { createAndRegisterArchetype, destroyArchetype } from "./archetype.js";
 import { createEntity } from "./entity.js";
-import { registerObserverCallback, unregisterObserverCallback } from "./observer.js";
+import { fireObserverEvent, registerObserverCallback, unregisterObserverCallback } from "./observer.js";
 import { createWorld } from "./world.js";
 
 describe("Observer", () => {
@@ -116,6 +116,48 @@ describe("Observer", () => {
 
       assert.strictEqual(callCount1, 1);
       assert.strictEqual(callCount2, 1);
+    });
+
+    it("attempts all callbacks and rethrows the first error in dispatch order", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const firstError = new Error("first");
+      const secondError = new Error("second");
+      const calls: string[] = [];
+
+      registerObserverCallback(world, "entityCreated", () => {
+        calls.push("first");
+        throw firstError;
+      });
+      registerObserverCallback(world, "entityCreated", () => {
+        calls.push("second");
+        throw secondError;
+      });
+
+      assert.throws(
+        () => {
+          fireObserverEvent(world, "entityCreated", entity);
+        },
+        (error) => error === secondError
+      );
+      assert.deepStrictEqual(calls, ["second", "first"]);
+    });
+
+    it("rethrows a single callback error unchanged", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const error = new Error("failed");
+
+      registerObserverCallback(world, "entityCreated", () => {
+        throw error;
+      });
+
+      assert.throws(
+        () => {
+          fireObserverEvent(world, "entityCreated", entity);
+        },
+        (thrown) => thrown === error
+      );
     });
   });
 
