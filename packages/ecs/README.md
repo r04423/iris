@@ -715,14 +715,18 @@ First -> PreUpdate -> Update -> PostUpdate -> Last
 `Update` is the default schedule. Assign systems to other phases based on when they should run:
 
 ```typescript
-import { addSystem, First, PreUpdate, PostUpdate, Last, run, stop } from "iris-ecs";
+import { addSystem, First, PreUpdate, PostUpdate, Last, run, stop, suspend } from "iris-ecs";
 
 addSystem(world, inputSystem, { schedule: First });
 addSystem(world, physicsSystem, { schedule: PreUpdate });
 addSystem(world, movementSystem); // defaults to Update
 addSystem(world, collisionSystem, { schedule: PostUpdate });
 addSystem(world, renderSystem, { schedule: Last });
+ 
+run(world);
 
+// Suspend and resume the animation frame loop without running lifecycle schedules
+await suspend(world);
 run(world);
 
 // ... later
@@ -757,7 +761,7 @@ addSystem(world, gravitySystem, { schedule: Physics });
 
 #### Running the World
 
-`run(world)` starts a `requestAnimationFrame` loop. Each frame runs all pipeline schedules then flushes events. `stop(world)` stops the loop and runs Shutdown. Calling `stop()` then `run()` again re-triggers Startup and Shutdown for each cycle.
+`run(world)` starts or resumes a `requestAnimationFrame` loop. Each frame runs all pipeline schedules then flushes events. `suspend(world)` stops scheduling frames after the active frame completes without running Shutdown; direct `runOnce()` calls are unaffected. `stop(world)` stops the loop and runs Shutdown. Calling `stop()` then `run()` again re-triggers Startup and Shutdown for each cycle.
 
 For manual frame stepping (tests, server-side), use `runOnce()`:
 

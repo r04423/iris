@@ -820,10 +820,11 @@ export async function runOnce(world: World): Promise<void> {
 }
 
 /**
- * Start the main loop using requestAnimationFrame.
+ * Start or resume the main loop using requestAnimationFrame.
  *
  * Startup schedule runs automatically on first frame. Each frame executes
- * all pipeline schedules in order. Call stop() to end the loop.
+ * all pipeline schedules in order. Call `suspend()` to halt the loop without
+ * running Shutdown, or `stop()` to end the lifecycle.
  *
  * @param world - World instance
  *
@@ -842,7 +843,35 @@ export function run(world: World): void {
   }
 
   world.execution.running = true;
-  scheduleFrame(world);
+
+  if (world.execution.activeFrame === null) {
+    scheduleFrame(world);
+  }
+}
+
+/**
+ * Suspend the requestAnimationFrame loop without running Shutdown.
+ * An active frame finishes before the returned promise resolves. Call `run()`
+ * to resume without running Startup again. Direct `runOnce()` calls are unaffected.
+ *
+ * @param world - World instance
+ * @returns Active frame promise, or a resolved promise if no frame is active
+ *
+ * @example
+ * ```typescript
+ * await suspend(world);
+ * run(world);
+ * ```
+ */
+export function suspend(world: World): Promise<void> {
+  world.execution.running = false;
+
+  if (world.execution.rafHandle !== null) {
+    cancelAnimationFrame(world.execution.rafHandle);
+    world.execution.rafHandle = null;
+  }
+
+  return world.execution.activeFrame ?? Promise.resolve();
 }
 
 /**
@@ -929,12 +958,7 @@ async function runShutdown(world: World): Promise<void> {
  * ```
  */
 export function stop(world: World): Promise<void> {
-  world.execution.running = false;
-
-  if (world.execution.rafHandle !== null) {
-    cancelAnimationFrame(world.execution.rafHandle);
-    world.execution.rafHandle = null;
-  }
+  suspend(world);
 
   if (world.execution.shutdownPromise !== null) {
     return world.execution.shutdownPromise;

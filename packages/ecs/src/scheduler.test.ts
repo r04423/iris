@@ -25,12 +25,13 @@ import {
   Shutdown,
   Startup,
   stop,
+  suspend,
   Update,
 } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
 
-function mockAnimationFrame(): { runFrame: () => Promise<void>; restore: () => void } {
+function mockAnimationFrame(): { hasFrame: () => boolean; runFrame: () => Promise<void>; restore: () => void } {
   const request = globalThis.requestAnimationFrame;
   const cancel = globalThis.cancelAnimationFrame;
   let callback: ((time: number) => Promise<void>) | null = null;
@@ -39,10 +40,17 @@ function mockAnimationFrame(): { runFrame: () => Promise<void>; restore: () => v
     callback = next as (time: number) => Promise<void>;
     return 1;
   };
-  globalThis.cancelAnimationFrame = () => {};
+  globalThis.cancelAnimationFrame = () => {
+    callback = null;
+  };
 
   return {
-    runFrame: () => callback!(0),
+    hasFrame: () => callback !== null,
+    runFrame: () => {
+      const frame = callback!;
+      callback = null;
+      return frame(0);
+    },
     restore: () => {
       globalThis.requestAnimationFrame = request;
       globalThis.cancelAnimationFrame = cancel;
@@ -654,6 +662,143 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.strictEqual(calls.indexOf("physics") < calls.indexOf("update"), true);
+    });
+  });
+
+  describe("Suspension", () => {
+    it("resumes without running Startup or Shutdown", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        let startupCount = 0;
+        let updateCount = 0;
+        let shutdownCount = 0;
+        addSystem(
+          world,
+          () => {
+            startupCount++;
+          },
+          { name: "startup", schedule: Startup }
+        );
+        addSystem(
+          world,
+          () => {
+            updateCount++;
+          },
+          { name: "update" }
+        );
+        addSystem(
+          world,
+          () => {
+            shutdownCount++;
+          },
+          { name: "shutdown", schedule: Shutdown }
+        );
+
+        run(world);
+        assert.strictEqual(animationFrame.hasFrame(), true);
+        await suspend(world);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+
+        run(world);
+        await animationFrame.runFrame();
+        await suspend(world);
+        run(world);
+        await animationFrame.runFrame();
+        await suspend(world);
+
+        assert.strictEqual(startupCount, 1);
+        assert.strictEqual(updateCount, 2);
+        assert.strictEqual(shutdownCount, 0);
+
+        await stop(world);
+        assert.strictEqual(shutdownCount, 1);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("resumes after an active frame finishes", async () => {
+      const animationFrame = mockAnimationFrame();
+      let updateStarted!: () => void;
+      let releaseUpdate!: () => void;
+      const updateStart = new Promise<void>((resolve) => {
+        updateStarted = resolve;
+      });
+      const updateGate = new Promise<void>((resolve) => {
+        releaseUpdate = resolve;
+      });
+
+      try {
+        const world = createWorld();
+        let updateCount = 0;
+        addSystem(world, async function updateSys() {
+          updateCount++;
+          if (updateCount === 1) {
+            updateStarted();
+            await updateGate;
+          }
+        });
+
+        run(world);
+        const frame = animationFrame.runFrame();
+        await updateStart;
+
+        const firstSuspend = suspend(world);
+        const secondSuspend = suspend(world);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+
+        run(world);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+        releaseUpdate();
+        await Promise.all([frame, firstSuspend, secondSuspend]);
+        assert.strictEqual(animationFrame.hasFrame(), true);
+
+        await animationFrame.runFrame();
+        await suspend(world);
+        assert.strictEqual(updateCount, 2);
+      } finally {
+        releaseUpdate();
+        animationFrame.restore();
+      }
+    });
+
+    it("propagates active frame errors", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        const error = new Error("frame failed");
+        addSystem(world, function updateSys() {
+          throw error;
+        });
+
+        run(world);
+        const frame = animationFrame.runFrame();
+        const suspension = suspend(world);
+
+        await Promise.all([
+          assert.rejects(frame, (actual) => actual === error),
+          assert.rejects(suspension, (actual) => actual === error),
+        ]);
+        assert.strictEqual(world.execution.running, false);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("does not block manual frames", async () => {
+      const world = createWorld();
+      let updateCount = 0;
+      addSystem(world, function updateSys() {
+        updateCount++;
+      });
+
+      await suspend(world);
+      await runOnce(world);
+
+      assert.strictEqual(updateCount, 1);
     });
   });
 
