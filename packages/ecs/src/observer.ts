@@ -56,6 +56,9 @@ export type ObserverMeta<T extends EventType> = {
 /**
  * Registers a callback to be invoked when an event of the specified type is fired.
  *
+ * During observer dispatch, a callback may unregister itself but must not
+ * register or unregister other callbacks for the event being dispatched.
+ *
  * @param world - The world instance containing observer state
  * @param eventType - The event type to listen for
  * @param callback - Function to invoke when the event fires
@@ -73,6 +76,10 @@ export function registerObserverCallback<T extends EventType>(world: World, even
 
 /**
  * Removes a previously registered callback for the specified event type.
+ *
+ * A callback may unregister itself during dispatch. Registering or
+ * unregistering any other callback for the event currently being dispatched can
+ * lead to an undefined behavior.
  *
  * @param world - The world instance containing observer state
  * @param eventType - The event type to stop listening for

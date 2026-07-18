@@ -1002,6 +1002,8 @@ registerObserverCallback(world, "entityDestroyed", handler);
 unregisterObserverCallback(world, "entityDestroyed", handler);
 ```
 
+During observer dispatch, a callback may unregister itself. It must not register or unregister other callbacks for the event currently being dispatched; doing so can lead to an undefined behavior.
+
 #### Available Events
 
 | Event | Payload | When |
