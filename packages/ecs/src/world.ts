@@ -174,8 +174,8 @@ export type World = {
     systemId: string | null;
 
     /**
-     * Frame counter. Starts and resets at 0, then increments once per `runOnce()`
-     * attempt, including empty and failed attempts.
+     * Frame counter. Starts and resets at 0, then increments once per accepted
+     * manual or animation frame attempt, including empty and failed attempts.
      */
     tick: number;
 
@@ -190,9 +190,14 @@ export type World = {
     rafHandle: number | null;
 
     /**
-     * Current RAF frame promise.
+     * Whether a frame is currently executing.
      */
-    activeFrame: Promise<void> | null;
+    frameRunning: boolean;
+
+    /**
+     * Current frame promise.
+     */
+    framePromise: Promise<void> | null;
 
     /**
      * Current shutdown promise.
@@ -290,7 +295,8 @@ export function createWorld(): World {
       tick: 0,
       running: false,
       rafHandle: null,
-      activeFrame: null,
+      frameRunning: false,
+      framePromise: null,
       shutdownPromise: null,
       startupRan: false,
       shutdownRan: false,
@@ -379,7 +385,8 @@ export function resetWorld(world: World): void {
   world.execution.systemId = null;
   world.execution.running = false;
   world.execution.rafHandle = null;
-  world.execution.activeFrame = null;
+  world.execution.frameRunning = false;
+  world.execution.framePromise = null;
   world.execution.shutdownPromise = null;
   world.execution.startupRan = false;
   world.execution.shutdownRan = false;

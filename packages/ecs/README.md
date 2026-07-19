@@ -773,7 +773,7 @@ addSystem(world, gravitySystem, { schedule: Physics });
 
 #### Running the World
 
-`run(world)` starts or resumes a `requestAnimationFrame` loop. Each frame runs all pipeline schedules then flushes events. `suspend(world)` stops scheduling frames after the active frame completes without running Shutdown; direct `runOnce()` calls are unaffected. `stop(world)` stops the loop and runs Shutdown. Calling `stop()` then `run()` again re-triggers Startup and Shutdown for each cycle.
+`run(world)` starts or resumes a `requestAnimationFrame` loop. Each frame runs all pipeline schedules then flushes events. `suspend(world)` stops scheduling frames after the active frame completes without running Shutdown. `stop(world)` stops the loop and runs Shutdown. Calling `stop()` then `run()` again re-triggers Startup and Shutdown for each cycle.
 
 For manual frame stepping (tests, server-side), use `runOnce()`:
 

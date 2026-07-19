@@ -785,42 +785,87 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
 // Public Execution API
 // ============================================================================
 
+/** Execute one frame. */
+async function executeFrame(world: World): Promise<void> {
+  try {
+    // Run startup schedule on first call
+    if (!world.execution.startupRan) {
+      await executeSchedule(world, Startup);
+      world.execution.startupRan = true;
+    }
+
+    // Run all pipeline schedules in order
+    for (let i = 0; i < world.schedules.pipeline.length; i++) {
+      await executeSchedule(world, world.schedules.pipeline[i]!);
+    }
+
+    // Flush events at end of frame
+    flushEvents(world);
+  } catch (error) {
+    world.execution.running = false;
+    world.execution.rafHandle = null;
+
+    throw error;
+  } finally {
+    world.execution.frameRunning = false;
+    world.execution.framePromise = null;
+  }
+
+  if (world.execution.running) {
+    scheduleFrame(world);
+  }
+}
+
+/**
+ * Start a tracked frame.
+ */
+function startFrame(world: World): Promise<void> {
+  assert(!world.execution.frameRunning, InvalidState, { message: "A frame is already executing" });
+  assert(world.execution.shutdownPromise === null, InvalidState, { message: "Shutdown is executing" });
+
+  world.execution.frameRunning = true;
+  world.execution.shutdownRan = false;
+
+  try {
+    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+      resource: "World frame tick",
+      max: Number.MAX_SAFE_INTEGER,
+    });
+
+    world.execution.tick++;
+
+    prepareSystems(world);
+  } catch (error) {
+    world.execution.frameRunning = false;
+    world.execution.running = false;
+    world.execution.rafHandle = null;
+
+    throw error;
+  }
+
+  const frame = executeFrame(world);
+  world.execution.framePromise = frame;
+
+  return frame;
+}
+
 /**
  * Execute one frame. Runs startup on first call, then all pipeline schedules,
- * then flushes events.
+ * then flushes events. Rejects if another frame, the animation frame loop,
+ * or Shutdown is active.
  *
  * @param world - World instance
  * @returns Promise that resolves when the frame completes
  *
  * @example
  * ```typescript
- * // Game loop
  * await runOnce(world);
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
-  assert(world.execution.tick < Number.MAX_SAFE_INTEGER, LimitExceeded, {
-    resource: "World frame tick",
-    max: Number.MAX_SAFE_INTEGER,
-  });
+  assert(!world.execution.running, InvalidState, { message: "The animation frame loop is running" });
 
-  world.execution.tick++;
-  prepareSystems(world);
-
-  // Run startup schedule on first call
-  if (!world.execution.startupRan) {
-    await executeSchedule(world, Startup);
-    world.execution.startupRan = true;
-    world.execution.shutdownRan = false;
-  }
-
-  // Run all pipeline schedules in order
-  for (let i = 0; i < world.schedules.pipeline.length; i++) {
-    await executeSchedule(world, world.schedules.pipeline[i]!);
-  }
-
-  // Flush events at end of frame
-  flushEvents(world);
+  await startFrame(world);
 }
 
 /**
@@ -848,7 +893,7 @@ export function run(world: World): void {
 
   world.execution.running = true;
 
-  if (world.execution.activeFrame === null) {
+  if (!world.execution.frameRunning) {
     scheduleFrame(world);
   }
 }
@@ -856,10 +901,11 @@ export function run(world: World): void {
 /**
  * Suspend the requestAnimationFrame loop without running Shutdown.
  * An active frame finishes before the returned promise resolves. Call `run()`
- * to resume without running Startup again. Direct `runOnce()` calls are unaffected.
+ * to resume without running Startup again.
  *
  * @param world - World instance
  * @returns Active frame promise, or a resolved promise if no frame is active
+ * @throws {InvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript
@@ -868,6 +914,10 @@ export function run(world: World): void {
  * ```
  */
 export function suspend(world: World): Promise<void> {
+  assert(!world.execution.frameRunning || world.execution.framePromise !== null, InvalidState, {
+    message: "A frame is starting",
+  });
+
   world.execution.running = false;
 
   if (world.execution.rafHandle !== null) {
@@ -875,7 +925,7 @@ export function suspend(world: World): Promise<void> {
     world.execution.rafHandle = null;
   }
 
-  return world.execution.activeFrame ?? Promise.resolve();
+  return world.execution.framePromise ?? Promise.resolve();
 }
 
 /**
@@ -883,28 +933,13 @@ export function suspend(world: World): Promise<void> {
  */
 function scheduleFrame(world: World): void {
   world.execution.rafHandle = requestAnimationFrame(async () => {
+    world.execution.rafHandle = null;
+
     if (!world.execution.running) {
       return;
     }
 
-    const frame = runOnce(world);
-    world.execution.activeFrame = frame;
-
-    try {
-      await frame;
-    } catch (error) {
-      world.execution.running = false;
-      world.execution.rafHandle = null;
-      throw error;
-    } finally {
-      if (world.execution.activeFrame === frame) {
-        world.execution.activeFrame = null;
-      }
-    }
-
-    if (world.execution.running) {
-      scheduleFrame(world);
-    }
+    await startFrame(world);
   });
 }
 
@@ -912,7 +947,7 @@ function scheduleFrame(world: World): void {
  * Wait for the active frame and execute the shutdown schedule.
  */
 async function runShutdown(world: World): Promise<void> {
-  const frame = world.execution.activeFrame;
+  const frame = world.execution.framePromise;
 
   let frameFailed = false;
   let frameError: unknown;
@@ -953,6 +988,7 @@ async function runShutdown(world: World): Promise<void> {
  *
  * @param world - World instance
  * @returns Promise that resolves when shutdown completes
+ * @throws {InvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript
