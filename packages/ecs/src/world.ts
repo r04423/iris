@@ -190,11 +190,6 @@ export type World = {
     rafHandle: number | null;
 
     /**
-     * Whether a frame is currently executing.
-     */
-    frameRunning: boolean;
-
-    /**
      * Current frame promise.
      */
     framePromise: Promise<void> | null;
@@ -295,7 +290,6 @@ export function createWorld(): World {
       tick: 0,
       running: false,
       rafHandle: null,
-      frameRunning: false,
       framePromise: null,
       shutdownPromise: null,
       startupRan: false,
@@ -385,7 +379,6 @@ export function resetWorld(world: World): void {
   world.execution.systemId = null;
   world.execution.running = false;
   world.execution.rafHandle = null;
-  world.execution.frameRunning = false;
   world.execution.framePromise = null;
   world.execution.shutdownPromise = null;
   world.execution.startupRan = false;

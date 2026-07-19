@@ -794,6 +794,15 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
 /** Execute one frame. */
 async function executeFrame(world: World): Promise<void> {
   try {
+    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
+      resource: "World frame tick",
+      max: Number.MAX_SAFE_INTEGER,
+    });
+
+    world.execution.tick++;
+
+    prepareSystems(world);
+
     // Run startup schedule on first call
     if (!world.execution.startupRan) {
       await executeSchedule(world, Startup);
@@ -809,11 +818,9 @@ async function executeFrame(world: World): Promise<void> {
     flushEvents(world);
   } catch (error) {
     world.execution.running = false;
-    world.execution.rafHandle = null;
 
     throw error;
   } finally {
-    world.execution.frameRunning = false;
     world.execution.framePromise = null;
   }
 
@@ -823,36 +830,19 @@ async function executeFrame(world: World): Promise<void> {
 }
 
 /**
- * Start a tracked frame.
+ * Admit and start a frame. Rejects while another frame or Shutdown is active.
  */
 function startFrame(world: World): Promise<void> {
-  assert(!world.execution.frameRunning, IrisInvalidState, { message: "A frame is already executing" });
+  assert(world.execution.framePromise === null, IrisInvalidState, { message: "A frame is already executing" });
   assert(world.execution.shutdownPromise === null, IrisInvalidState, { message: "Shutdown is executing" });
 
-  world.execution.frameRunning = true;
   world.execution.shutdownRan = false;
 
-  try {
-    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
-      resource: "World frame tick",
-      max: Number.MAX_SAFE_INTEGER,
-    });
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  world.execution.framePromise = promise;
+  executeFrame(world).then(resolve, reject);
 
-    world.execution.tick++;
-
-    prepareSystems(world);
-  } catch (error) {
-    world.execution.frameRunning = false;
-    world.execution.running = false;
-    world.execution.rafHandle = null;
-
-    throw error;
-  }
-
-  const frame = executeFrame(world);
-  world.execution.framePromise = frame;
-
-  return frame;
+  return promise;
 }
 
 /**
@@ -879,7 +869,8 @@ export async function runOnce(world: World): Promise<void> {
  *
  * Startup schedule runs automatically on first frame. Each frame executes
  * all pipeline schedules in order. Call `suspend()` to halt the loop without
- * running Shutdown, or `stop()` to end the lifecycle.
+ * running Shutdown, or `stop()` to end the lifecycle. Ignored while a
+ * shutdown is in progress.
  *
  * @param world - World instance
  *
@@ -899,7 +890,7 @@ export function run(world: World): void {
 
   world.execution.running = true;
 
-  if (!world.execution.frameRunning) {
+  if (world.execution.framePromise === null) {
     scheduleFrame(world);
   }
 }
@@ -911,7 +902,6 @@ export function run(world: World): void {
  *
  * @param world - World instance
  * @returns Active frame promise, or a resolved promise if no frame is active
- * @throws {IrisInvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript
@@ -920,10 +910,6 @@ export function run(world: World): void {
  * ```
  */
 export function suspend(world: World): Promise<void> {
-  assert(!world.execution.frameRunning || world.execution.framePromise !== null, IrisInvalidState, {
-    message: "A frame is starting",
-  });
-
   world.execution.running = false;
 
   if (world.execution.rafHandle !== null) {
@@ -994,7 +980,6 @@ async function runShutdown(world: World): Promise<void> {
  *
  * @param world - World instance
  * @returns Promise that resolves when shutdown completes
- * @throws {IrisInvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript

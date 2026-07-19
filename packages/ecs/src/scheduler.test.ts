@@ -704,17 +704,19 @@ describe("Scheduler", () => {
       assert.strictEqual(world.execution.framePromise, null);
     });
 
-    it("rejects reentrant suspension while a frame is starting", async () => {
+    it("rejects concurrent manual frames admitted in the same task", async () => {
       const world = createWorld();
-      addSystem(
-        world,
-        function startupSys() {
-          suspend(world);
-        },
-        { schedule: Startup }
-      );
+      let runs = 0;
+      addSystem(world, function updateSys() {
+        runs++;
+      });
 
-      await assert.rejects(runOnce(world), IrisInvalidState);
+      const first = runOnce(world);
+      const second = runOnce(world);
+
+      await Promise.all([first, assert.rejects(second, IrisInvalidState)]);
+      assert.strictEqual(runs, 1);
+      assert.strictEqual(world.execution.tick, 1);
     });
 
     it("rejects manual frames while the animation frame loop is running", async () => {
@@ -932,6 +934,52 @@ describe("Scheduler", () => {
 
       assert.strictEqual(updateCount, 1);
     });
+
+    it("suspends from a sync Startup system after the frame completes", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        let updates = 0;
+        addSystem(
+          world,
+          function startupSys() {
+            suspend(world);
+          },
+          { schedule: Startup }
+        );
+        addSystem(world, function updateSys() {
+          updates++;
+        });
+
+        run(world);
+        await animationFrame.runFrame();
+
+        assert.strictEqual(updates, 1);
+        assert.strictEqual(world.execution.running, false);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("suspends from a factory init without failing the frame", async () => {
+      const world = createWorld();
+      let ticks = 0;
+      addSystem(
+        world,
+        defineSystem("initSuspender", (w) => {
+          suspend(w);
+          return () => {
+            ticks++;
+          };
+        })
+      );
+
+      await runOnce(world);
+
+      assert.strictEqual(ticks, 1);
+    });
   });
 
   describe("Startup and Shutdown", () => {
@@ -1130,6 +1178,34 @@ describe("Scheduler", () => {
       releaseStartup();
       await Promise.all([frame, stopping]);
       assert.strictEqual(shutdownCount, 2);
+    });
+
+    it("stop from a sync system runs Shutdown after the frame completes", async () => {
+      const world = createWorld();
+      const order: string[] = [];
+      addSystem(world, function updateSys() {
+        order.push("update");
+        stop(world);
+      });
+      addSystem(
+        world,
+        function lastSys() {
+          order.push("last");
+        },
+        { schedule: Last }
+      );
+      addSystem(
+        world,
+        function shutdownSys() {
+          order.push("shutdown");
+        },
+        { schedule: Shutdown }
+      );
+
+      await runOnce(world);
+      await stop(world);
+
+      assert.deepStrictEqual(order, ["update", "last", "shutdown"]);
     });
 
     it("stop without prior runOnce initializes and runs a shutdown factory", async () => {
