@@ -334,7 +334,8 @@ export function createWorld(): World {
  *
  * Does NOT fire per-entity lifecycle events (entityDestroyed, componentRemoved).
  * For per-entity cleanup, run a "shutdown" schedule before calling resetWorld().
- * Factory systems initialize again before the next `runOnce()` or `stop()`.
+ * Factory systems and attached conditions initialize again before the next
+ * `runOnce()` or `stop()`.
  * Fires the "worldReset" observer event after reset completes.
  *
  * @param world - World instance to reset
@@ -391,6 +392,14 @@ export function resetWorld(world: World): void {
   for (const meta of world.systems.byId.values()) {
     if (meta.factory !== null) {
       meta.runner = null;
+    }
+    if (meta.conditionFactory !== null) {
+      meta.conditionRunner = null;
+    }
+  }
+  for (const meta of world.systemSets.byId.values()) {
+    if (meta.conditionFactory !== null) {
+      meta.conditionRunner = null;
     }
   }
   world.schedules.byId.clear();

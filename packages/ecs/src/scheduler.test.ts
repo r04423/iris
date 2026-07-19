@@ -11,6 +11,7 @@ import type { ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
   addSystemSet,
+  defineCondition,
   defineSchedule,
   defineSystem,
   defineSystemSet,
@@ -2419,6 +2420,293 @@ describe("Scheduler", () => {
         assert.strictEqual(calls.indexOf("gravity") < calls.indexOf("render"), true);
         assert.strictEqual(calls.indexOf("collision") < calls.indexOf("render"), true);
       });
+    });
+  });
+
+  describe("Conditions", () => {
+    it("initializes all systems before system and set conditions", async () => {
+      const world = createWorld();
+      const Group = defineSystemSet("Group");
+      const calls: string[] = [];
+      const condition = (name: string) =>
+        defineCondition(name, () => {
+          calls.push(name);
+          return () => true;
+        });
+
+      addSystemSet(world, Group, { condition: condition("set condition") });
+      addSystem(
+        world,
+        defineSystem("first", () => {
+          calls.push("first system");
+          return () => {};
+        }),
+        { set: Group, condition: condition("first condition") }
+      );
+      addSystem(
+        world,
+        defineSystem("second", () => {
+          calls.push("second system");
+          return () => {};
+        }),
+        { condition: condition("second condition") }
+      );
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, [
+        "first system",
+        "second system",
+        "first condition",
+        "second condition",
+        "set condition",
+      ]);
+    });
+
+    it("prepares conditioned registrations added by a system initializer", async () => {
+      const world = createWorld();
+      let conditionInits = 0;
+      let childRuns = 0;
+      const condition = defineCondition("addedCondition", () => {
+        conditionInits++;
+        return () => true;
+      });
+      addSystem(
+        world,
+        defineSystem("parent", () => {
+          const Added = defineSystemSet("Added");
+          addSystemSet(world, Added, { condition });
+          addSystem(
+            world,
+            () => {
+              childRuns++;
+            },
+            { name: "child", set: Added, condition }
+          );
+          return () => {};
+        })
+      );
+
+      await runOnce(world);
+
+      assert.deepStrictEqual({ conditionInits, childRuns }, { conditionInits: 2, childRuns: 1 });
+    });
+
+    it("evaluates a system condition on every invocation and skips false ticks", async () => {
+      const world = createWorld();
+      let checks = 0;
+      let runs = 0;
+      const alternating = defineCondition("alternating", () => () => ++checks % 2 === 0);
+
+      addSystem(
+        world,
+        () => {
+          runs++;
+        },
+        { name: "conditioned", condition: alternating }
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual({ checks, runs }, { checks: 3, runs: 1 });
+    });
+
+    it("caches set true and false results across non-contiguous members", async () => {
+      const world = createWorld();
+      const Group = defineSystemSet("Group");
+      let checks = 0;
+      const calls: string[] = [];
+      const alternating = defineCondition("alternatingSet", () => () => ++checks % 2 === 1);
+      addSystemSet(world, Group, { condition: alternating });
+      addSystem(
+        world,
+        () => {
+          calls.push("first");
+        },
+        { name: "first", set: Group }
+      );
+      addSystem(
+        world,
+        () => {
+          calls.push("middle");
+        },
+        { name: "middle" }
+      );
+      addSystem(
+        world,
+        () => {
+          calls.push("last");
+        },
+        { name: "last", set: Group }
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.strictEqual(checks, 2);
+      assert.deepStrictEqual(calls, ["first", "middle", "last", "middle"]);
+    });
+
+    it("does not evaluate member conditions when the set condition is false", async () => {
+      const world = createWorld();
+      const Group = defineSystemSet("Group");
+      let memberChecks = 0;
+      addSystemSet(world, Group, { condition: defineCondition("setFalse", () => () => false) });
+      addSystem(world, () => assert.fail("system ran"), {
+        name: "member",
+        set: Group,
+        condition: defineCondition("member", () => () => {
+          memberChecks++;
+          return true;
+        }),
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(memberChecks, 0);
+    });
+
+    it("initializes reused attachments independently and reinitializes them after reset", async () => {
+      const world = createWorld();
+      const Group = defineSystemSet("Group");
+      let inits = 0;
+      let runs = 0;
+      const firstTickOnly = defineCondition("firstTickOnly", () => {
+        inits++;
+        let first = true;
+        return () => {
+          const result = first;
+          first = false;
+          return result;
+        };
+      });
+      addSystemSet(world, Group, { condition: firstTickOnly });
+      addSystem(
+        world,
+        () => {
+          runs++;
+        },
+        { name: "one", set: Group, condition: firstTickOnly }
+      );
+      addSystem(
+        world,
+        () => {
+          runs++;
+        },
+        { name: "two", condition: firstTickOnly }
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+      resetWorld(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual({ inits, runs }, { inits: 6, runs: 4 });
+    });
+
+    it("keeps conditions outside system context and preserves instrumentation cleanup on errors", async () => {
+      const world = createWorld();
+      const events: string[] = [];
+      registerObserverCallback(world, "scheduleStarted", () => events.push("scheduleStarted"));
+      registerObserverCallback(world, "scheduleFinished", () => events.push("scheduleFinished"));
+      registerObserverCallback(world, "systemStarted", () => events.push("systemStarted"));
+      addSystem(world, () => assert.fail("system ran"), {
+        name: "throws",
+        condition: defineCondition("throws", (conditionWorld) => () => {
+          assert.strictEqual(conditionWorld.execution.systemId, null);
+          throw new Error("condition failed");
+        }),
+      });
+
+      await assert.rejects(runOnce(world), /condition failed/);
+
+      assert.deepStrictEqual(events, ["scheduleStarted", "scheduleFinished"]);
+      assert.strictEqual(world.execution.scheduleLabel, null);
+      assert.strictEqual(world.execution.systemId, null);
+    });
+
+    it("emits schedule events but no system events when a condition is false", async () => {
+      const world = createWorld();
+      const events: string[] = [];
+      registerObserverCallback(world, "scheduleStarted", () => events.push("scheduleStarted"));
+      registerObserverCallback(world, "scheduleFinished", () => events.push("scheduleFinished"));
+      registerObserverCallback(world, "systemStarted", () => events.push("systemStarted"));
+      registerObserverCallback(world, "systemFinished", () => events.push("systemFinished"));
+      addSystem(world, () => assert.fail("system ran"), {
+        name: "skipped",
+        condition: defineCondition("false", () => () => false),
+      });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(events, ["scheduleStarted", "scheduleFinished"]);
+    });
+
+    it("consumes false Startup and Shutdown conditions", async () => {
+      const world = createWorld();
+      let startupChecks = 0;
+      let shutdownChecks = 0;
+      addSystem(world, () => assert.fail("startup ran"), {
+        name: "startup",
+        schedule: Startup,
+        condition: defineCondition("startupFalse", () => () => {
+          startupChecks++;
+          return false;
+        }),
+      });
+      addSystem(world, () => assert.fail("shutdown ran"), {
+        name: "shutdown",
+        schedule: Shutdown,
+        condition: defineCondition("shutdownFalse", () => () => {
+          shutdownChecks++;
+          return false;
+        }),
+      });
+
+      await runOnce(world);
+      await runOnce(world);
+      await stop(world);
+      await stop(world);
+
+      assert.deepStrictEqual({ startupChecks, shutdownChecks }, { startupChecks: 1, shutdownChecks: 1 });
+
+      const stoppedBeforeFrame = createWorld();
+      let immediateShutdownChecks = 0;
+      addSystem(stoppedBeforeFrame, () => assert.fail("shutdown ran"), {
+        name: "immediateShutdown",
+        schedule: Shutdown,
+        condition: defineCondition("immediateShutdownFalse", () => () => {
+          immediateShutdownChecks++;
+          return false;
+        }),
+      });
+
+      await stop(stoppedBeforeFrame);
+
+      assert.strictEqual(immediateShutdownChecks, 1);
+    });
+
+    it("initializes but never evaluates an empty set condition", async () => {
+      const world = createWorld();
+      let inits = 0;
+      let ticks = 0;
+      const Empty = defineSystemSet("Empty");
+      addSystemSet(world, Empty, {
+        condition: defineCondition("empty", () => {
+          inits++;
+          return () => {
+            ticks++;
+            return true;
+          };
+        }),
+      });
+      addSystem(world, () => {}, { name: "prepare" });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual({ inits, ticks }, { inits: 1, ticks: 0 });
     });
   });
 

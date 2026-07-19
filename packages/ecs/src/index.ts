@@ -13,6 +13,12 @@ export {
 } from "./error.js";
 
 // ============================================================================
+// Conditions
+// ============================================================================
+
+export { every, once } from "./conditions.js";
+
+// ============================================================================
 // World Operations
 // ============================================================================
 
@@ -97,6 +103,7 @@ export {
 export {
   addSystem,
   addSystemSet,
+  defineCondition,
   defineSchedule,
   defineSystem,
   defineSystemSet,
@@ -146,6 +153,8 @@ export type {
   QueryModifier,
 } from "./query.js";
 export type {
+  ConditionFactory,
+  ConditionTick,
   ScheduleLabel,
   SystemFactory,
   SystemMeta,

@@ -145,6 +145,11 @@ export type SystemSetOptions = {
    * All systems in this set run after these systems or sets.
    */
   after?: SystemReference | SystemReference[];
+
+  /**
+   * Condition evaluated lazily once for this set per schedule invocation.
+   */
+  condition?: ConditionFactory;
 };
 
 /**
@@ -170,11 +175,24 @@ export type SystemSetMeta = {
    * System names that belong to this set (populated by addSystem calls).
    */
   systems: string[];
+
+  /**
+   * Condition factory attached to this set, if any.
+   */
+  conditionFactory: ConditionFactory | null;
+
+  /**
+   * Initialized condition tick, or null before preparation and after reset.
+   */
+  conditionRunner: ConditionTick | null;
 };
 
 // ============================================================================
 // Scheduler Types
 // ============================================================================
+
+const CONDITION_FACTORY_BRAND: unique symbol = Symbol("ConditionFactory");
+const SYSTEM_FACTORY_BRAND: unique symbol = Symbol("SystemFactory");
 
 /**
  * System function signature.
@@ -192,6 +210,42 @@ export type SystemRunner = (world: World) => void | Promise<void>;
 export type SystemTick = () => void | Promise<void>;
 
 /**
+ * Synchronous condition tick. Returning false skips the attached system or set.
+ *
+ * Conditions execute outside system observation context. Conditions may observe
+ * world state, but must not mutate gameplay data or scheduler registrations.
+ *
+ * @example
+ * ```typescript
+ * const enabled = defineCondition("enabled", (world) =>
+ *   () => hasResource(world, Enabled)
+ * );
+ * ```
+ */
+export type ConditionTick = () => boolean;
+
+/**
+ * Reusable condition factory with per-attachment initialization.
+ *
+ * @example
+ * ```typescript
+ * const everyOtherRun = defineCondition("everyOtherRun", () => {
+ *   let run = false;
+ *   return () => (run = !run);
+ * });
+ * addSystem(world, movementSystem, { condition: everyOtherRun });
+ * ```
+ */
+export type ConditionFactory = {
+  /** @internal Runtime brand for condition factories. */
+  readonly [CONDITION_FACTORY_BRAND]: true;
+  /** Descriptive condition name. */
+  readonly name: string;
+  /** Initializes a synchronous tick for one attachment. */
+  readonly init: (world: World) => ConditionTick;
+};
+
+/**
  * System factory with init/tick separation.
  *
  * Created via `defineSystem()`. The init function runs before first execution
@@ -199,7 +253,7 @@ export type SystemTick = () => void | Promise<void>;
  */
 export type SystemFactory = {
   /** @internal Runtime brand for discriminating SystemFactory from SystemRunner. */
-  readonly __systemFactory: true;
+  readonly [SYSTEM_FACTORY_BRAND]: true;
   /** System name for scheduling constraints and execution context. */
   readonly name: string;
   /**
@@ -227,6 +281,11 @@ type SystemOptionsBase = {
    * Run after these systems or sets (within same schedule).
    */
   after?: SystemReference | SystemReference[];
+
+  /**
+   * Condition evaluated before system instrumentation.
+   */
+  condition?: ConditionFactory;
 };
 
 /**
@@ -266,6 +325,16 @@ export type SystemMeta = {
    * Factory used to create the runner before execution and after a world reset.
    */
   factory: SystemFactory | null;
+
+  /**
+   * Condition factory attached to this system, if any.
+   */
+  conditionFactory: ConditionFactory | null;
+
+  /**
+   * Initialized condition tick, or null before preparation and after reset.
+   */
+  conditionRunner: ConditionTick | null;
 
   /**
    * Schedule this system belongs to.
@@ -329,13 +398,17 @@ export function defineSystemSet(name: string): SystemSetLabel {
  *
  * @param world - World instance
  * @param set - System set label from `defineSystemSet()`
- * @param options - Registration options (schedule, before, after)
+ * @param options - Registration options (schedule, before, after, condition)
  *
  * @example
  * ```typescript
  * const PhysicsSystems = defineSystemSet("PhysicsSystems");
  * const RenderSystems = defineSystemSet("RenderSystems");
- * addSystemSet(world, PhysicsSystems, { schedule: Update, before: RenderSystems });
+ * addSystemSet(world, PhysicsSystems, {
+ *   schedule: Update,
+ *   before: RenderSystems,
+ *   condition: gameIsRunning,
+ * });
  * addSystemSet(world, RenderSystems, { schedule: Update });
  * ```
  */
@@ -351,6 +424,8 @@ export function addSystemSet(world: World, set: SystemSetLabel, options?: System
     before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
     after: !after ? [] : Array.isArray(after) ? after.map(resolveReference) : [resolveReference(after)],
     systems: [],
+    conditionFactory: options?.condition ?? null,
+    conditionRunner: null,
   });
 
   world.schedules.dirty = true;
@@ -383,12 +458,16 @@ function resolveReference(ref: SystemReference): string {
  *
  * @param world - World instance
  * @param system - System function or factory (must be named unless name option provided)
- * @param options - Registration options (name, schedule, before, after)
+ * @param options - Registration options (name, schedule, set, before, after, condition)
  *
  * @example
  * ```typescript
  * addSystem(world, physicsSystem);
- * addSystem(world, renderSystem, { schedule: PostUpdate, after: physicsSystem });
+ * addSystem(world, renderSystem, {
+ *   schedule: PostUpdate,
+ *   after: physicsSystem,
+ *   condition: rendererIsReady,
+ * });
  * addSystem(world, movementFactory); // SystemFactory from defineSystem()
  * ```
  */
@@ -432,6 +511,8 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
   world.systems.byId.set(name, {
     runner,
     factory,
+    conditionFactory: options?.condition ?? null,
+    conditionRunner: null,
     schedule,
     index: world.systems.nextIndex++,
     before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
@@ -491,11 +572,34 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
  * ```
  */
 export function defineSystem(name: string, init: (world: World) => SystemTick): SystemFactory {
-  return { __systemFactory: true, name, init };
+  return { [SYSTEM_FACTORY_BRAND]: true, name, init };
+}
+
+/**
+ * Define a reusable synchronous scheduler condition.
+ *
+ * The initializer runs independently for every system or set attachment before
+ * scheduling begins and again after `resetWorld()`. It may observe world state,
+ * but must not mutate it.
+ *
+ * @param name - Descriptive condition name
+ * @param init - Initializer returning the boolean condition tick
+ * @returns Condition factory for a system or system set
+ *
+ * @example
+ * ```typescript
+ * const gameIsRunning = defineCondition("gameIsRunning", (world) =>
+ *   () => hasResource(world, GameState)
+ * );
+ * addSystem(world, movementSystem, { condition: gameIsRunning });
+ * ```
+ */
+export function defineCondition(name: string, init: (world: World) => ConditionTick): ConditionFactory {
+  return { [CONDITION_FACTORY_BRAND]: true, name, init };
 }
 
 function isSystemFactory(system: SystemRunner | SystemFactory): system is SystemFactory {
-  return typeof system === "object" && system !== null && "__systemFactory" in system;
+  return typeof system === "object" && system !== null && SYSTEM_FACTORY_BRAND in system;
 }
 
 // ============================================================================
@@ -715,9 +819,23 @@ function prepareSystems(world: World): void {
     return;
   }
 
+  // Complete system setup before condition setup so every condition observes
+  // a fully initialized system layer.
   for (const meta of world.systems.byId.values()) {
     if (meta.runner === null) {
       meta.runner = meta.factory!.init(world);
+    }
+  }
+
+  for (const meta of world.systems.byId.values()) {
+    if (meta.conditionFactory !== null && meta.conditionRunner === null) {
+      meta.conditionRunner = meta.conditionFactory.init(world);
+    }
+  }
+
+  for (const meta of world.systemSets.byId.values()) {
+    if (meta.conditionFactory !== null && meta.conditionRunner === null) {
+      meta.conditionRunner = meta.conditionFactory.init(world);
     }
   }
 
@@ -749,13 +867,38 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
   try {
     fireObserverEvent(world, "scheduleStarted", scheduleLabel);
 
-    for (const systemId of order) {
-      world.execution.systemId = systemId;
+    let setResults: Map<SystemSetLabel, boolean> | null = null;
 
+    for (const systemId of order) {
+      const meta = world.systems.byId.get(systemId)!;
+      world.execution.systemId = null;
+
+      if (meta.set !== undefined) {
+        const setMeta = world.systemSets.byId.get(meta.set)!;
+
+        if (setMeta.conditionRunner !== null) {
+          setResults ??= new Map();
+          let passed = setResults.get(meta.set);
+
+          if (passed === undefined) {
+            passed = setMeta.conditionRunner();
+            setResults.set(meta.set, passed);
+          }
+
+          if (!passed) {
+            continue;
+          }
+        }
+      }
+
+      if (meta.conditionRunner !== null && !meta.conditionRunner()) {
+        continue;
+      }
+
+      world.execution.systemId = systemId;
       const systemStart = performance.now();
       fireObserverEvent(world, "systemStarted", systemId, scheduleLabel);
 
-      const meta = world.systems.byId.get(systemId)!;
       const result = meta.runner!(world);
 
       // Await async systems, sync systems pass through unchanged

@@ -716,6 +716,34 @@ addSystem(world, debugOverlay, { after: PhysicsSystems, before: RenderSystems })
 
 A system uses either `schedule` or `set`, not both -- the set inherits its schedule from `addSystemSet`.
 
+#### Conditions
+
+**Conditions** skip systems when shared application state says they should not run. Define a reusable condition with `defineCondition()` and attach it to a system or system set:
+
+```typescript
+import { addSystem, addSystemSet, defineCondition, getResourceValue } from "iris-ecs";
+
+const gameIsPlaying = defineCondition("gameIsPlaying", (world) => {
+  return () => getResourceValue(world, GameState, "playing") === true;
+});
+
+addSystemSet(world, GameplaySystems, { condition: gameIsPlaying });
+addSystem(world, updatePlayer, { set: GameplaySystems });
+addSystem(world, updateEnemies, { set: GameplaySystems });
+addSystem(world, updateAudio, { condition: gameIsPlaying });
+```
+
+A system condition is checked immediately before that system runs. A set condition is checked once per schedule run and shared by every member.
+
+Use `once()` for the first condition tick or `every(ticks)` for world-tick intervals:
+
+```typescript
+import { every, once } from "iris-ecs";
+ 
+addSystem(world, initializeRenderer, { condition: once() });
+addSystem(world, updateAI, { condition: every(10) });
+```
+
 #### Schedules
 
 Systems are grouped into **schedules** -- named execution phases. The default pipeline runs these schedules every frame:
