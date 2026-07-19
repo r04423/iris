@@ -1986,6 +1986,154 @@ describe("Query", () => {
     });
   });
 
+  describe("Pair Topology Change Detection", () => {
+    it("changes but does not re-add a relation wildcard on exclusive replacement", async () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfExclusiveTopology", { exclusive: true });
+      const parent1 = createEntity(world);
+      const parent2 = createEntity(world);
+      const child = createEntity(world);
+      const relationWildcard = pair(ChildOf, Wildcard);
+      const newPair = pair(ChildOf, parent2);
+      const changedCounts: number[] = [];
+      const addedCounts: number[] = [];
+      const newPairAddedCounts: number[] = [];
+
+      addComponent(world, child, pair(ChildOf, parent1));
+
+      addSystem(world, function tracker() {
+        changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+        addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+        newPairAddedCounts.push(collectEntities(world, [added(newPair)]).length);
+      });
+
+      await runOnce(world);
+      addComponent(world, child, newPair);
+      await runOnce(world);
+
+      assert.deepStrictEqual(changedCounts, [1, 1]);
+      assert.deepStrictEqual(addedCounts, [1, 0]);
+      assert.deepStrictEqual(newPairAddedCounts, [0, 1]);
+    });
+
+    it("changes but does not re-add a relation wildcard when adding another target", async () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesAdditionalTargetTopology");
+      const target1 = createEntity(world);
+      const target2 = createEntity(world);
+      const entity = createEntity(world);
+      const relationWildcard = pair(Likes, Wildcard);
+      const changedCounts: number[] = [];
+      const addedCounts: number[] = [];
+
+      addComponent(world, entity, pair(Likes, target1));
+
+      addSystem(world, function tracker() {
+        changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+        addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+      });
+
+      await runOnce(world);
+      addComponent(world, entity, pair(Likes, target2));
+      await runOnce(world);
+
+      assert.deepStrictEqual(changedCounts, [1, 1]);
+      assert.deepStrictEqual(addedCounts, [1, 0]);
+    });
+
+    it("changes surviving relation and target wildcards on partial removal", async () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesPartialRemovalTopology");
+      const Follows = defineRelation("FollowsPartialRemovalTopology");
+      const target1 = createEntity(world);
+      const target2 = createEntity(world);
+      const entity = createEntity(world);
+      const removedPair = pair(Likes, target1);
+      const relationWildcard = pair(Likes, Wildcard);
+      const targetWildcard = pair(Wildcard, target1);
+      const relationChangedCounts: number[] = [];
+      const relationAddedCounts: number[] = [];
+      const targetChangedCounts: number[] = [];
+      const targetAddedCounts: number[] = [];
+
+      addComponent(world, entity, removedPair);
+      addComponent(world, entity, pair(Likes, target2));
+      addComponent(world, entity, pair(Follows, target1));
+
+      addSystem(world, function tracker() {
+        relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+        relationAddedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+        targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+        targetAddedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
+      });
+
+      await runOnce(world);
+      removeComponent(world, entity, removedPair);
+      await runOnce(world);
+
+      assert.deepStrictEqual(relationChangedCounts, [1, 1]);
+      assert.deepStrictEqual(relationAddedCounts, [1, 0]);
+      assert.deepStrictEqual(targetChangedCounts, [1, 1]);
+      assert.deepStrictEqual(targetAddedCounts, [1, 0]);
+    });
+
+    it("changes a surviving target wildcard on exclusive replacement", async () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfSharedOldTargetTopology", { exclusive: true });
+      const Likes = defineRelation("LikesSharedOldTargetTopology");
+      const parent1 = createEntity(world);
+      const parent2 = createEntity(world);
+      const child = createEntity(world);
+      const targetWildcard = pair(Wildcard, parent1);
+      const changedCounts: number[] = [];
+      const addedCounts: number[] = [];
+
+      addComponent(world, child, pair(ChildOf, parent1));
+      addComponent(world, child, pair(Likes, parent1));
+
+      addSystem(world, function tracker() {
+        changedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+        addedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
+      });
+
+      await runOnce(world);
+      addComponent(world, child, pair(ChildOf, parent2));
+      await runOnce(world);
+
+      assert.deepStrictEqual(changedCounts, [1, 1]);
+      assert.deepStrictEqual(addedCounts, [1, 0]);
+    });
+
+    it("does not treat pair payload changes as topology changes", async () => {
+      const world = createWorld();
+      const Scores = defineRelation("ScoresPayloadTopology", { schema: { value: Type.i32() } });
+      const target = createEntity(world);
+      const entity = createEntity(world);
+      const score = pair(Scores, target);
+      const relationWildcard = pair(Scores, Wildcard);
+      const targetWildcard = pair(Wildcard, target);
+      const pairChangedCounts: number[] = [];
+      const relationChangedCounts: number[] = [];
+      const targetChangedCounts: number[] = [];
+
+      addComponent(world, entity, score, { value: 1 });
+
+      addSystem(world, function tracker() {
+        pairChangedCounts.push(collectEntities(world, [changed(score)]).length);
+        relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+        targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+      });
+
+      await runOnce(world);
+      setComponentValue(world, entity, score, "value", 2);
+      await runOnce(world);
+
+      assert.deepStrictEqual(pairChangedCounts, [1, 1]);
+      assert.deepStrictEqual(relationChangedCounts, [1, 0]);
+      assert.deepStrictEqual(targetChangedCounts, [1, 0]);
+    });
+  });
+
   describe("Change Detection - Combined Modifiers", () => {
     it("combines added() with regular component requirements", async () => {
       const world = createWorld();

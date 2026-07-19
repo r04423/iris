@@ -5,6 +5,7 @@ import type { EntityId, Pair } from "./encoding.js";
 import { isPair, PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidState } from "./error.js";
+import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets, pair } from "./relation.js";
 import { Type } from "./schema.js";
@@ -789,25 +790,45 @@ describe("Relation", () => {
       assert.ok(hasComponent(world, child, pair(ChildOf, parent)));
     });
 
-    it("removes old pair and adds new pair atomically during exclusive replacement", () => {
+    it("commits exclusive replacement before removal observers run", () => {
       const world = createWorld();
-      const ChildOf = defineRelation("ChildOfAtomic", { exclusive: true });
+      const ChildOf = defineRelation("ChildOfAtomic", {
+        schema: { priority: Type.i8() },
+        exclusive: true,
+      });
       const parent1 = createEntity(world);
       const parent2 = createEntity(world);
       const child = createEntity(world);
+      const oldPair = pair(ChildOf, parent1);
+      const newPair = pair(ChildOf, parent2);
+      const observerError = new Error("removal observer failed");
+      let observed = false;
 
-      addComponent(world, child, pair(ChildOf, parent1));
+      addComponent(world, child, oldPair, { priority: 1 });
 
-      // After replacement, entity should be in consistent state
-      addComponent(world, child, pair(ChildOf, parent2));
+      registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
+        if (componentId !== oldPair || entityId !== child) {
+          return;
+        }
 
-      // Verify final state is consistent
-      const targets = getRelationTargets(world, child, ChildOf);
-      assert.strictEqual(targets.length, 1, "Should have exactly one target");
-      assert.strictEqual(targets[0], parent2, "Should be new target");
+        observed = true;
+        assert.strictEqual(hasComponent(world, child, oldPair), false);
+        assert.strictEqual(hasComponent(world, child, newPair), true);
+        assert.deepStrictEqual(getRelationTargets(world, child, ChildOf), [parent2]);
+        assert.strictEqual(getComponentValue(world, child, newPair, "priority"), 2);
+        throw observerError;
+      });
 
-      // Entity should be alive and queryable
-      assert.ok(isEntityAlive(world, child));
+      assert.throws(
+        () => addComponent(world, child, newPair, { priority: 2 }),
+        (error: unknown) => error === observerError
+      );
+
+      assert.strictEqual(observed, true);
+      assert.strictEqual(hasComponent(world, child, oldPair), false);
+      assert.strictEqual(hasComponent(world, child, newPair), true);
+      assert.deepStrictEqual(getRelationTargets(world, child, ChildOf), [parent2]);
+      assert.strictEqual(getComponentValue(world, child, newPair, "priority"), 2);
     });
 
     it("cleans up wildcards correctly during exclusive replacement", () => {
