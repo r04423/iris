@@ -601,7 +601,7 @@ Queries match archetypes where all required components are present and no exclud
 
 A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
-Use `defineSystem()` to create systems with init / tick separation. The init function runs before the first execution and again after `resetWorld()` -- use it to cache queries, cache action getters, and set up local state for the current world contents. It must be safe to repeat. The returned tick function runs every frame.
+Use `defineSystem()` to create systems with init / tick separation. The init function runs before the first execution and again after `resetWorld()` -- use each invocation to cache queries, cache action getters, and set up fresh local state for the current world contents. The returned tick function runs every frame.
 
 Systems are registered with `addSystem()` and executed automatically when the world runs.
 

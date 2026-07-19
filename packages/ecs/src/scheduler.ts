@@ -943,6 +943,7 @@ async function runShutdown(world: World): Promise<void> {
 
   let frameFailed = false;
   let frameError: unknown;
+  let shutdownCompleted = false;
 
   try {
     try {
@@ -958,6 +959,8 @@ async function runShutdown(world: World): Promise<void> {
 
       world.execution.shutdownRan = true;
       world.execution.startupRan = false;
+
+      shutdownCompleted = true;
     } catch (shutdownError) {
       if (frameFailed) {
         throw frameError;
@@ -970,7 +973,9 @@ async function runShutdown(world: World): Promise<void> {
       throw frameError;
     }
   } finally {
-    world.execution.shutdownPromise = null;
+    if (shutdownCompleted) {
+      world.execution.shutdownPromise = null;
+    }
   }
 }
 

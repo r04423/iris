@@ -1409,7 +1409,7 @@ describe("Scheduler", () => {
       await assert.rejects(stop(world), (error) => error === frameError);
     });
 
-    it("retries shutdown after failure", async () => {
+    it("retains a failed shutdown without retrying it", async () => {
       const world = createWorld();
       const error = new Error("shutdown failed");
       let attempts = 0;
@@ -1417,23 +1417,25 @@ describe("Scheduler", () => {
         world,
         function shutdownSys() {
           attempts++;
-          if (attempts === 1) {
-            throw error;
-          }
+          throw error;
         },
         { schedule: Shutdown }
       );
 
       const firstStop = stop(world);
       const secondStop = stop(world);
+      assert.strictEqual(secondStop, firstStop);
+
       await Promise.all([
         assert.rejects(firstStop, (actual) => actual === error),
         assert.rejects(secondStop, (actual) => actual === error),
       ]);
       assert.strictEqual(attempts, 1);
-      await stop(world);
 
-      assert.strictEqual(attempts, 2);
+      const thirdStop = stop(world);
+      assert.strictEqual(thirdStop, firstStop);
+      await assert.rejects(thirdStop, (actual) => actual === error);
+      assert.strictEqual(attempts, 1);
     });
   });
 
