@@ -37,16 +37,25 @@ const NameRegistry = defineComponent("NameRegistry", {
 // ============================================================================
 
 /**
+ * Creates a fresh name registry resource.
+ * @param world - World instance to initialize
+ * @internal
+ */
+export function resetNameSystem(world: World): void {
+  addResource(world, NameRegistry, {
+    nameToEntity: new Map(),
+    entityToName: new Map(),
+  });
+}
+
+/**
  * Initializes the name system for a world by setting up the dual-index registry
  * and observer callbacks that keep name mappings synchronized with entity lifecycle.
  * Called automatically by createWorld().
  * @internal
  */
 export function initNameSystem(world: World): void {
-  addResource(world, NameRegistry, {
-    nameToEntity: new Map(),
-    entityToName: new Map(),
-  });
+  resetNameSystem(world);
 
   // Clean up registry when Name component is removed from an entity
   registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
@@ -116,14 +125,6 @@ export function initNameSystem(world: World): void {
 
     nameToEntity.delete(name);
     entityToName.delete(entityId);
-  });
-
-  // Recreate fresh registry when world is reset
-  registerObserverCallback(world, "worldReset", () => {
-    addResource(world, NameRegistry, {
-      nameToEntity: new Map(),
-      entityToName: new Map(),
-    });
   });
 }
 

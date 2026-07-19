@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { addComponent, hasComponent } from "./component.js";
 import { createEntity } from "./entity.js";
+import { IrisInvalidState } from "./error.js";
 import { defineEvent, emitEvent } from "./event.js";
 import { lookupByName, setName } from "./name.js";
 import { registerObserverCallback } from "./observer.js";
@@ -16,6 +17,7 @@ import {
   Last,
   PostUpdate,
   PreUpdate,
+  runOnce,
   Update,
 } from "./scheduler.js";
 import { Type } from "./schema.js";
@@ -199,6 +201,40 @@ describe("World", () => {
       resetWorld(world);
 
       assert.strictEqual(called, true);
+    });
+
+    it("restores name lookup before firing worldReset", () => {
+      const world = createWorld();
+
+      registerObserverCallback(world, "worldReset", () => {
+        const entity = createEntity(world);
+        setName(world, entity, "reset-entity");
+      });
+
+      resetWorld(world);
+
+      assert.notStrictEqual(lookupByName(world, "reset-entity"), undefined);
+    });
+
+    it("rejects reset while a frame is executing", async () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      addSystem(world, async function waitingSystem() {
+        await gate;
+      });
+
+      const frame = runOnce(world);
+
+      assert.throws(() => resetWorld(world), IrisInvalidState);
+      assert.strictEqual(world.entities.byId.has(entity), true);
+
+      release();
+      await frame;
     });
 
     it("can create entities after reset", () => {

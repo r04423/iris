@@ -3,10 +3,11 @@ import type { Archetype } from "./archetype.js";
 import { createArchetype, registerArchetype } from "./archetype.js";
 import type { Component, EntityId, Relation, Tag } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
+import { assert, IrisInvalidState } from "./error.js";
 import type { EventId, EventQueueMeta } from "./event.js";
 import type { FilterMeta } from "./filters.js";
 import { initFilterDispatch } from "./filters.js";
-import { initNameSystem } from "./name.js";
+import { initNameSystem, resetNameSystem } from "./name.js";
 import type { EventType, ObserverMeta } from "./observer.js";
 import { fireObserverEvent } from "./observer.js";
 import type { QueryMeta, QueryModifier, QueryTrieNode } from "./query.js";
@@ -337,6 +338,7 @@ export function createWorld(): World {
  * Fires the "worldReset" observer event after reset completes.
  *
  * @param world - World instance to reset
+ * @throws {IrisInvalidState} If scheduler execution is active
  *
  * @example
  * ```typescript
@@ -346,6 +348,12 @@ export function createWorld(): World {
  * ```
  */
 export function resetWorld(world: World): void {
+  assert(
+    !world.execution.running && world.execution.framePromise === null && world.execution.shutdownPromise === null,
+    IrisInvalidState,
+    { message: "Cannot reset world while scheduler execution is active" }
+  );
+
   world.revision = 1;
 
   // 1. Clear filters and reverse index
@@ -368,12 +376,7 @@ export function resetWorld(world: World): void {
   world.entities.nextId = 1;
   world.entities.generations.clear();
 
-  // 5. Create new root archetype
-  const newRoot = createArchetype([], new Map());
-  world.archetypes.root = newRoot;
-  registerArchetype(world, newRoot);
-
-  // 6. Reset execution state
+  // 5. Reset execution state
   world.execution.tick = 0;
   world.execution.scheduleLabel = null;
   world.execution.systemId = null;
@@ -384,7 +387,7 @@ export function resetWorld(world: World): void {
   world.execution.startupRan = false;
   world.execution.shutdownRan = false;
 
-  // 7. Reset schedule state (preserve pipeline configuration)
+  // 6. Reset schedule state (preserve pipeline configuration)
   for (const meta of world.systems.byId.values()) {
     if (meta.factory !== null) {
       meta.runner = null;
@@ -393,10 +396,16 @@ export function resetWorld(world: World): void {
   world.schedules.byId.clear();
   world.schedules.dirty = true;
 
-  // 8. Clear caches
+  // 7. Clear caches
   world.events.byId.clear();
   world.actions.byInitializer.clear();
 
-  // 9. Fire worldReset event (subsystems handle their own reset via this observer)
+  // 8. Recreate root archetype and internal resources
+  const newRoot = createArchetype([], new Map());
+  world.archetypes.root = newRoot;
+  registerArchetype(world, newRoot);
+  resetNameSystem(world);
+
+  // 9. Fire worldReset event
   fireObserverEvent(world, "worldReset", world);
 }
