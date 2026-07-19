@@ -16,7 +16,7 @@ import {
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
-import { NotFound } from "./error.js";
+import { IrisNotFound } from "./error.js";
 import { changed, collectEntities, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
@@ -99,7 +99,7 @@ describe("Component", () => {
       // Should throw when accessing destroyed entity (fail-fast)
       assert.throws(() => {
         addComponent(world, entity1, entity2);
-      }, NotFound);
+      }, IrisNotFound);
     });
   });
 
@@ -271,7 +271,7 @@ describe("Component", () => {
       // Should throw when accessing destroyed entity (fail-fast)
       assert.throws(() => {
         removeComponent(world, entity1, entity2);
-      }, NotFound);
+      }, IrisNotFound);
     });
   });
 
@@ -305,7 +305,7 @@ describe("Component", () => {
       // Should throw when accessing destroyed entity (fail-fast)
       assert.throws(() => {
         hasComponent(world, entity1, entity2);
-      }, NotFound);
+      }, IrisNotFound);
     });
 
     it("throws for never-created entities (fail-fast)", () => {
@@ -468,7 +468,7 @@ describe("Component", () => {
       // Checking hasComponent on destroyed entity throws (fail-fast)
       assert.throws(() => {
         hasComponent(world, entity2, component);
-      }, NotFound);
+      }, IrisNotFound);
 
       // Add back to entity1
       addComponent(world, entity1, component);

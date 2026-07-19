@@ -1,5 +1,5 @@
 import type { World } from "iris-ecs";
-import { assert, InvalidState, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
+import { assert, IrisInvalidState, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
 import { createContext, useContext, useEffect, useState } from "react";
 
 // ============================================================================
@@ -67,7 +67,7 @@ export function WorldProvider(props: { world: World; children: React.ReactNode }
  * Returns the Iris ECS world from the nearest `WorldProvider`.
  *
  * @returns The world instance
- * @throws {InvalidState} If called outside a `WorldProvider`
+ * @throws {IrisInvalidState} If called outside a `WorldProvider`
  *
  * @example
  * ```tsx
@@ -82,7 +82,7 @@ export function WorldProvider(props: { world: World; children: React.ReactNode }
 export function useWorld(): World {
   const world = useContext(WorldContext);
 
-  assert(world !== null, InvalidState, { message: "useWorld must be used within a WorldProvider" });
+  assert(world !== null, IrisInvalidState, { message: "useWorld must be used within a WorldProvider" });
 
   return world;
 }

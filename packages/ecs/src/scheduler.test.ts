@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, getComponentValue } from "./component.js";
 import { createEntity } from "./entity.js";
-import { Duplicate, InvalidArgument, InvalidState, LimitExceeded, NotFound } from "./error.js";
+import { IrisDuplicate, IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { ensureQuery, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
@@ -139,48 +139,48 @@ describe("Scheduler", () => {
   });
 
   describe("Registration Validation", () => {
-    it("throws InvalidArgument for anonymous functions", () => {
+    it("throws IrisInvalidArgument for anonymous functions", () => {
       const world = createWorld();
 
-      assert.throws(() => addSystem(world, () => {}), InvalidArgument);
+      assert.throws(() => addSystem(world, () => {}), IrisInvalidArgument);
     });
 
-    it("throws InvalidArgument for anonymous function expression", () => {
+    it("throws IrisInvalidArgument for anonymous function expression", () => {
       const world = createWorld();
 
       // biome-ignore lint/complexity/useArrowFunction: testing anonymous function expression specifically
       const anonymous = function () {};
 
-      assert.throws(() => addSystem(world, anonymous), InvalidArgument);
+      assert.throws(() => addSystem(world, anonymous), IrisInvalidArgument);
     });
 
-    it("throws Duplicate for duplicate system name", () => {
+    it("throws IrisDuplicate for duplicate system name", () => {
       const world = createWorld();
 
       function physicsSystem() {}
       addSystem(world, physicsSystem);
 
-      assert.throws(() => addSystem(world, physicsSystem), Duplicate);
+      assert.throws(() => addSystem(world, physicsSystem), IrisDuplicate);
     });
 
-    it("throws Duplicate when system name matches a system set", () => {
+    it("throws IrisDuplicate when system name matches a system set", () => {
       const world = createWorld();
       const Shared = defineSystemSet("shared");
       addSystemSet(world, Shared, { schedule: PostUpdate });
 
       assert.throws(
         () => addSystem(world, () => {}, { name: "shared" }),
-        (error: unknown) => error instanceof Duplicate && error.resource === "SystemSet" && error.id === "shared"
+        (error: unknown) => error instanceof IrisDuplicate && error.resource === "SystemSet" && error.id === "shared"
       );
       assert.strictEqual(world.systems.byId.has("shared"), false);
     });
 
-    it("throws InvalidArgument for factory with empty name", () => {
+    it("throws IrisInvalidArgument for factory with empty name", () => {
       const world = createWorld();
 
       const factory = defineSystem("", () => () => {});
 
-      assert.throws(() => addSystem(world, factory), InvalidArgument);
+      assert.throws(() => addSystem(world, factory), IrisInvalidArgument);
     });
   });
 
@@ -309,7 +309,7 @@ describe("Scheduler", () => {
       addSystem(world, a, { before: b });
       addSystem(world, b, { before: a });
 
-      await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
+      await assert.rejects(runOnce(world), (err) => err instanceof IrisInvalidState);
     });
 
     it("throws on unknown system reference in before or after", async () => {
@@ -318,12 +318,12 @@ describe("Scheduler", () => {
       const world1 = createWorld();
       function system1() {}
       addSystem(world1, system1, { after: nonexistent });
-      await assert.rejects(runOnce(world1), (err) => err instanceof NotFound);
+      await assert.rejects(runOnce(world1), (err) => err instanceof IrisNotFound);
 
       const world2 = createWorld();
       function system2() {}
       addSystem(world2, system2, { before: nonexistent });
-      await assert.rejects(runOnce(world2), (err) => err instanceof NotFound);
+      await assert.rejects(runOnce(world2), (err) => err instanceof IrisNotFound);
     });
 
     it("throws on 3-node transitive cycle", async () => {
@@ -337,10 +337,10 @@ describe("Scheduler", () => {
       addSystem(world, b, { before: c });
       addSystem(world, c, { before: a });
 
-      await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
+      await assert.rejects(runOnce(world), (err) => err instanceof IrisInvalidState);
     });
 
-    it("throws NotFound for cross-schedule reference", async () => {
+    it("throws IrisNotFound for cross-schedule reference", async () => {
       const world = createWorld();
 
       const postSys = defineSystem("postSys", () => () => {});
@@ -348,7 +348,7 @@ describe("Scheduler", () => {
 
       addSystem(world, function updateSys() {}, { before: postSys });
 
-      await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+      await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
     });
   });
 
@@ -576,12 +576,12 @@ describe("Scheduler", () => {
       const Unknown = defineSchedule("Unknown");
 
       // Unknown anchor
-      assert.throws(() => insertScheduleBefore(world, Physics, Unknown), NotFound);
-      assert.throws(() => insertScheduleAfter(world, Physics, Unknown), NotFound);
+      assert.throws(() => insertScheduleBefore(world, Physics, Unknown), IrisNotFound);
+      assert.throws(() => insertScheduleAfter(world, Physics, Unknown), IrisNotFound);
 
-      // Duplicate schedule
-      assert.throws(() => insertScheduleBefore(world, First, Update), Duplicate);
-      assert.throws(() => insertScheduleAfter(world, First, Update), Duplicate);
+      // IrisDuplicate schedule
+      assert.throws(() => insertScheduleBefore(world, First, Update), IrisDuplicate);
+      assert.throws(() => insertScheduleAfter(world, First, Update), IrisDuplicate);
     });
 
     it("marks pipeline dirty on insert", async () => {
@@ -684,7 +684,7 @@ describe("Scheduler", () => {
       const frame = runOnce(world);
       await start;
 
-      await assert.rejects(runOnce(world), InvalidState);
+      await assert.rejects(runOnce(world), IrisInvalidState);
       assert.strictEqual(world.execution.tick, 1);
 
       release();
@@ -700,7 +700,7 @@ describe("Scheduler", () => {
         await runOnce(world);
       });
 
-      await assert.rejects(runOnce(world), InvalidState);
+      await assert.rejects(runOnce(world), IrisInvalidState);
       assert.strictEqual(world.execution.framePromise, null);
     });
 
@@ -714,7 +714,7 @@ describe("Scheduler", () => {
         { schedule: Startup }
       );
 
-      await assert.rejects(runOnce(world), InvalidState);
+      await assert.rejects(runOnce(world), IrisInvalidState);
     });
 
     it("rejects manual frames while the animation frame loop is running", async () => {
@@ -724,7 +724,7 @@ describe("Scheduler", () => {
         const world = createWorld();
         run(world);
 
-        await assert.rejects(runOnce(world), InvalidState);
+        await assert.rejects(runOnce(world), IrisInvalidState);
         assert.strictEqual(world.execution.tick, 0);
         await suspend(world);
       } finally {
@@ -990,7 +990,7 @@ describe("Scheduler", () => {
       assert.strictEqual(failed.execution.tick, 1);
 
       empty.execution.tick = Number.MAX_SAFE_INTEGER;
-      await assert.rejects(runOnce(empty), LimitExceeded);
+      await assert.rejects(runOnce(empty), IrisLimitExceeded);
       assert.strictEqual(empty.execution.tick, Number.MAX_SAFE_INTEGER);
     });
 
@@ -1214,7 +1214,7 @@ describe("Scheduler", () => {
       const stopping = stop(world);
       await start;
 
-      await assert.rejects(runOnce(world), InvalidState);
+      await assert.rejects(runOnce(world), IrisInvalidState);
       assert.strictEqual(world.execution.tick, 0);
 
       release();
@@ -1857,21 +1857,21 @@ describe("Scheduler", () => {
         assert.strictEqual(world.systemSets.byId.get(PhysicsSet)?.schedule, PostUpdate);
       });
 
-      it("throws Duplicate for duplicate set label", () => {
+      it("throws IrisDuplicate for duplicate set label", () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
-        assert.throws(() => addSystemSet(world, PhysicsSet), Duplicate);
+        assert.throws(() => addSystemSet(world, PhysicsSet), IrisDuplicate);
       });
 
-      it("throws Duplicate when set label matches a system name", () => {
+      it("throws IrisDuplicate when set label matches a system name", () => {
         const world = createWorld();
         addSystem(world, function shared() {}, { schedule: PostUpdate });
         const Shared = defineSystemSet("shared");
 
         assert.throws(
           () => addSystemSet(world, Shared),
-          (error: unknown) => error instanceof Duplicate && error.resource === "System" && error.id === "shared"
+          (error: unknown) => error instanceof IrisDuplicate && error.resource === "System" && error.id === "shared"
         );
         assert.strictEqual(world.systemSets.byId.has(Shared), false);
       });
@@ -1909,12 +1909,12 @@ describe("Scheduler", () => {
         assert.strictEqual(world.systems.byId.get("sys")?.schedule, PostUpdate);
       });
 
-      it("throws NotFound when set is not registered", () => {
+      it("throws IrisNotFound when set is not registered", () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
 
         const sys = defineSystem("sys", () => () => {});
-        assert.throws(() => addSystem(world, sys, { set: PhysicsSet }), NotFound);
+        assert.throws(() => addSystem(world, sys, { set: PhysicsSet }), IrisNotFound);
       });
     });
 
@@ -2236,7 +2236,7 @@ describe("Scheduler", () => {
         assert.deepStrictEqual(calls, ["apply", "detect", "resolve"]);
       });
 
-      it("circular dependency through sets throws InvalidState", async () => {
+      it("circular dependency through sets throws IrisInvalidState", async () => {
         const world = createWorld();
 
         const SetA = defineSystemSet("SetA");
@@ -2255,28 +2255,28 @@ describe("Scheduler", () => {
           { set: SetB }
         );
 
-        await assert.rejects(runOnce(world), (err) => err instanceof InvalidState);
+        await assert.rejects(runOnce(world), (err) => err instanceof IrisInvalidState);
       });
 
-      it("unknown set in before throws NotFound", async () => {
+      it("unknown set in before throws IrisNotFound", async () => {
         const world = createWorld();
         const UnknownSet = defineSystemSet("UnknownSet");
 
         addSystem(world, function sys() {}, { before: UnknownSet });
 
-        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+        await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
 
-      it("unknown set in after throws NotFound", async () => {
+      it("unknown set in after throws IrisNotFound", async () => {
         const world = createWorld();
         const UnknownSet = defineSystemSet("UnknownSet");
 
         addSystem(world, function sys() {}, { after: UnknownSet });
 
-        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+        await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
 
-      it("set referencing unknown target in before throws NotFound", async () => {
+      it("set referencing unknown target in before throws IrisNotFound", async () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet, { before: "nonexistent" });
@@ -2287,10 +2287,10 @@ describe("Scheduler", () => {
           { set: PhysicsSet }
         );
 
-        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+        await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
 
-      it("set referencing unknown target in after throws NotFound", async () => {
+      it("set referencing unknown target in after throws IrisNotFound", async () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet, { after: "nonexistent" });
@@ -2301,7 +2301,7 @@ describe("Scheduler", () => {
           { set: PhysicsSet }
         );
 
-        await assert.rejects(runOnce(world), (err) => err instanceof NotFound);
+        await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
 
       it("mixed standalone and set systems order correctly", async () => {

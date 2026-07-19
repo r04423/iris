@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, hasComponent, setComponentValue } from "./component.js";
 import { createEntity, destroyEntity } from "./entity.js";
-import { Duplicate, InvalidArgument } from "./error.js";
+import { IrisDuplicate, IrisInvalidArgument } from "./error.js";
 import { getName, lookupByName, Name, removeName, setName } from "./name.js";
 import { defineComponent, defineTag } from "./registry.js";
 import { Type } from "./schema.js";
@@ -36,7 +36,7 @@ describe("Name", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
-      assert.throws(() => setName(world, entity, ""), InvalidArgument);
+      assert.throws(() => setName(world, entity, ""), IrisInvalidArgument);
       assert.strictEqual(getName(world, entity), undefined);
       assert.strictEqual(hasComponent(world, entity, Name), false);
     });
@@ -48,7 +48,7 @@ describe("Name", () => {
 
       setName(world, entity1, "player");
 
-      assert.throws(() => setName(world, entity2, "player"), Duplicate);
+      assert.throws(() => setName(world, entity2, "player"), IrisDuplicate);
       assert.strictEqual(getName(world, entity2), undefined);
       assert.strictEqual(hasComponent(world, entity2, Name), false);
       assert.strictEqual(lookupByName(world, "player"), entity1);
@@ -148,8 +148,8 @@ describe("Name", () => {
       const duplicate = createEntity(world);
       setName(world, winner, "shared");
 
-      assert.throws(() => addComponent(world, empty, Name, { value: "" }), InvalidArgument);
-      assert.throws(() => addComponent(world, duplicate, Name, { value: "shared" }), Duplicate);
+      assert.throws(() => addComponent(world, empty, Name, { value: "" }), IrisInvalidArgument);
+      assert.throws(() => addComponent(world, duplicate, Name, { value: "shared" }), IrisDuplicate);
 
       assert.strictEqual(hasComponent(world, empty, Name), false);
       assert.strictEqual(hasComponent(world, duplicate, Name), false);
@@ -163,11 +163,11 @@ describe("Name", () => {
       setName(world, winner, "shared");
       setName(world, entity, "original");
 
-      assert.throws(() => setComponentValue(world, entity, Name, "value", ""), InvalidArgument);
+      assert.throws(() => setComponentValue(world, entity, Name, "value", ""), IrisInvalidArgument);
       assert.strictEqual(getName(world, entity), "original");
       assert.strictEqual(lookupByName(world, "original"), entity);
 
-      assert.throws(() => setComponentValue(world, entity, Name, "value", "shared"), Duplicate);
+      assert.throws(() => setComponentValue(world, entity, Name, "value", "shared"), IrisDuplicate);
       assert.strictEqual(getName(world, entity), "original");
       assert.strictEqual(lookupByName(world, "original"), entity);
       assert.strictEqual(lookupByName(world, "shared"), winner);

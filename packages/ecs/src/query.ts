@@ -1,6 +1,6 @@
 import type { FieldColumnsOf } from "./archetype.js";
 import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding.js";
-import { assert, InvalidArgument, LimitExceeded } from "./error.js";
+import { assert, IrisInvalidArgument, IrisLimitExceeded } from "./error.js";
 import type { FilterMeta, FilterTerms } from "./filters.js";
 import { ensureFilter } from "./filters.js";
 import type { World } from "./world.js";
@@ -176,7 +176,7 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
  * const moving = collectEntities(world, [Position, or(Velocity, Acceleration)]);
  */
 export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[number]> {
-  assert(componentIds.length > 0, InvalidArgument, { expected: "at least one component in or()" });
+  assert(componentIds.length > 0, IrisInvalidArgument, { expected: "at least one component in or()" });
 
   return { type: "or", componentIds };
 }
@@ -285,7 +285,7 @@ export function hashQuery(
  * @param world - World instance
  * @param terms - Components and modifiers
  * @returns Query with the requested component order
- * @throws {InvalidArgument} If no included components (query must match something)
+ * @throws {IrisInvalidArgument} If no included components (query must match something)
  *
  * @example
  * const query = cacheQuery(world, [Position, Velocity, not(Dead)]);
@@ -326,7 +326,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   // Filter must include added/changed components since they must be present on entity
   const filterInclude = include.concat(added, changed);
 
-  assert(filterInclude.length > 0 || orGroups.length > 0, InvalidArgument, {
+  assert(filterInclude.length > 0 || orGroups.length > 0, IrisInvalidArgument, {
     expected: "at least one component in query",
   });
 
@@ -393,7 +393,7 @@ function buildQueryFilters(
     branches = next;
   }
 
-  assert(branches.length <= MAX_QUERY_BRANCHES, LimitExceeded, {
+  assert(branches.length <= MAX_QUERY_BRANCHES, IrisLimitExceeded, {
     resource: "Query filter branches",
     max: MAX_QUERY_BRANCHES,
   });
@@ -558,7 +558,7 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
   const boundary = world.revision;
   const lastRevision = queryMeta.lastRevision.get(systemId) ?? 0;
 
-  assert(boundary < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+  assert(boundary < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
     resource: "World revision",
     max: Number.MAX_SAFE_INTEGER,
   });
@@ -793,7 +793,7 @@ export function queryColumns(
   const query = resolveQuery(world, termsOrQuery);
   const queryMeta = query.meta;
 
-  assert(queryMeta.added.length === 0 && queryMeta.changed.length === 0, InvalidArgument, {
+  assert(queryMeta.added.length === 0 && queryMeta.changed.length === 0, IrisInvalidArgument, {
     expected: "queryColumns does not support added() or changed() modifiers",
   });
 

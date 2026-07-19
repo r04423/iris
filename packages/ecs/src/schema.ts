@@ -1,4 +1,4 @@
-import { assert, InvalidArgument } from "./error.js";
+import { assert, IrisInvalidArgument } from "./error.js";
 
 // ============================================================================
 // Type Definitions
@@ -124,7 +124,7 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
       return { kind: "typed", arrayConstructor: ArrayCtor, typeName: "number" };
     }
 
-    assert(size >= 2 && size <= 16, InvalidArgument, {
+    assert(size >= 2 && size <= 16, IrisInvalidArgument, {
       expected: "vector size between 2 and 16",
       actual: String(size),
     });

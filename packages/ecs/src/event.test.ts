@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { LimitExceeded } from "./error.js";
+import { IrisLimitExceeded } from "./error.js";
 import {
   clearEvents,
   collectEvents,
@@ -541,7 +541,7 @@ describe("Event", () => {
         const queue = world.events.byId.get(Event.id)!;
         const cursor = queue.lastRevision.get("reader");
         world.revision = Number.MAX_SAFE_INTEGER;
-        assert.throws(() => readEvents(world, Event, () => {}), LimitExceeded);
+        assert.throws(() => readEvents(world, Event, () => {}), IrisLimitExceeded);
         assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
         assert.strictEqual(queue.lastRevision.get("reader"), cursor);
       });

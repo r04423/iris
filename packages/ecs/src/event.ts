@@ -1,4 +1,4 @@
-import { assert, LimitExceeded } from "./error.js";
+import { assert, IrisLimitExceeded } from "./error.js";
 import type { Schema, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -265,7 +265,7 @@ export function emitEvent<S extends EventSchema>(
 function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: string, boundary: number): number {
   const previous = queue.lastRevision.get(systemId) ?? 0;
 
-  assert(boundary < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+  assert(boundary < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
     resource: "World revision",
     max: Number.MAX_SAFE_INTEGER,
   });

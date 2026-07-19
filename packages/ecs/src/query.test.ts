@@ -4,7 +4,7 @@ import { createAndRegisterArchetype } from "./archetype.js";
 import { addComponent, getComponentValue, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
-import { InvalidArgument, InvalidState, LimitExceeded } from "./error.js";
+import { IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded } from "./error.js";
 import { hashFilterTerms } from "./filters.js";
 import type { OrModifier } from "./query.js";
 import {
@@ -278,7 +278,7 @@ describe("Query", () => {
       // Raw number without type bits is invalid
       assert.throws(() => {
         collectEntities(world, [999 as EntityId]);
-      }, InvalidState);
+      }, IrisInvalidState);
     });
   });
 
@@ -604,7 +604,7 @@ describe("Query", () => {
     it("throws when query has no components", () => {
       const world = createWorld();
 
-      assert.throws(() => ensureQuery(world, []), InvalidArgument);
+      assert.throws(() => ensureQuery(world, []), IrisInvalidArgument);
     });
   });
 
@@ -801,7 +801,7 @@ describe("Query", () => {
       const Dead = defineTag("ParametricInvalidDead");
       const invalid = cacheQuery(world, (_target: EntityId) => [not(Dead)]);
 
-      assert.throws(() => invalid(createEntity(world)), InvalidArgument);
+      assert.throws(() => invalid(createEntity(world)), IrisInvalidArgument);
     });
   });
 
@@ -1195,7 +1195,7 @@ describe("Query", () => {
     });
 
     it("throws for empty or()", () => {
-      assert.throws(() => or(), InvalidArgument);
+      assert.throws(() => or(), IrisInvalidArgument);
     });
 
     it("throws when branch expansion exceeds the limit", () => {
@@ -1207,7 +1207,7 @@ describe("Query", () => {
         groups.push(or(createEntity(world), createEntity(world)));
       }
 
-      assert.throws(() => ensureQuery(world, groups), LimitExceeded);
+      assert.throws(() => ensureQuery(world, groups), IrisLimitExceeded);
     });
   });
 
@@ -2434,7 +2434,7 @@ describe("Query", () => {
       addSystem(world, function reader() {
         const cursor = query.meta.lastRevision.get("reader");
         world.revision = Number.MAX_SAFE_INTEGER;
-        assert.throws(() => collectEntities(world, query), LimitExceeded);
+        assert.throws(() => collectEntities(world, query), IrisLimitExceeded);
         assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
         assert.strictEqual(query.meta.lastRevision.get("reader"), cursor);
       });

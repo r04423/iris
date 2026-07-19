@@ -7,7 +7,14 @@ import {
   removeNode as removeDagNode,
   topologicalSort,
 } from "./directed-acyclic-graph.js";
-import { assert, Duplicate, InvalidArgument, InvalidState, LimitExceeded, NotFound } from "./error.js";
+import {
+  assert,
+  IrisDuplicate,
+  IrisInvalidArgument,
+  IrisInvalidState,
+  IrisLimitExceeded,
+  IrisNotFound,
+} from "./error.js";
 import { flushEvents } from "./event.js";
 import { fireObserverEvent } from "./observer.js";
 import type { World } from "./world.js";
@@ -333,8 +340,8 @@ export function defineSystemSet(name: string): SystemSetLabel {
  * ```
  */
 export function addSystemSet(world: World, set: SystemSetLabel, options?: SystemSetOptions): void {
-  assert(!world.systemSets.byId.has(set), Duplicate, { resource: "SystemSet", id: set });
-  assert(!world.systems.byId.has(set), Duplicate, { resource: "System", id: set });
+  assert(!world.systemSets.byId.has(set), IrisDuplicate, { resource: "SystemSet", id: set });
+  assert(!world.systems.byId.has(set), IrisDuplicate, { resource: "System", id: set });
 
   const before = options?.before;
   const after = options?.after;
@@ -400,15 +407,15 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
     name = options?.name ?? system.name;
   }
 
-  assert(name && name !== "anonymous", InvalidArgument, { expected: "named system function or name option" });
-  assert(!world.systems.byId.has(name), Duplicate, { resource: "System", id: name });
-  assert(!world.systemSets.byId.has(name as SystemSetLabel), Duplicate, { resource: "SystemSet", id: name });
+  assert(name && name !== "anonymous", IrisInvalidArgument, { expected: "named system function or name option" });
+  assert(!world.systems.byId.has(name), IrisDuplicate, { resource: "System", id: name });
+  assert(!world.systemSets.byId.has(name as SystemSetLabel), IrisDuplicate, { resource: "SystemSet", id: name });
 
   const setLabel = options?.set;
 
   // Validate set exists
   if (setLabel) {
-    assert(world.systemSets.byId.has(setLabel), NotFound, {
+    assert(world.systemSets.byId.has(setLabel), IrisNotFound, {
       resource: "SystemSet",
       id: setLabel,
       context: `"${name}" set option`,
@@ -511,9 +518,8 @@ function isSystemFactory(system: SystemRunner | SystemFactory): system is System
 export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
 
-  assert(idx !== -1, NotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
-
-  assert(!world.schedules.pipeline.includes(schedule), Duplicate, { resource: "Schedule", id: schedule });
+  assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
+  assert(!world.schedules.pipeline.includes(schedule), IrisDuplicate, { resource: "Schedule", id: schedule });
 
   world.schedules.pipeline.splice(idx, 0, schedule);
   world.schedules.dirty = true;
@@ -535,8 +541,8 @@ export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anch
 export function insertScheduleAfter(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
 
-  assert(idx !== -1, NotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
-  assert(!world.schedules.pipeline.includes(schedule), Duplicate, { resource: "Schedule", id: schedule });
+  assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
+  assert(!world.schedules.pipeline.includes(schedule), IrisDuplicate, { resource: "Schedule", id: schedule });
 
   world.schedules.pipeline.splice(idx + 1, 0, schedule);
   world.schedules.dirty = true;
@@ -593,7 +599,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
   for (const [name, meta] of scheduleSystems) {
     for (const beforeName of meta.before) {
       if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
-        throw new NotFound({
+        throw new IrisNotFound({
           resource: "System or SystemSet",
           id: beforeName,
           context: `"${name}" before constraint in schedule "${scheduleLabel}"`,
@@ -604,7 +610,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
 
     for (const afterName of meta.after) {
       if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
-        throw new NotFound({
+        throw new IrisNotFound({
           resource: "System or SystemSet",
           id: afterName,
           context: `"${name}" after constraint in schedule "${scheduleLabel}"`,
@@ -618,7 +624,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
   for (const [label, meta] of scheduleSets) {
     for (const beforeName of meta.before) {
       if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
-        throw new NotFound({
+        throw new IrisNotFound({
           resource: "System or SystemSet",
           id: beforeName,
           context: `"${label}" before constraint in schedule "${scheduleLabel}"`,
@@ -629,7 +635,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
 
     for (const afterName of meta.after) {
       if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
-        throw new NotFound({
+        throw new IrisNotFound({
           resource: "System or SystemSet",
           id: afterName,
           context: `"${label}" after constraint in schedule "${scheduleLabel}"`,
@@ -676,7 +682,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
       return scheduleSystems.get(a)!.index - scheduleSystems.get(b)!.index;
     });
   } catch (err) {
-    throw new InvalidState({
+    throw new IrisInvalidState({
       message: `Circular dependency in schedule "${scheduleLabel}": ${err instanceof Error ? err.message : String(err)}`,
     });
   }
@@ -820,14 +826,14 @@ async function executeFrame(world: World): Promise<void> {
  * Start a tracked frame.
  */
 function startFrame(world: World): Promise<void> {
-  assert(!world.execution.frameRunning, InvalidState, { message: "A frame is already executing" });
-  assert(world.execution.shutdownPromise === null, InvalidState, { message: "Shutdown is executing" });
+  assert(!world.execution.frameRunning, IrisInvalidState, { message: "A frame is already executing" });
+  assert(world.execution.shutdownPromise === null, IrisInvalidState, { message: "Shutdown is executing" });
 
   world.execution.frameRunning = true;
   world.execution.shutdownRan = false;
 
   try {
-    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, LimitExceeded, {
+    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
       resource: "World frame tick",
       max: Number.MAX_SAFE_INTEGER,
     });
@@ -863,7 +869,7 @@ function startFrame(world: World): Promise<void> {
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
-  assert(!world.execution.running, InvalidState, { message: "The animation frame loop is running" });
+  assert(!world.execution.running, IrisInvalidState, { message: "The animation frame loop is running" });
 
   await startFrame(world);
 }
@@ -905,7 +911,7 @@ export function run(world: World): void {
  *
  * @param world - World instance
  * @returns Active frame promise, or a resolved promise if no frame is active
- * @throws {InvalidState} If called reentrantly while a frame is starting
+ * @throws {IrisInvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript
@@ -914,7 +920,7 @@ export function run(world: World): void {
  * ```
  */
 export function suspend(world: World): Promise<void> {
-  assert(!world.execution.frameRunning || world.execution.framePromise !== null, InvalidState, {
+  assert(!world.execution.frameRunning || world.execution.framePromise !== null, IrisInvalidState, {
     message: "A frame is starting",
   });
 
@@ -988,7 +994,7 @@ async function runShutdown(world: World): Promise<void> {
  *
  * @param world - World instance
  * @returns Promise that resolves when shutdown completes
- * @throws {InvalidState} If called reentrantly while a frame is starting
+ * @throws {IrisInvalidState} If called reentrantly while a frame is starting
  *
  * @example
  * ```typescript

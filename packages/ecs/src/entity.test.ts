@@ -4,7 +4,7 @@ import { addComponent, getComponentValue, hasComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
-import { LimitExceeded, NotFound } from "./error.js";
+import { IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
@@ -207,7 +207,7 @@ describe("Entity", () => {
 
       assert.throws(() => {
         ensureEntity(world, entity);
-      }, NotFound);
+      }, IrisNotFound);
     });
   });
 
@@ -348,7 +348,7 @@ describe("Entity", () => {
       // Next entity should throw
       assert.throws(() => {
         createEntity(world);
-      }, LimitExceeded);
+      }, IrisLimitExceeded);
     });
   });
 

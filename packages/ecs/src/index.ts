@@ -2,7 +2,15 @@
 // Errors
 // ============================================================================
 
-export { assert, Duplicate, InvalidArgument, InvalidState, IrisError, LimitExceeded, NotFound } from "./error.js";
+export {
+  assert,
+  IrisDuplicate,
+  IrisError,
+  IrisInvalidArgument,
+  IrisInvalidState,
+  IrisLimitExceeded,
+  IrisNotFound,
+} from "./error.js";
 
 // ============================================================================
 // World Operations

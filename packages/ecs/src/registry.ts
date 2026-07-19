@@ -1,6 +1,6 @@
 import type { Component, Relation, Tag } from "./encoding.js";
 import { encodeComponent, encodeRelation, encodeTag, ID_MASK_8, ID_MASK_20 } from "./encoding.js";
-import { assert, Duplicate, LimitExceeded } from "./error.js";
+import { assert, IrisDuplicate, IrisLimitExceeded } from "./error.js";
 import type { SchemaRecord } from "./schema.js";
 
 // ============================================================================
@@ -107,7 +107,7 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
 
 /** @internal */
 function assertDefinitionNameAvailable(name: string): void {
-  assert(!COMPONENT_REGISTRY.byName.has(name), Duplicate, { resource: "Definition", id: name });
+  assert(!COMPONENT_REGISTRY.byName.has(name), IrisDuplicate, { resource: "Definition", id: name });
 }
 
 // ============================================================================
@@ -118,8 +118,8 @@ function assertDefinitionNameAvailable(name: string): void {
  * Defines a tag component. Tags are lightweight markers without data.
  * @param name - Human-readable tag name for debugging
  * @returns Encoded tag ID
- * @throws {Duplicate} If the name is already used by a tag, component, or relation
- * @throws {LimitExceeded} If tag limit (1,048,576) exceeded
+ * @throws {IrisDuplicate} If the name is already used by a tag, component, or relation
+ * @throws {IrisLimitExceeded} If tag limit (1,048,576) exceeded
  * @example
  * const Player = defineTag("Player");
  * addTag(world, entity, Player);
@@ -129,7 +129,7 @@ export function defineTag<N extends string>(name: N): Tag<N> {
 
   const rawId = COMPONENT_REGISTRY.nextTagId;
 
-  assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Tag", max: ID_MASK_20 });
+  assert(rawId <= ID_MASK_20, IrisLimitExceeded, { resource: "Tag", max: ID_MASK_20 });
 
   const tagId = encodeTag(rawId);
 
@@ -153,8 +153,8 @@ export function defineTag<N extends string>(name: N): Tag<N> {
  * @param name - Human-readable component name for debugging
  * @param schema - Field schema record defining data layout
  * @returns Encoded component ID with schema type
- * @throws {Duplicate} If the name is already used by a tag, component, or relation
- * @throws {LimitExceeded} If component limit (1,048,576) exceeded
+ * @throws {IrisDuplicate} If the name is already used by a tag, component, or relation
+ * @throws {IrisLimitExceeded} If component limit (1,048,576) exceeded
  * @example
  * const Position = defineComponent("Position", { x: Type.f32, y: Type.f32 });
  * set(world, entity, Position, { x: 10, y: 20 });
@@ -164,7 +164,7 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
 
   const rawId = COMPONENT_REGISTRY.nextComponentId;
 
-  assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Component", max: ID_MASK_20 });
+  assert(rawId <= ID_MASK_20, IrisLimitExceeded, { resource: "Component", max: ID_MASK_20 });
 
   const componentId = encodeComponent<S>(rawId);
 
@@ -188,8 +188,8 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
  * @param name - Human-readable relation name for debugging
  * @param options - Configuration: schema for data, exclusive trait, delete behavior
  * @returns Encoded relation ID with schema type
- * @throws {Duplicate} If the name is already used by a tag, component, or relation
- * @throws {LimitExceeded} If relation limit (256) exceeded
+ * @throws {IrisDuplicate} If the name is already used by a tag, component, or relation
+ * @throws {IrisLimitExceeded} If relation limit (256) exceeded
  * @example
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
  * addPair(world, child, ChildOf, parent);
@@ -202,7 +202,7 @@ export function defineRelation<N extends string, S extends SchemaRecord = Record
 
   const rawId = COMPONENT_REGISTRY.nextRelationId;
 
-  assert(rawId <= ID_MASK_8, LimitExceeded, { resource: "Relation", max: ID_MASK_8 });
+  assert(rawId <= ID_MASK_8, IrisLimitExceeded, { resource: "Relation", max: ID_MASK_8 });
 
   const relationId = encodeRelation<S>(rawId);
 

@@ -10,7 +10,7 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
-import { Duplicate, LimitExceeded } from "./error.js";
+import { IrisDuplicate, IrisLimitExceeded } from "./error.js";
 import { COMPONENT_REGISTRY, defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { Type } from "./schema.js";
 
@@ -54,7 +54,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineTag("OverLimit");
-      }, LimitExceeded);
+      }, IrisLimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextTagId = originalNextId;
@@ -110,7 +110,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineComponent("OverLimit", { value: Type.i32() });
-      }, LimitExceeded);
+      }, IrisLimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextComponentId = originalNextId;
@@ -166,7 +166,7 @@ describe("Registry", () => {
 
       assert.throws(() => {
         defineRelation("OverLimit");
-      }, LimitExceeded);
+      }, IrisLimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextRelationId = originalNextId;
@@ -228,15 +228,15 @@ describe("Registry", () => {
       assert.strictEqual(COMPONENT_REGISTRY.byName.get(name), tag);
       assert.throws(
         () => defineComponent(name, { value: Type.i32() }),
-        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+        (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
       assert.throws(
         () => defineRelation(name),
-        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+        (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
       assert.throws(
         () => defineTag(name),
-        (error: unknown) => error instanceof Duplicate && error.resource === "Definition" && error.id === name
+        (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
 
       assert.strictEqual(COMPONENT_REGISTRY.byId.size, byIdSize);

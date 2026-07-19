@@ -16,7 +16,7 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
-import { assert, InvalidState, LimitExceeded, NotFound } from "./error.js";
+import { assert, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, OnDeleteTarget } from "./registry.js";
 import { cleanupPairsTargetingEntity, getPairRelation } from "./relation.js";
@@ -73,7 +73,7 @@ function allocateEntityId(world: World): Entity {
 
   const newRawId = world.entities.nextId++;
 
-  assert(newRawId <= ID_MASK_20, LimitExceeded, { resource: "Entity", max: ID_MASK_20, id: newRawId });
+  assert(newRawId <= ID_MASK_20, IrisLimitExceeded, { resource: "Entity", max: ID_MASK_20, id: newRawId });
 
   world.entities.generations.set(newRawId, 0);
   return encodeEntity(newRawId, 0);
@@ -105,8 +105,8 @@ function registerEntity(world: World, entityId: EntityId, schema?: SchemaRecord)
  * @param world - World instance
  * @param entityId - Entity or component ID
  * @returns Entity metadata
- * @throws {NotFound} If entity not registered (ENTITY_TYPE)
- * @throws {InvalidState} If unknown entity type
+ * @throws {IrisNotFound} If entity not registered (ENTITY_TYPE)
+ * @throws {IrisInvalidState} If unknown entity type
  *
  * @example
  * ```typescript
@@ -157,11 +157,11 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
     }
 
     case ENTITY_TYPE: {
-      throw new NotFound({ resource: "Entity", id: entityId, context: "world" });
+      throw new IrisNotFound({ resource: "Entity", id: entityId, context: "world" });
     }
 
     default: {
-      throw new InvalidState({ message: `Invalid entity type: ${type}` });
+      throw new IrisInvalidState({ message: `Invalid entity type: ${type}` });
     }
   }
 }
@@ -171,7 +171,7 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
  *
  * @param world - World instance
  * @returns Encoded entity ID
- * @throws {LimitExceeded} If entity limit (1,048,576) exceeded
+ * @throws {IrisLimitExceeded} If entity limit (1,048,576) exceeded
  *
  * @example
  * ```typescript
@@ -187,7 +187,7 @@ export function createEntity(world: World): Entity;
  * @param world - World instance
  * @param entries - Array of component entries
  * @returns Encoded entity ID
- * @throws {LimitExceeded} If entity limit (1,048,576) exceeded
+ * @throws {IrisLimitExceeded} If entity limit (1,048,576) exceeded
  *
  * @example
  * ```typescript

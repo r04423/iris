@@ -13,7 +13,7 @@
  * try {
  *   createEntity(world);
  * } catch (error) {
- *   if (error instanceof LimitExceeded) {
+ *   if (error instanceof IrisLimitExceeded) {
  *     console.log(error.resource, error.max);
  *   }
  * }
@@ -39,7 +39,7 @@ export class IrisError extends Error {
  * const entity = createEntity(world);
  * ```
  */
-export class LimitExceeded extends IrisError {
+export class IrisLimitExceeded extends IrisError {
   readonly resource: string;
   readonly max: number;
   readonly id?: number;
@@ -62,7 +62,7 @@ export class LimitExceeded extends IrisError {
  * ensureEntity(world, destroyedEntity);
  * ```
  */
-export class NotFound extends IrisError {
+export class IrisNotFound extends IrisError {
   readonly resource: string;
   readonly id: string | number;
   readonly context?: string;
@@ -83,10 +83,10 @@ export class NotFound extends IrisError {
  * ```typescript
  * // Thrown when registering a system with the same name twice
  * addSystem(world, mySystem);
- * addSystem(world, mySystem); // throws Duplicate
+ * addSystem(world, mySystem); // throws IrisDuplicate
  * ```
  */
-export class Duplicate extends IrisError {
+export class IrisDuplicate extends IrisError {
   readonly resource: string;
   readonly id: string | number;
 
@@ -106,7 +106,7 @@ export class Duplicate extends IrisError {
  * addSystem(world, () => {});
  * ```
  */
-export class InvalidArgument extends IrisError {
+export class IrisInvalidArgument extends IrisError {
   readonly expected: string;
   readonly actual?: string;
 
@@ -129,7 +129,7 @@ export class InvalidArgument extends IrisError {
  * await runOnce(world);
  * ```
  */
-export class InvalidState extends IrisError {
+export class IrisInvalidState extends IrisError {
   constructor(params: { message: string }) {
     super(params.message);
   }
@@ -151,7 +151,7 @@ export class InvalidState extends IrisError {
  *
  * @example
  * ```typescript
- * assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Entity", max: ID_MASK_20, id: rawId });
+ * assert(rawId <= ID_MASK_20, IrisLimitExceeded, { resource: "Entity", max: ID_MASK_20, id: rawId });
  * // rawId is narrowed to truthy after this point
  * ```
  */

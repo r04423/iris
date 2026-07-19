@@ -1,6 +1,6 @@
 import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId, EntityWith } from "./encoding.js";
-import { assert, Duplicate, InvalidArgument } from "./error.js";
+import { assert, IrisDuplicate, IrisInvalidArgument } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue } from "./resource.js";
@@ -83,8 +83,8 @@ export function initNameSystem(world: World): void {
     }
 
     try {
-      assert(current, InvalidArgument, { expected: "non-empty name" });
-      assert(!nameToEntity.has(current), Duplicate, { resource: "Name", id: current });
+      assert(current, IrisInvalidArgument, { expected: "non-empty name" });
+      assert(!nameToEntity.has(current), IrisDuplicate, { resource: "Name", id: current });
     } catch (error) {
       if (previous === undefined) {
         removeComponent(world, entityId, Name);
@@ -150,8 +150,8 @@ export function getName(world: World, entityId: EntityId): string | undefined {
  * @param world - World instance
  * @param entityId - Entity to name
  * @param name - Name to assign (must be unique and non-empty)
- * @throws {InvalidArgument} If name is empty
- * @throws {Duplicate} If name already exists
+ * @throws {IrisInvalidArgument} If name is empty
+ * @throws {IrisDuplicate} If name already exists
  * @example
  * ```ts
  * setName(world, player, "player-1");

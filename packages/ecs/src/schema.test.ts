@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { InvalidArgument } from "./error.js";
+import { IrisInvalidArgument } from "./error.js";
 import type { InferSchema, InferSchemaRecord, ScalarFields, Schema, VectorFields } from "./schema.js";
 import { Type } from "./schema.js";
 
@@ -163,12 +163,12 @@ describe("Schema", () => {
 
     it("throws for stride less than 2", () => {
       // @ts-expect-error -- testing runtime validation of invalid size
-      assert.throws(() => Type.f32(1), InvalidArgument);
+      assert.throws(() => Type.f32(1), IrisInvalidArgument);
     });
 
     it("throws for stride greater than 16", () => {
       // @ts-expect-error -- testing runtime validation of invalid size
-      assert.throws(() => Type.f32(17), InvalidArgument);
+      assert.throws(() => Type.f32(17), IrisInvalidArgument);
     });
   });
 });
