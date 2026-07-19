@@ -1,4 +1,4 @@
-import { assert, IrisLimitExceeded } from "./error.js";
+import { assert, IrisDuplicate, IrisLimitExceeded } from "./error.js";
 import type { Schema, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -141,6 +141,11 @@ type EventRegistry = {
   byId: Map<EventId, Event>;
 
   /**
+   * Globally allocated event names.
+   */
+  names: Set<string>;
+
+  /**
    * Next raw ID to allocate.
    */
   nextId: number;
@@ -151,6 +156,7 @@ type EventRegistry = {
  */
 const EVENT_REGISTRY: EventRegistry = {
   byId: new Map(),
+  names: new Set(),
   nextId: 0,
 };
 
@@ -161,12 +167,13 @@ const EVENT_REGISTRY: EventRegistry = {
 /**
  * Define event type.
  *
- * Allocates unique event ID with optional schema for type-safe event data.
+ * Allocates a unique event name and ID with optional schema for type-safe event data.
  * Tag events (no schema) use void for data type - emit() requires no data argument.
  *
- * @param name - Event name for debugging
+ * @param name - Globally unique event name used for type identity and debugging
  * @param schema - Optional field schema record (omit for tag events)
  * @returns Event definition
+ * @throws {IrisDuplicate} If the event name is already defined
  *
  * @example
  * ```typescript
@@ -186,7 +193,9 @@ export function defineEvent<N extends string, S extends EventSchema = Record<nev
   name: N,
   schema?: S
 ): Event<S, N> {
-  const id = EVENT_REGISTRY.nextId++ as EventId<S, N>;
+  assert(!EVENT_REGISTRY.names.has(name), IrisDuplicate, { resource: "Event", id: name });
+
+  const id = EVENT_REGISTRY.nextId as EventId<S, N>;
 
   const event: Event<S, N> = {
     id,
@@ -195,6 +204,8 @@ export function defineEvent<N extends string, S extends EventSchema = Record<nev
   };
 
   EVENT_REGISTRY.byId.set(id, event as Event);
+  EVENT_REGISTRY.names.add(name);
+  EVENT_REGISTRY.nextId++;
 
   return event;
 }

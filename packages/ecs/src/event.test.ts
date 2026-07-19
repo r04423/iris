@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { IrisLimitExceeded } from "./error.js";
+import { IrisDuplicate, IrisLimitExceeded } from "./error.js";
 import {
   clearEvents,
   collectEvents,
@@ -50,11 +50,16 @@ describe("Event", () => {
       assert.notStrictEqual(Event1.id, Event3.id);
     });
 
-    it("allows same name for different events", () => {
+    it("rejects a duplicate name without allocating an ID", () => {
       const First = defineEvent("SameName");
-      const Second = defineEvent("SameName");
 
-      assert.notStrictEqual(First.id, Second.id);
+      assert.throws(
+        () => defineEvent("SameName"),
+        (error: unknown) => error instanceof IrisDuplicate && error.resource === "Event" && error.id === "SameName"
+      );
+
+      const Next = defineEvent("AfterDuplicateEvent");
+      assert.strictEqual(Next.id, First.id + 1);
     });
   });
 
