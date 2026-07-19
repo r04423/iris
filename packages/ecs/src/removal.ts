@@ -13,7 +13,7 @@ import type { World } from "./world.js";
  * Schema for removal events containing the entity that had a component removed.
  */
 const RemovalEventSchema = {
-  entity: Type.i32(),
+  entity: Type.u32<EntityId>(),
 };
 
 // ============================================================================
@@ -61,7 +61,7 @@ export function removed(componentId: EntityId): Event<typeof RemovalEventSchema>
 export function initRemovalSystem(world: World): void {
   // Handle explicit component removal via removeComponent()
   registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
-    emitEvent(world, removed(componentId), { entity: entityId as number });
+    emitEvent(world, removed(componentId), { entity: entityId });
   });
 
   // Handle entity destruction - destroyEntity() doesn't call removeComponent() for each
@@ -73,7 +73,7 @@ export function initRemovalSystem(world: World): void {
     for (const componentId of meta.archetype.types) {
       // Skip the entity's own ID (entities are components in ECS)
       if (componentId !== entityId) {
-        emitEvent(world, removed(componentId), { entity: entityId as number });
+        emitEvent(world, removed(componentId), { entity: entityId });
       }
     }
   });

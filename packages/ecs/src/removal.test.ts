@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, removeComponent } from "./component.js";
+import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity } from "./entity.js";
 import { readEvents } from "./event.js";
 import { defineComponent, defineRelation, defineTag } from "./registry.js";
@@ -19,7 +20,7 @@ describe("Removal", () => {
     it("detects component removal via readEvents", async () => {
       const world = createWorld();
       const Health = defineComponent("RD_Health", { value: Type.f32() });
-      const results: number[] = [];
+      const results: EntityId[] = [];
 
       addSystem(world, function reader() {
         readEvents(world, removed(Health), ({ entity }) => {
