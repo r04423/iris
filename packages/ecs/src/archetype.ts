@@ -551,15 +551,11 @@ export function destroyArchetype(world: World, archetype: Archetype): void {
   if (archetype === world.archetypes.root) return;
 
   removeEntityRecord(world, archetype);
+  fireObserverEvent(world, "archetypeDestroyed", archetype);
+  world.archetypes.byId.delete(archetype.hash);
 
-  try {
-    fireObserverEvent(world, "archetypeDestroyed", archetype);
-  } finally {
-    world.archetypes.byId.delete(archetype.hash);
-
-    for (const [typeId, targetArchetype] of archetype.edges) {
-      targetArchetype.edges.delete(typeId);
-    }
+  for (const [typeId, targetArchetype] of archetype.edges) {
+    targetArchetype.edges.delete(typeId);
   }
 }
 

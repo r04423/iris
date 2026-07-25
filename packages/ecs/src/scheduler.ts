@@ -860,13 +860,9 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
   world.execution.scheduleLabel = scheduleLabel;
 
   const scheduleStart = performance.now();
-
-  let firstError: unknown;
-  let failed = false;
+  fireObserverEvent(world, "scheduleStarted", scheduleLabel);
 
   try {
-    fireObserverEvent(world, "scheduleStarted", scheduleLabel);
-
     let setResults: Map<SystemSetLabel, boolean> | null = null;
 
     for (const systemId of order) {
@@ -908,25 +904,11 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
 
       fireObserverEvent(world, "systemFinished", systemId, scheduleLabel, performance.now() - systemStart);
     }
-  } catch (error) {
-    firstError = error;
-    failed = true;
   } finally {
     world.execution.scheduleLabel = null;
     world.execution.systemId = null;
 
-    try {
-      fireObserverEvent(world, "scheduleFinished", scheduleLabel, performance.now() - scheduleStart);
-    } catch (error) {
-      if (!failed) {
-        firstError = error;
-        failed = true;
-      }
-    }
-  }
-
-  if (failed) {
-    throw firstError;
+    fireObserverEvent(world, "scheduleFinished", scheduleLabel, performance.now() - scheduleStart);
   }
 }
 
@@ -1106,7 +1088,7 @@ async function runShutdown(world: World): Promise<void> {
       shutdownCompleted = true;
     } catch (shutdownError) {
       if (frameFailed) {
-        throw frameError;
+        throw new AggregateError([frameError, shutdownError], "Frame and shutdown both failed");
       }
 
       throw shutdownError;

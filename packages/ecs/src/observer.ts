@@ -121,22 +121,8 @@ export function unregisterObserverCallback<T extends EventType>(
 export function fireObserverEvent<T extends EventType>(world: World, eventType: T, ...args: EventPayloads[T]): void {
   const meta = world.observers[eventType];
 
-  let firstError: unknown;
-  let failed = false;
-
   // Iterate in reverse so callbacks can safely unregister themselves during dispatch
   for (let i = meta.callbacks.length - 1; i >= 0; i--) {
-    try {
-      meta.callbacks[i]!(...args);
-    } catch (error) {
-      if (!failed) {
-        firstError = error;
-        failed = true;
-      }
-    }
-  }
-
-  if (failed) {
-    throw firstError;
+    meta.callbacks[i]!(...args);
   }
 }

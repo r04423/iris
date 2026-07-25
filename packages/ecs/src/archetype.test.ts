@@ -15,7 +15,6 @@ import {
 import { addComponent, removeComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
-import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineTag } from "./registry.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -982,29 +981,6 @@ describe("Archetype", () => {
       // But we can verify that root archetype's edges were cleaned up
       const rootArchetype = world.archetypes.root;
       assert.strictEqual(rootArchetype.edges.has(entityA), false);
-    });
-
-    it("finalizes cleanup when a destroy observer throws", () => {
-      const world = createWorld();
-      const component = createEntity(world);
-      const root = world.archetypes.root;
-      const archetype = archetypeTraverseAdd(world, root, component);
-      const error = new Error("failed");
-
-      registerObserverCallback(world, "archetypeDestroyed", () => {
-        throw error;
-      });
-
-      assert.throws(
-        () => {
-          destroyArchetype(world, archetype);
-        },
-        (thrown) => thrown === error
-      );
-
-      assert.strictEqual(world.archetypes.byId.has(archetype.hash), false);
-      assert.strictEqual(root.edges.has(component), false);
-      assert.strictEqual(world.entities.byId.get(component)!.records.includes(archetype), false);
     });
 
     it("never destroys root archetype", () => {

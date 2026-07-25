@@ -1394,22 +1394,6 @@ describe("Scheduler", () => {
       }
     });
 
-    it("preserves an active frame error when shutdown also fails", async () => {
-      const world = createWorld();
-      const frameError = new Error("frame failed");
-
-      world.execution.framePromise = Promise.reject(frameError);
-      addSystem(
-        world,
-        function shutdownSys() {
-          throw new Error("shutdown failed");
-        },
-        { schedule: Shutdown }
-      );
-
-      await assert.rejects(stop(world), (error) => error === frameError);
-    });
-
     it("retains a failed shutdown without retrying it", async () => {
       const world = createWorld();
       const error = new Error("shutdown failed");
@@ -1751,30 +1735,6 @@ describe("Scheduler", () => {
       assert.notStrictEqual(updateEvent, undefined);
       assert.strictEqual(typeof updateEvent!.duration, "number");
       assert.strictEqual(updateEvent!.duration >= 0, true);
-    });
-
-    it("clears context and preserves the first observer error", async () => {
-      const world = createWorld();
-      const startError = new Error("start failed");
-      const finishError = new Error("finish failed");
-      let systemRan = false;
-
-      registerObserverCallback(world, "scheduleStarted", () => {
-        throw startError;
-      });
-      registerObserverCallback(world, "scheduleFinished", () => {
-        assert.strictEqual(world.execution.scheduleLabel, null);
-        assert.strictEqual(world.execution.systemId, null);
-        throw finishError;
-      });
-      addSystem(world, function skipped() {
-        systemRan = true;
-      });
-
-      await assert.rejects(runOnce(world), (error) => error === startError);
-      assert.strictEqual(systemRan, false);
-      assert.strictEqual(world.execution.scheduleLabel, null);
-      assert.strictEqual(world.execution.systemId, null);
     });
 
     it("fires systemStarted and systemFinished around each system", async () => {

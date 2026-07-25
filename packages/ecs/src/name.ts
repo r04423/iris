@@ -65,11 +65,7 @@ export function initNameSystem(world: World): void {
 
     const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
     const entityToName = getResourceValue(world, NameRegistry, "entityToName")!;
-    const name = entityToName.get(entityId);
-
-    if (name === undefined) {
-      return;
-    }
+    const name = entityToName.get(entityId)!;
 
     nameToEntity.delete(name);
     entityToName.delete(entityId);
@@ -91,18 +87,8 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    try {
-      assert(current, IrisInvalidArgument, { expected: "non-empty name" });
-      assert(!nameToEntity.has(current), IrisDuplicate, { resource: "Name", id: current });
-    } catch (error) {
-      if (previous === undefined) {
-        removeComponent(world, entityId, Name);
-      } else {
-        setComponentValue(world, entityId, Name, "value", previous);
-      }
-
-      throw error;
-    }
+    assert(current, IrisInvalidArgument, { expected: "non-empty name" });
+    assert(!nameToEntity.has(current), IrisDuplicate, { resource: "Name", id: current });
 
     // Remove old mapping if renaming an entity
     if (previous !== undefined) {

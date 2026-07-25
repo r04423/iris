@@ -255,21 +255,19 @@ export function destroyEntity(world: World, entityId: EntityId): void {
     swappedMeta.row = meta.row;
   }
 
-  try {
-    fireObserverEvent(world, "entityDestroyed", entityId);
-  } finally {
-    world.entities.byId.delete(entityId);
+  fireObserverEvent(world, "entityDestroyed", entityId);
 
-    // Only entity IDs are recycled; component/tag/relation IDs are permanent
-    if (extractType(entityId) === ENTITY_TYPE) {
-      const rawId = extractId(entityId);
-      const oldGeneration = extractMeta(entityId);
-      // Increment generation so stale references become detectable
-      const newGeneration = (oldGeneration + 1) & ID_MASK_8;
+  world.entities.byId.delete(entityId);
 
-      world.entities.generations.set(rawId, newGeneration);
-      world.entities.freeIds.push(rawId);
-    }
+  // Only entity IDs are recycled; component/tag/relation IDs are permanent
+  if (extractType(entityId) === ENTITY_TYPE) {
+    const rawId = extractId(entityId);
+    const oldGeneration = extractMeta(entityId);
+    // Increment generation so stale references become detectable
+    const newGeneration = (oldGeneration + 1) & ID_MASK_8;
+
+    world.entities.generations.set(rawId, newGeneration);
+    world.entities.freeIds.push(rawId);
   }
 }
 
