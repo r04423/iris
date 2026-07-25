@@ -718,9 +718,9 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
  * Get a zero-copy typed array view into a vector component field.
  *
  * Returns a `subarray` view that shares the underlying buffer. Mutations
- * to the view directly modify the stored data. **The view is invalidated
- * if the archetype resizes** (e.g., when new entities cause capacity growth).
- * Use within a system tick; do not cache across frames.
+ * to the view directly modify the stored data. Any structural change to the
+ * entity's archetype invalidates the view -- capacity growth, add/remove
+ * component, or destroying any entity in the same archetype.
  *
  * @param world - World instance
  * @param entityId - Entity to query
