@@ -247,6 +247,10 @@ export function destroyEntity(world: World, entityId: EntityId): void {
   // Remove this entity from any entities that have it as a component
   cascadeRemoveComponent(world, entityId);
 
+  // Fires after cascades (which report their own removals) but before the row is
+  // vacated, so callbacks can still read the entity's remaining component data
+  fireObserverEvent(world, "entityDestroying", entityId);
+
   const swappedEntityId = removeEntityFromArchetypeByRow(meta.archetype, meta.row);
 
   // Swap-remove updates: entity swapped into our slot needs row update
@@ -255,9 +259,10 @@ export function destroyEntity(world: World, entityId: EntityId): void {
     swappedMeta.row = meta.row;
   }
 
-  fireObserverEvent(world, "entityDestroyed", entityId);
-
+  // Delete before firing so the entity reads as gone
   world.entities.byId.delete(entityId);
+
+  fireObserverEvent(world, "entityDestroyed", entityId);
 
   // Only entity IDs are recycled; component/tag/relation IDs are permanent
   if (extractType(entityId) === ENTITY_TYPE) {

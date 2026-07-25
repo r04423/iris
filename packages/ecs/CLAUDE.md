@@ -41,9 +41,9 @@ Core ECS library for Iris.
 
 **Events** -- Double-buffered queues (`current`/`previous`, swapped on flush). Each system tracks consumption independently via per-system `lastTick`. Events survive one full frame cycle. Reads return empty outside system context. Tag events (no schema) and data events (typed schema) share the same API.
 
-**Observers** -- Low-level lifecycle callbacks, not for game logic. Fire during operations: `entityCreated`, `entityDestroyed`, `componentAdded`, `componentRemoved`, `componentChanged`, `archetypeCreated`, `archetypeDestroyed`, `worldReset`. Power filter caching and removal detection internally.
+**Observers** -- Low-level lifecycle callbacks, not for game logic. Fire during operations: `entityCreated`, `entityDestroying`, `entityDestroyed`, `componentAdded`, `componentRemoved`, `componentChanged`, `archetypeCreated`, `archetypeDestroyed`, `worldReset`. Power filter caching and removal detection internally.
 
-**Removal detection** -- Observer-driven: `componentRemoved` and `entityDestroyed` observers lazily emit removal events via `removed()`. Entity destruction emits removal for each component without calling `removeComponent` individually.
+**Removal detection** -- Observer-driven: `componentRemoved` and `entityDestroying` observers lazily emit removal events via `removed()`. Entity destruction emits removal for each component without calling `removeComponent` individually.
 
 **Scheduler** -- Topological sort via Kahn's algorithm with registration-order tiebreaker for determinism. Tick increments before each system execution + post-bump in `finally` block. Default pipeline: `[First, PreUpdate, Update, PostUpdate, Last]`.
 

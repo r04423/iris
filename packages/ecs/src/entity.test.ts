@@ -5,6 +5,7 @@ import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisLimitExceeded, IrisNotFound } from "./error.js";
+import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
@@ -166,6 +167,54 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, e1), true);
       assert.strictEqual(isEntityAlive(world, e2), false);
       assert.strictEqual(isEntityAlive(world, e3), true);
+    });
+
+    it("fires entityDestroying while the entity's component data is still readable", () => {
+      const world = createWorld();
+      const Position = defineComponent("DestroyingPosition", { x: Type.f32() });
+
+      const dying = createEntity(world, [[Position, { x: 1 }]]);
+      createEntity(world, [[Position, { x: 2 }]]);
+
+      let observed: number | undefined;
+      registerObserverCallback(world, "entityDestroying", (entityId) => {
+        observed = getComponentValue(world, entityId, Position, "x");
+      });
+
+      destroyEntity(world, dying);
+
+      assert.strictEqual(observed, 1);
+    });
+
+    it("fires entityDestroyed once the entity is gone", () => {
+      const world = createWorld();
+      const Position = defineComponent("DestroyedPosition", { x: Type.f32() });
+
+      const dying = createEntity(world, [[Position, { x: 1 }]]);
+      createEntity(world, [[Position, { x: 2 }]]);
+
+      let alive: boolean | undefined;
+      registerObserverCallback(world, "entityDestroyed", (entityId) => {
+        alive = isEntityAlive(world, entityId);
+        assert.throws(() => getComponentValue(world, entityId, Position, "x"), IrisNotFound);
+      });
+
+      destroyEntity(world, dying);
+
+      assert.strictEqual(alive, false);
+    });
+
+    it("fires entityDestroying before entityDestroyed", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const fired: string[] = [];
+
+      registerObserverCallback(world, "entityDestroyed", () => fired.push("entityDestroyed"));
+      registerObserverCallback(world, "entityDestroying", () => fired.push("entityDestroying"));
+
+      destroyEntity(world, entity);
+
+      assert.deepStrictEqual(fired, ["entityDestroying", "entityDestroyed"]);
     });
   });
 

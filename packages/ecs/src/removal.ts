@@ -66,8 +66,8 @@ export function initRemovalSystem(world: World): void {
 
   // Handle entity destruction - destroyEntity() doesn't call removeComponent() for each
   // component, so we emit removal events for all components on the entity here
-  registerObserverCallback(world, "entityDestroyed", (entityId) => {
-    // Observer fires before entity metadata is deleted, so meta is guaranteed to exist
+  registerObserverCallback(world, "entityDestroying", (entityId) => {
+    // Fires before any cleanup, so meta is guaranteed to exist
     const meta = world.entities.byId.get(entityId)!;
 
     for (const componentId of meta.archetype.types) {

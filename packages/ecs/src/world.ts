@@ -307,6 +307,7 @@ export function createWorld(): World {
       archetypeDestroyed: { callbacks: [] },
       filterCreated: { callbacks: [] },
       entityCreated: { callbacks: [] },
+      entityDestroying: { callbacks: [] },
       entityDestroyed: { callbacks: [] },
       componentAdded: { callbacks: [] },
       componentRemoved: { callbacks: [] },
@@ -332,7 +333,7 @@ export function createWorld(): World {
 /**
  * Resets world to initial state, clearing all entities and caches.
  *
- * Does NOT fire per-entity lifecycle events (entityDestroyed, componentRemoved).
+ * Does NOT fire per-entity lifecycle events (entityDestroying, entityDestroyed, componentRemoved).
  * For per-entity cleanup, run a "shutdown" schedule before calling resetWorld().
  * Factory systems and attached conditions initialize again before the next
  * `runOnce()` or `stop()`.

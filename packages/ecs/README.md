@@ -1048,8 +1048,9 @@ During observer dispatch, a callback may unregister itself. It must not register
 
 | Event | Payload | When |
 |-------|---------|------|
-| `entityCreated` | `(entity)` | After `createEntity()` |
-| `entityDestroyed` | `(entityId)` | Before entity cleanup |
+| `entityCreated` | `(entity)` | After the entity is allocated, before initial components attach |
+| `entityDestroying` | `(entityId)` | Before cleanup -- entity is alive and its component data is still readable |
+| `entityDestroyed` | `(entityId)` | After removal -- the entity is gone, so reads through the handle throw |
 | `componentAdded` | `(componentId, entityId)` | After component added |
 | `componentRemoved` | `(componentId, entityId)` | Before component removed |
 | `componentChanged` | `(componentId, entityId)` | After `setComponentValue()` |
