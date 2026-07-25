@@ -122,7 +122,7 @@ function assertDefinitionNameAvailable(name: string): void {
  * @throws {IrisLimitExceeded} If tag limit (1,048,576) exceeded
  * @example
  * const Player = defineTag("Player");
- * addTag(world, entity, Player);
+ * addComponent(world, entity, Player);
  */
 export function defineTag<N extends string>(name: N): Tag<N> {
   assertDefinitionNameAvailable(name);
@@ -156,8 +156,8 @@ export function defineTag<N extends string>(name: N): Tag<N> {
  * @throws {IrisDuplicate} If the name is already used by a tag, component, or relation
  * @throws {IrisLimitExceeded} If component limit (1,048,576) exceeded
  * @example
- * const Position = defineComponent("Position", { x: Type.f32, y: Type.f32 });
- * set(world, entity, Position, { x: 10, y: 20 });
+ * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+ * addComponent(world, entity, Position, { x: 10, y: 20 });
  */
 export function defineComponent<N extends string, S extends SchemaRecord>(name: N, schema: S): Component<S, N> {
   assertDefinitionNameAvailable(name);
@@ -192,7 +192,7 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
  * @throws {IrisLimitExceeded} If relation limit (256) exceeded
  * @example
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
- * addPair(world, child, ChildOf, parent);
+ * addComponent(world, child, pair(ChildOf, parent));
  */
 export function defineRelation<N extends string, S extends SchemaRecord = Record<string, never>>(
   name: N,
