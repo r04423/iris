@@ -358,6 +358,10 @@ export function resetWorld(world: World): void {
   world.revision = 1;
 
   // 1. Clear filters and reverse index
+  for (const filter of world.filters.byId.values()) {
+    filter.archetypes.length = 0;
+  }
+
   world.filters.byId.clear();
   world.filters.byType.clear();
 
