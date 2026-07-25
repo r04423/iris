@@ -3,6 +3,7 @@ import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } fro
 import { encodePair, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
 import { ensureEntity, moveEntityToArchetype } from "./entity.js";
+import { assert, IrisInvalidArgument } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets } from "./relation.js";
@@ -70,7 +71,12 @@ export function addComponent<S extends SchemaRecord>(
     const target = getPairTarget(world, componentId);
     const relation = getPairRelation(componentId);
 
-    if (hasComponent(world, relation, Exclusive) && target !== Wildcard) {
+    assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
+      expected: "concrete pair",
+      actual: "wildcard pair (wildcards are query patterns)",
+    });
+
+    if (hasComponent(world, relation, Exclusive)) {
       const oldTargets = getRelationTargets(world, entityId, relation);
 
       if (oldTargets.length > 0) {
@@ -270,6 +276,7 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
  * @param world - World instance
  * @param entityId - Entity to modify
  * @param componentId - Component to remove
+ * @throws {IrisInvalidArgument} If the component is a wildcard pair
  *
  * @example
  * ```typescript
@@ -293,6 +300,11 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
   if (componentIsPair) {
     const target = getPairTarget(world, componentId);
     const relation = getPairRelation(componentId);
+
+    assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
+      expected: "concrete pair",
+      actual: "wildcard pair (maintained automatically)",
+    });
 
     const wildcardTargetPair = encodePair(Wildcard, target);
     const relationWildcardPair = encodePair(relation, Wildcard);
@@ -341,12 +353,13 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
 /**
  * Check if entity has component.
  *
- * Returns false for dead entities or if component not present.
+ * Returns false if the component is not present.
  *
  * @param world - World instance
  * @param entityId - Entity to check
  * @param componentId - Component to check
  * @returns True if entity has component
+ * @throws {IrisNotFound} If the entity is not alive in the world
  *
  * @example
  * ```typescript
@@ -409,11 +422,13 @@ export function getComponentValue<S extends SchemaRecord, K extends ScalarFields
   const { archetype, row } = ensureEntity(world, entityId);
 
   const fieldColumns = archetype.columns.get(componentId);
+
   if (!fieldColumns) {
     return;
   }
 
   const column = fieldColumns[fieldName as string];
+
   if (!column) {
     return;
   }
@@ -470,11 +485,13 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
   const { archetype, row } = ensureEntity(world, entityId);
 
   const fieldColumns = archetype.columns.get(componentId);
+
   if (!fieldColumns) {
     return;
   }
 
   const column = fieldColumns[fieldName as string];
+
   if (!column) {
     return;
   }
@@ -482,6 +499,7 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
   column[row] = value;
 
   const ticks = archetype.ticks.get(componentId);
+
   if (ticks) {
     ticks.changed[row] = world.revision;
   }
@@ -491,6 +509,8 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
 
 /**
  * Mark a component as changed without setting a value.
+ *
+ * No-op if the entity does not have the component.
  *
  * @param world - World instance
  * @param entityId - Entity with the component
@@ -503,9 +523,12 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
   const { archetype, row } = ensureEntity(world, entityId);
 
   const ticks = archetype.ticks.get(componentId);
-  if (ticks) {
-    ticks.changed[row] = world.revision;
+
+  if (!ticks) {
+    return;
   }
+
+  ticks.changed[row] = world.revision;
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
 }
@@ -526,11 +549,13 @@ function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): 
   }
 
   const relationTicks = meta.archetype.ticks.get(encodePair(relation, Wildcard));
+
   if (relationTicks) {
     relationTicks.changed[meta.row] = world.revision;
   }
 
   const targetTicks = meta.archetype.ticks.get(encodePair(Wildcard, target));
+
   if (targetTicks) {
     targetTicks.changed[meta.row] = world.revision;
   }
@@ -588,10 +613,16 @@ export function getComponentVectorValue<S extends SchemaRecord, K extends Vector
   const { archetype, row } = ensureEntity(world, entityId);
 
   const fieldColumns = archetype.columns.get(componentId);
-  if (!fieldColumns) return;
+
+  if (!fieldColumns) {
+    return;
+  }
 
   const column = fieldColumns[fieldName as string];
-  if (!column) return;
+
+  if (!column) {
+    return;
+  }
 
   const stride = getColumnStride(column, archetype.capacity);
   const offset = row * stride;
@@ -656,10 +687,16 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
   const { archetype, row } = ensureEntity(world, entityId);
 
   const fieldColumns = archetype.columns.get(componentId);
-  if (!fieldColumns) return;
+
+  if (!fieldColumns) {
+    return;
+  }
 
   const column = fieldColumns[fieldName as string];
-  if (!column) return;
+
+  if (!column) {
+    return;
+  }
 
   const stride = getColumnStride(column, archetype.capacity);
   const offset = row * stride;
@@ -669,6 +706,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
   }
 
   const ticks = archetype.ticks.get(componentId);
+
   if (ticks) {
     ticks.changed[row] = world.revision;
   }
@@ -727,13 +765,20 @@ export function getComponentVectorView<S extends SchemaRecord, K extends VectorF
   const { archetype, row } = ensureEntity(world, entityId);
 
   const fieldColumns = archetype.columns.get(componentId);
-  if (!fieldColumns) return;
+
+  if (!fieldColumns) {
+    return;
+  }
 
   const column = fieldColumns[fieldName as string];
-  if (!column || Array.isArray(column)) return;
+
+  if (!column || Array.isArray(column)) {
+    return;
+  }
 
   const stride = getColumnStride(column, archetype.capacity);
   const offset = row * stride;
+
   return column.subarray(offset, offset + stride) as TypedArrayInstance;
 }
 

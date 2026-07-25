@@ -16,7 +16,8 @@ import {
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
-import { IrisNotFound } from "./error.js";
+import { IrisInvalidArgument, IrisNotFound } from "./error.js";
+import { registerObserverCallback } from "./observer.js";
 import { changed, collectEntities, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
@@ -1073,6 +1074,16 @@ describe("Component", () => {
   // ============================================================================
 
   describe("Pair Add", () => {
+    it("throws for wildcard pairs (query patterns, not storable types)", () => {
+      const world = createWorld();
+      const Owns = defineRelation("OwnsAddThrowsForWildcardPairs");
+      const entity = createEntity(world);
+      const target = createEntity(world);
+
+      assert.throws(() => addComponent(world, entity, encodePair(Owns, Wildcard)), IrisInvalidArgument);
+      assert.throws(() => addComponent(world, entity, encodePair(Wildcard, target)), IrisInvalidArgument);
+    });
+
     it("adds pair with wildcard pairs for query patterns", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOf");
@@ -1212,6 +1223,18 @@ describe("Component", () => {
       assert.ok(meta.archetype.typesSet.has(encodePair(Wildcard, parent2)));
     });
 
+    it("throws for wildcard pairs (maintained automatically)", () => {
+      const world = createWorld();
+      const Owns = defineRelation("OwnsRemoveThrowsForWildcardPairs");
+      const entity = createEntity(world);
+      const target = createEntity(world);
+
+      addComponent(world, entity, pair(Owns, target));
+
+      assert.throws(() => removeComponent(world, entity, encodePair(Owns, Wildcard)), IrisInvalidArgument);
+      assert.throws(() => removeComponent(world, entity, encodePair(Wildcard, target)), IrisInvalidArgument);
+    });
+
     it("is idempotent for pair components", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfIdempotentPairComponents8");
@@ -1259,6 +1282,21 @@ describe("Component", () => {
 
       assert.strictEqual(results[1]!.length, 1);
       assert.strictEqual(results[1]![0], entity);
+    });
+
+    it("does not announce a component the entity does not have", () => {
+      const world = createWorld();
+      const Position = defineComponent("PositionEmitAbsent", { x: Type.f32() });
+      const entity = createEntity(world);
+
+      let fired = 0;
+      registerObserverCallback(world, "componentChanged", () => {
+        fired++;
+      });
+
+      emitComponentChanged(world, entity, Position);
+
+      assert.strictEqual(fired, 0);
     });
 
     it("updates changed tick in archetype", () => {

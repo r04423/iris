@@ -173,7 +173,7 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
   // Separate pairs by their OnDeleteTarget policy:
   // - pairsToRemove: Just destroy the pair entity (default behavior)
   // - pairsToDelete: Cascade delete to subjects holding the pair
-  const pairsToRemove = new Set<EntityId>([wildcardTargetPair]);
+  const pairsToRemove = new Set<EntityId>();
   const pairsToDelete = new Set<EntityId>();
 
   for (const archetype of wildcardMeta.records) {
@@ -216,7 +216,11 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
     destroyEntity(world, pairId);
   }
 
-  // Phase 4: Delete subjects that had cascading pairs (may trigger recursive cascades)
+  // Phase 4: Destroy the target aggregate last - the concrete pair removals above
+  // already dropped it from every subject, so no entity still holds it
+  destroyEntity(world, wildcardTargetPair);
+
+  // Phase 5: Delete subjects that had cascading pairs (may trigger recursive cascades)
   for (const entityId of subjectsToDelete) {
     destroyEntity(world, entityId);
   }
