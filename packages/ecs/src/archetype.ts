@@ -149,9 +149,28 @@ function resizeColumn(column: Column, oldCapacity: number, newCapacity: number):
   const TypedArrayCtor = column.constructor as TypedArrayConstructor;
   const newColumn = new TypedArrayCtor(newCapacity * stride);
 
-  newColumn.set(column.subarray(0, column.length));
+  newColumn.set(column);
 
   return newColumn;
+}
+
+/**
+ * Copies one entity's slot between columns of the same field.
+ * Vector columns store `stride` contiguous elements per entity.
+ */
+function copyColumnSlot(destColumn: Column, destRow: number, srcColumn: Column, srcRow: number, stride: number): void {
+  if (stride === 1) {
+    destColumn[destRow] = srcColumn[srcRow];
+
+    return;
+  }
+
+  const destOffset = destRow * stride;
+  const srcOffset = srcRow * stride;
+
+  for (let s = 0; s < stride; s++) {
+    destColumn[destOffset + s] = srcColumn[srcOffset + s];
+  }
 }
 
 /**
@@ -373,19 +392,7 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
     for (const fieldColumns of archetype.columns.values()) {
       for (const fieldName in fieldColumns) {
         const column = fieldColumns[fieldName]!;
-        // Vector columns store `stride` contiguous elements per entity
-        const stride = getColumnStride(column, archetype.capacity);
-
-        if (stride === 1) {
-          column[row] = column[lastIdx];
-        } else {
-          const src = lastIdx * stride;
-          const dst = row * stride;
-
-          for (let s = 0; s < stride; s++) {
-            column[dst + s] = column[src + s];
-          }
-        }
+        copyColumnSlot(column, row, column, lastIdx, getColumnStride(column, archetype.capacity));
       }
     }
 
@@ -442,30 +449,16 @@ export function transferEntityToArchetypeByRow(
     const destFieldColumns = toArchetype.columns.get(type);
     const sourceFieldColumns = fromArchetype.columns.get(type);
 
-    if (!destFieldColumns || !sourceFieldColumns) continue;
-
-    for (const fieldName in destFieldColumns) {
-      const destCol = destFieldColumns[fieldName]!;
-      const srcCol = sourceFieldColumns[fieldName]!;
-      // Vector columns: copy all `stride` elements per entity
-      const stride = getColumnStride(destCol, toArchetype.capacity);
-
-      if (stride === 1) {
-        destCol[toRow] = srcCol[fromRow];
-      } else {
-        const dstOffset = toRow * stride;
-        const srcOffset = fromRow * stride;
-
-        for (let s = 0; s < stride; s++) {
-          destCol[dstOffset + s] = srcCol[srcOffset + s];
-        }
+    if (destFieldColumns && sourceFieldColumns) {
+      for (const fieldName in destFieldColumns) {
+        const destColumn = destFieldColumns[fieldName]!;
+        const stride = getColumnStride(destColumn, toArchetype.capacity);
+        copyColumnSlot(destColumn, toRow, sourceFieldColumns[fieldName]!, fromRow, stride);
       }
     }
-  }
 
-  for (const componentId of toArchetype.types) {
-    const fromTicks = fromArchetype.ticks.get(componentId);
-    const toTicks = toArchetype.ticks.get(componentId);
+    const fromTicks = fromArchetype.ticks.get(type);
+    const toTicks = toArchetype.ticks.get(type);
 
     if (fromTicks && toTicks) {
       toTicks.added[toRow] = fromTicks.added[fromRow]!;
@@ -501,36 +494,45 @@ function findInsertionIndex(types: EntityId[], typeId: EntityId): number {
 }
 
 /**
- * Finds or creates an archetype with a type added, checking cache first to avoid Map allocation.
+ * Finds or creates the archetype for an already-computed type set, checking the world
+ * lookup first to avoid allocating a schema Map for an archetype that exists.
+ *
+ * A `schema` of undefined means `typeId` carries no data (tag or wildcard pair), so the
+ * entry is dropped -- correct for both traversal directions.
  */
-function ensureArchetypeWithType(world: World, from: Archetype, typeId: EntityId, schema?: SchemaRecord): Archetype {
-  const insertIdx = findInsertionIndex(from.types, typeId);
-  const newTypes = from.types.toSpliced(insertIdx, 0, typeId);
+function ensureArchetype(
+  world: World,
+  from: Archetype,
+  typeId: EntityId,
+  newTypes: EntityId[],
+  schema?: SchemaRecord
+): Archetype {
+  const existing = world.archetypes.byId.get(hashArchetypeTypes(newTypes));
 
-  const hashKey = hashArchetypeTypes(newTypes);
-  const existing = world.archetypes.byId.get(hashKey);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const schemas = new Map(from.schemas);
-  if (schema) schemas.set(typeId, schema);
+
+  if (schema) {
+    schemas.set(typeId, schema);
+  } else {
+    schemas.delete(typeId);
+  }
 
   return createAndRegisterArchetype(world, newTypes, schemas);
 }
 
 /**
- * Finds or creates an archetype with a type removed, checking cache first to avoid Map allocation.
+ * Records the edge between two archetypes in both directions.
+ * Bidirectional edges enable O(1) traversal in both add and remove directions.
  */
-function ensureArchetypeWithoutType(world: World, from: Archetype, typeId: EntityId): Archetype {
-  const newTypes = from.types.filter((id) => id !== typeId);
+function linkArchetypes(from: Archetype, to: Archetype, typeId: EntityId): Archetype {
+  from.edges.set(typeId, to);
+  to.edges.set(typeId, from);
 
-  const hashKey = hashArchetypeTypes(newTypes);
-  const existing = world.archetypes.byId.get(hashKey);
-  if (existing) return existing;
-
-  const schemas = new Map(from.schemas);
-  schemas.delete(typeId);
-
-  return createAndRegisterArchetype(world, newTypes, schemas);
+  return to;
 }
 
 /**
@@ -548,7 +550,9 @@ function ensureArchetypeWithoutType(world: World, from: Archetype, typeId: Entit
  * ```
  */
 export function destroyArchetype(world: World, archetype: Archetype): void {
-  if (archetype === world.archetypes.root) return;
+  if (archetype === world.archetypes.root) {
+    return;
+  }
 
   removeEntityRecord(world, archetype);
   fireObserverEvent(world, "archetypeDestroyed", archetype);
@@ -580,18 +584,19 @@ export function archetypeTraverseAdd(
   typeId: EntityId,
   schema?: SchemaRecord
 ): Archetype {
-  if (from.typesSet.has(typeId)) return from;
+  if (from.typesSet.has(typeId)) {
+    return from;
+  }
 
   const cachedArchetype = from.edges.get(typeId);
-  if (cachedArchetype) return cachedArchetype;
 
-  const to = ensureArchetypeWithType(world, from, typeId, schema);
+  if (cachedArchetype) {
+    return cachedArchetype;
+  }
 
-  // Bidirectional edges enable O(1) traversal in both add and remove directions
-  from.edges.set(typeId, to);
-  to.edges.set(typeId, from);
+  const newTypes = from.types.toSpliced(findInsertionIndex(from.types, typeId), 0, typeId);
 
-  return to;
+  return linkArchetypes(from, ensureArchetype(world, from, typeId, newTypes, schema), typeId);
 }
 
 /**
@@ -609,16 +614,17 @@ export function archetypeTraverseAdd(
  * ```
  */
 export function archetypeTraverseRemove(world: World, from: Archetype, typeId: EntityId): Archetype {
-  if (!from.typesSet.has(typeId)) return from;
+  if (!from.typesSet.has(typeId)) {
+    return from;
+  }
 
   const cachedArchetype = from.edges.get(typeId);
-  if (cachedArchetype) return cachedArchetype;
 
-  const to = ensureArchetypeWithoutType(world, from, typeId);
+  if (cachedArchetype) {
+    return cachedArchetype;
+  }
 
-  // Bidirectional edges enable O(1) traversal in both add and remove directions
-  from.edges.set(typeId, to);
-  to.edges.set(typeId, from);
+  const newTypes = from.types.filter((id) => id !== typeId);
 
-  return to;
+  return linkArchetypes(from, ensureArchetype(world, from, typeId, newTypes), typeId);
 }
