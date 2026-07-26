@@ -32,14 +32,18 @@ describe("Name", () => {
       assert.strictEqual(lookupByName(world, "player-1"), undefined);
     });
 
-    it("throws on empty name", () => {
+    it("throws on empty name and keeps the existing name", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
+      setName(world, entity, "player");
+
       assert.throws(() => setName(world, entity, ""), IrisInvalidArgument);
+      assert.strictEqual(getName(world, entity), "player");
+      assert.strictEqual(lookupByName(world, "player"), entity);
     });
 
-    it("throws on name collision", () => {
+    it("throws on name collision and leaves both entities untouched", () => {
       const world = createWorld();
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
@@ -47,6 +51,22 @@ describe("Name", () => {
       setName(world, entity1, "player");
 
       assert.throws(() => setName(world, entity2, "player"), IrisDuplicate);
+      assert.strictEqual(getName(world, entity2), undefined);
+      assert.strictEqual(hasComponent(world, entity2, Name), false);
+      assert.strictEqual(lookupByName(world, "player"), entity1);
+    });
+
+    it("keeps the old name when a rename collides", () => {
+      const world = createWorld();
+      const entity1 = createEntity(world);
+      const entity2 = createEntity(world);
+
+      setName(world, entity1, "player");
+      setName(world, entity2, "enemy");
+
+      assert.throws(() => setName(world, entity2, "player"), IrisDuplicate);
+      assert.strictEqual(getName(world, entity2), "enemy");
+      assert.strictEqual(lookupByName(world, "enemy"), entity2);
     });
 
     it("updates name and registry on change", () => {

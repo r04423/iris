@@ -14,12 +14,13 @@ import type { World } from "./world.js";
 /**
  * Name component for entity identification.
  *
- * Stores a single string value that must be unique within the world.
+ * Stores a single string value that must be unique within the world. Set it via
+ * {@link setName}, which enforces those constraints.
  *
  * @example
  * ```typescript
- * addComponent(world, entity, Name, { value: "player-1" });
- * const name = getComponentValue(world, entity, Name, "value");
+ * setName(world, entity, "player-1");
+ * const name = getName(world, entity);
  * ```
  */
 export const Name = defineComponent("Name", { value: Type.string() });
@@ -145,6 +146,14 @@ export function getName(world: World, entityId: EntityId): string | undefined {
  * ```
  */
 export function setName(world: World, entityId: EntityId, name: string): void {
+  assert(name, IrisInvalidArgument, { expected: "non-empty name" });
+
+  if (getName(world, entityId) === name) {
+    return;
+  }
+
+  assert(lookupByName(world, name) === undefined, IrisDuplicate, { resource: "Name", id: name });
+
   if (!hasComponent(world, entityId, Name)) {
     addComponent(world, entityId, Name, { value: name });
     return;
