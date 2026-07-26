@@ -28,10 +28,13 @@ export function once(): ConditionFactory {
 }
 
 /**
- * Create a condition that passes every number of world ticks.
+ * Create a condition that passes on every nth evaluation.
  *
- * @param ticks - Positive safe integer interval
- * @returns Condition factory that passes when the world tick is divisible by ticks
+ * A system condition is evaluated once per frame, so `every(10)` passes every
+ * tenth frame.
+ *
+ * @param ticks - Positive safe integer interval, counted in condition evaluations
+ * @returns Condition factory that passes on every nth evaluation
  * @throws {IrisInvalidArgument} If ticks is not a positive safe integer
  *
  * @example
@@ -45,7 +48,9 @@ export function every(ticks: number): ConditionFactory {
     actual: String(ticks),
   });
 
-  return defineCondition(`every(${ticks})`, (world) => {
-    return () => world.execution.tick > 0 && world.execution.tick % ticks === 0;
+  return defineCondition(`every(${ticks})`, () => {
+    let count = 0;
+
+    return () => ++count % ticks === 0;
   });
 }

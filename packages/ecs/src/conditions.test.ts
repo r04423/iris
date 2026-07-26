@@ -27,7 +27,7 @@ describe("Conditions", () => {
     assert.strictEqual(runs, 2);
   });
 
-  it("every passes on divisible world ticks and restarts after reset", async () => {
+  it("every passes on every nth frame and restarts after reset", async () => {
     const world = createWorld();
     const runs: number[] = [];
     let tick = 0;
@@ -52,7 +52,7 @@ describe("Conditions", () => {
     assert.deepStrictEqual(runs, [3, 6, 10]);
   });
 
-  it("every aligns set and system intervals on shared world ticks", async () => {
+  it("every counts its own evaluations, so nested intervals multiply", async () => {
     const world = createWorld();
     const Group = defineSystemSet("Group");
     const runs: string[] = [];
@@ -91,16 +91,12 @@ describe("Conditions", () => {
     }
 
     assert.deepStrictEqual(runs, [
-      "first:2",
       "standalone:3",
       "first:4",
-      "first:6",
       "second:6",
       "standalone:6",
-      "first:9",
       "standalone:10",
       "first:11",
-      "first:13",
       "second:13",
       "standalone:13",
     ]);
