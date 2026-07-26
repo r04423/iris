@@ -11,6 +11,7 @@ import type { ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
   addSystemSet,
+  addSystems,
   defineCondition,
   defineSchedule,
   defineSystem,
@@ -125,6 +126,37 @@ describe("Scheduler", () => {
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["a", "b"]);
       assert.deepStrictEqual(meta?.after, ["c", "d"]);
+    });
+
+    it("registers a batch in order under shared options", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+      const track = (label: string) => defineSystem(label, () => () => void calls.push(label));
+
+      addSystems(world, [track("a"), track("b"), track("c")], { schedule: PostUpdate });
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["a", "b", "c"]);
+      assert.strictEqual(world.systems.byId.get("b")?.schedule, PostUpdate);
+    });
+
+    it("applies batch constraints to every system", () => {
+      const world = createWorld();
+
+      const anchor = defineSystem("anchor", () => () => {});
+      addSystems(world, [defineSystem("a", () => () => {}), defineSystem("b", () => () => {})], { after: anchor });
+
+      assert.deepStrictEqual(world.systems.byId.get("a")?.after, ["anchor"]);
+      assert.deepStrictEqual(world.systems.byId.get("b")?.after, ["anchor"]);
+    });
+
+    it("throws IrisDuplicate when a batch repeats a name", () => {
+      const world = createWorld();
+
+      const sys = defineSystem("sys", () => () => {});
+
+      assert.throws(() => addSystems(world, [sys, sys]), IrisDuplicate);
     });
 
     it("stores before/after as string arrays from string references", () => {

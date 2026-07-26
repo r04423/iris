@@ -103,6 +103,7 @@ export {
 export {
   addSystem,
   addSystemSet,
+  addSystems,
   defineCondition,
   defineSchedule,
   defineSystem,
@@ -164,6 +165,7 @@ export type {
   SystemSetLabel,
   SystemSetMeta,
   SystemSetOptions,
+  SystemsOptions,
   SystemTick,
 } from "./scheduler.js";
 export type {

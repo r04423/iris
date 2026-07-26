@@ -290,28 +290,39 @@ type SystemOptionsBase = {
 };
 
 /**
- * Options for system registration.
+ * Placement of a system in the pipeline.
  *
  * Exactly one of `schedule` or `set` may be provided. When `set` is given,
  * the system inherits the set's schedule. When neither is given, the system
  * defaults to the Update schedule.
  */
-export type SystemOptions = SystemOptionsBase &
-  (
-    | {
-        /** Schedule this system belongs to. Defaults to Update. */
-        schedule?: ScheduleLabel;
-        set?: never;
-      }
-    | {
-        schedule?: never;
-        /**
-         * System set this system belongs to. The set must be registered first
-         * via `addSystemSet()`. The set's schedule applies to this system.
-         */
-        set?: SystemSetLabel;
-      }
-  );
+type SystemTarget =
+  | {
+      /** Schedule this system belongs to. Defaults to Update. */
+      schedule?: ScheduleLabel;
+      set?: never;
+    }
+  | {
+      schedule?: never;
+      /**
+       * System set this system belongs to. The set must be registered first
+       * via `addSystemSet()`. The set's schedule applies to this system.
+       */
+      set?: SystemSetLabel;
+    };
+
+/**
+ * Options for system registration.
+ */
+export type SystemOptions = SystemOptionsBase & SystemTarget;
+
+/**
+ * Options shared by a batch of systems.
+ *
+ * Names must be unique, so `name` is unavailable here; register such systems
+ * individually with `addSystem()`.
+ */
+export type SystemsOptions = Omit<SystemOptionsBase, "name"> & SystemTarget;
 
 /**
  * System metadata stored in registry.
@@ -517,6 +528,24 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
   setMeta?.systems.push(name);
 
   world.schedules.dirty = true;
+}
+
+/**
+ * Registers several systems that share the same options.
+ *
+ * @param world - World instance
+ * @param systems - System functions or factories
+ * @param options - Options applied to every entry (schedule, set, before, after, condition)
+ *
+ * @example
+ * ```typescript
+ * addSystems(world, [broadphase, narrowphase, solver], { set: PhysicsSystems });
+ * ```
+ */
+export function addSystems(world: World, systems: (SystemRunner | SystemFactory)[], options?: SystemsOptions): void {
+  for (let i = 0; i < systems.length; i++) {
+    addSystem(world, systems[i]!, options);
+  }
 }
 
 // ============================================================================
