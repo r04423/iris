@@ -271,10 +271,24 @@ export function emitEvent<S extends EventSchema>(
 // ============================================================================
 
 /**
+ * Revision at which the given system last consumed this queue.
+ */
+function lastConsumedRevision(queue: EventQueueMeta, systemId: string): number {
+  return queue.lastRevision.get(systemId) ?? 0;
+}
+
+/**
+ * Whether an entry falls inside the (lastRevision, boundary] consumption window.
+ */
+function inWindow(entry: EventEntry, lastRevision: number, boundary: number): boolean {
+  return entry.revision > lastRevision && entry.revision <= boundary;
+}
+
+/**
  * Commits one validated event consumption window and returns its previous boundary.
  */
 function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: string, boundary: number): number {
-  const previous = queue.lastRevision.get(systemId) ?? 0;
+  const previous = lastConsumedRevision(queue, systemId);
 
   assert(boundary < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
     resource: "World revision",
@@ -306,17 +320,64 @@ function iterateEventQueue<S extends EventSchema>(
 
   for (let i = 0; i < prevLen; i++) {
     const entry = queue.previous[i]!;
-    if (entry.revision > lastRevision && entry.revision <= boundary) {
-      if (callback(entry.data) === false) return;
+    if (inWindow(entry, lastRevision, boundary)) {
+      if (callback(entry.data) === false) {
+        return;
+      }
     }
   }
 
   for (let i = 0; i < currLen; i++) {
     const entry = queue.current[i]!;
-    if (entry.revision > lastRevision && entry.revision <= boundary) {
-      if (callback(entry.data) === false) return;
+    if (inWindow(entry, lastRevision, boundary)) {
+      if (callback(entry.data) === false) {
+        return;
+      }
     }
   }
+}
+
+/**
+ * Iterate the unread window without consuming it or advancing revisions.
+ *
+ * @internal
+ */
+function peekEvents<S extends EventSchema>(
+  world: World,
+  event: Event<S>,
+  callback: (data: EventData<S>) => unknown
+): void {
+  const { systemId } = world.execution;
+
+  // Outside system context: nothing is readable
+  if (systemId === null) {
+    return;
+  }
+
+  const queue = ensureEventQueue(world, event);
+
+  iterateEventQueue(queue, lastConsumedRevision(queue, systemId), world.revision, callback);
+}
+
+/**
+ * Last entry of a buffer inside the consumption window, scanning backwards.
+ *
+ * @internal
+ */
+function findLastInWindow<S extends EventSchema>(
+  buffer: EventEntry<S>[],
+  lastRevision: number,
+  boundary: number
+): EventEntry<S> | undefined {
+  for (let i = buffer.length - 1; i >= 0; i--) {
+    const entry = buffer[i]!;
+
+    if (inWindow(entry, lastRevision, boundary)) {
+      return entry;
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -409,19 +470,9 @@ export function hasEvents<S extends EventSchema>(
   world: World,
   event: Event<S>
 ): event is Event<S> & PendingEvent<Event<S>> {
-  const { systemId } = world.execution;
-
-  // Outside system context: always false
-  if (systemId === null) {
-    return false;
-  }
-
-  const queue = ensureEventQueue(world, event);
-  const lastRevision = queue.lastRevision.get(systemId) ?? 0;
-
   let found = false;
 
-  iterateEventQueue(queue, lastRevision, world.revision, () => {
+  peekEvents(world, event, () => {
     found = true;
     return false;
   });
@@ -445,19 +496,9 @@ export function hasEvents<S extends EventSchema>(
  * ```
  */
 export function countEvents<S extends EventSchema>(world: World, event: Event<S>): number {
-  const { systemId } = world.execution;
-
-  // Outside system context: always 0
-  if (systemId === null) {
-    return 0;
-  }
-
-  const queue = ensureEventQueue(world, event);
-  const lastRevision = queue.lastRevision.get(systemId) ?? 0;
-
   let count = 0;
 
-  iterateEventQueue(queue, lastRevision, world.revision, () => {
+  peekEvents(world, event, () => {
     count++;
   });
 
@@ -499,28 +540,11 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Event<
   const queue = ensureEventQueue(world, event);
   const lastRevision = consumeEventWindow(world, queue, systemId, boundary);
 
-  let result: EventData<S> | undefined;
+  // Current buffer holds the newer events, so search it first
+  const entry =
+    findLastInWindow(queue.current, lastRevision, boundary) ?? findLastInWindow(queue.previous, lastRevision, boundary);
 
-  // Search current buffer backwards first, then previous
-  for (let i = queue.current.length - 1; i >= 0; i--) {
-    const entry = queue.current[i]!;
-    if (entry.revision > lastRevision && entry.revision <= boundary) {
-      result = entry.data;
-      break;
-    }
-  }
-
-  if (result === undefined) {
-    for (let i = queue.previous.length - 1; i >= 0; i--) {
-      const entry = queue.previous[i]!;
-      if (entry.revision > lastRevision && entry.revision <= boundary) {
-        result = entry.data;
-        break;
-      }
-    }
-  }
-
-  return result;
+  return entry?.data;
 }
 
 /**
