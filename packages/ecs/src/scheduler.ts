@@ -2,6 +2,7 @@ import {
   addEdge,
   addNode,
   createDag,
+  type DirectedAcyclicGraph,
   getPredecessors,
   getSuccessors,
   removeNode as removeDagNode,
@@ -416,13 +417,10 @@ export function addSystemSet(world: World, set: SystemSetLabel, options?: System
   assert(!world.systemSets.byId.has(set), IrisDuplicate, { resource: "SystemSet", id: set });
   assert(!world.systems.byId.has(set), IrisDuplicate, { resource: "System", id: set });
 
-  const before = options?.before;
-  const after = options?.after;
-
   world.systemSets.byId.set(set, {
     schedule: options?.schedule ?? Update,
-    before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
-    after: !after ? [] : Array.isArray(after) ? after.map(resolveReference) : [resolveReference(after)],
+    before: normalizeReferences(options?.before),
+    after: normalizeReferences(options?.after),
     systems: [],
     conditionFactory: options?.condition ?? null,
     conditionRunner: null,
@@ -441,6 +439,18 @@ export function addSystemSet(world: World, set: SystemSetLabel, options?: System
  */
 function resolveReference(ref: SystemReference): string {
   return typeof ref === "string" ? ref : ref.name;
+}
+
+/**
+ * Normalizes an optional single reference or reference array to a name array.
+ * @internal
+ */
+function normalizeReferences(refs: SystemReference | SystemReference[] | undefined): string[] {
+  if (!refs) {
+    return [];
+  }
+
+  return Array.isArray(refs) ? refs.map(resolveReference) : [resolveReference(refs)];
 }
 
 // ============================================================================
@@ -472,58 +482,39 @@ function resolveReference(ref: SystemReference): string {
  * ```
  */
 export function addSystem(world: World, system: SystemRunner | SystemFactory, options?: SystemOptions): void {
-  let runner: SystemRunner | null;
-  let factory: SystemFactory | null;
-  let name: string;
-
-  if (isSystemFactory(system)) {
-    runner = null;
-    factory = system;
-    name = options?.name ?? system.name;
-  } else {
-    runner = system;
-    factory = null;
-    name = options?.name ?? system.name;
-  }
+  const factory = isSystemFactory(system) ? system : null;
+  const runner = factory === null ? (system as SystemRunner) : null;
+  const name = options?.name ?? system.name;
 
   assert(name && name !== "anonymous", IrisInvalidArgument, { expected: "named system function or name option" });
   assert(!world.systems.byId.has(name), IrisDuplicate, { resource: "System", id: name });
   assert(!world.systemSets.byId.has(name as SystemSetLabel), IrisDuplicate, { resource: "SystemSet", id: name });
 
   const setLabel = options?.set;
+  const setMeta = setLabel === undefined ? null : (world.systemSets.byId.get(setLabel) ?? null);
 
-  // Validate set exists
-  if (setLabel) {
-    assert(world.systemSets.byId.has(setLabel), IrisNotFound, {
+  if (setLabel !== undefined) {
+    assert(setMeta !== null, IrisNotFound, {
       resource: "SystemSet",
       id: setLabel,
       context: `"${name}" set option`,
     });
   }
 
-  // Resolve schedule: from set if specified, else from options, else Update
-  const schedule = setLabel ? world.systemSets.byId.get(setLabel)!.schedule : (options?.schedule ?? Update);
-
-  // Normalize before/after constraints to arrays
-  const before = options?.before;
-  const after = options?.after;
-
   world.systems.byId.set(name, {
     runner,
     factory,
     conditionFactory: options?.condition ?? null,
     conditionRunner: null,
-    schedule,
+    // A set's schedule wins over the schedule option, which the types forbid combining.
+    schedule: setMeta !== null ? setMeta.schedule : (options?.schedule ?? Update),
     index: world.systems.nextIndex++,
-    before: !before ? [] : Array.isArray(before) ? before.map(resolveReference) : [resolveReference(before)],
-    after: !after ? [] : Array.isArray(after) ? after.map(resolveReference) : [resolveReference(after)],
+    before: normalizeReferences(options?.before),
+    after: normalizeReferences(options?.after),
     set: setLabel,
   });
 
-  // Add system to set's member list
-  if (setLabel) {
-    world.systemSets.byId.get(setLabel)!.systems.push(name);
-  }
+  setMeta?.systems.push(name);
 
   world.schedules.dirty = true;
 }
@@ -620,13 +611,7 @@ function isSystemFactory(system: SystemRunner | SystemFactory): system is System
  * ```
  */
 export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
-  const idx = world.schedules.pipeline.indexOf(anchor);
-
-  assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
-  assert(!world.schedules.pipeline.includes(schedule), IrisDuplicate, { resource: "Schedule", id: schedule });
-
-  world.schedules.pipeline.splice(idx, 0, schedule);
-  world.schedules.dirty = true;
+  insertScheduleAt(world, schedule, anchor, 0);
 }
 
 /**
@@ -643,18 +628,68 @@ export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anch
  * ```
  */
 export function insertScheduleAfter(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel): void {
+  insertScheduleAt(world, schedule, anchor, 1);
+}
+
+/**
+ * Splices a schedule into the pipeline at the anchor's index plus an offset.
+ * @internal
+ */
+function insertScheduleAt(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel, offset: 0 | 1): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
 
   assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
   assert(!world.schedules.pipeline.includes(schedule), IrisDuplicate, { resource: "Schedule", id: schedule });
 
-  world.schedules.pipeline.splice(idx + 1, 0, schedule);
+  world.schedules.pipeline.splice(idx + offset, 0, schedule);
   world.schedules.dirty = true;
 }
 
 // ============================================================================
 // Schedule Building (Internal)
 // ============================================================================
+
+/**
+ * Adds the before/after edges for one system or set node, rejecting unknown targets.
+ *
+ * Works for both node kinds because a set's constraints have the same shape as a
+ * system's; set nodes are flattened into their members later.
+ */
+function addConstraintEdges(
+  dag: DirectedAcyclicGraph<string>,
+  owner: string,
+  meta: { before: string[]; after: string[] },
+  scheduleSystems: Map<string, SystemMeta>,
+  scheduleSets: Map<string, SystemSetMeta>,
+  scheduleLabel: ScheduleLabel
+): void {
+  for (const target of meta.before) {
+    assertConstraintTarget(target, scheduleSystems, scheduleSets, owner, "before", scheduleLabel);
+    addEdge(dag, owner, target);
+  }
+
+  for (const target of meta.after) {
+    assertConstraintTarget(target, scheduleSystems, scheduleSets, owner, "after", scheduleLabel);
+    addEdge(dag, target, owner);
+  }
+}
+
+function assertConstraintTarget(
+  target: string,
+  scheduleSystems: Map<string, SystemMeta>,
+  scheduleSets: Map<string, SystemSetMeta>,
+  owner: string,
+  kind: "before" | "after",
+  scheduleLabel: ScheduleLabel
+): void {
+  if (!scheduleSystems.has(target) && !scheduleSets.has(target)) {
+    throw new IrisNotFound({
+      resource: "System or SystemSet",
+      id: target,
+      context: `"${owner}" ${kind} constraint in schedule "${scheduleLabel}"`,
+    });
+  }
+}
 
 /**
  * Builds an execution order from registered systems using a DAG with set flattening.
@@ -699,54 +734,13 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
     addNode(dag, label);
   }
 
-  // Add system constraint edges
+  // Add system and set constraint edges
   for (const [name, meta] of scheduleSystems) {
-    for (const beforeName of meta.before) {
-      if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
-        throw new IrisNotFound({
-          resource: "System or SystemSet",
-          id: beforeName,
-          context: `"${name}" before constraint in schedule "${scheduleLabel}"`,
-        });
-      }
-      addEdge(dag, name, beforeName);
-    }
-
-    for (const afterName of meta.after) {
-      if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
-        throw new IrisNotFound({
-          resource: "System or SystemSet",
-          id: afterName,
-          context: `"${name}" after constraint in schedule "${scheduleLabel}"`,
-        });
-      }
-      addEdge(dag, afterName, name);
-    }
+    addConstraintEdges(dag, name, meta, scheduleSystems, scheduleSets, scheduleLabel);
   }
 
-  // Add set constraint edges
   for (const [label, meta] of scheduleSets) {
-    for (const beforeName of meta.before) {
-      if (!scheduleSystems.has(beforeName) && !scheduleSets.has(beforeName)) {
-        throw new IrisNotFound({
-          resource: "System or SystemSet",
-          id: beforeName,
-          context: `"${label}" before constraint in schedule "${scheduleLabel}"`,
-        });
-      }
-      addEdge(dag, label, beforeName);
-    }
-
-    for (const afterName of meta.after) {
-      if (!scheduleSystems.has(afterName) && !scheduleSets.has(afterName)) {
-        throw new IrisNotFound({
-          resource: "System or SystemSet",
-          id: afterName,
-          context: `"${label}" after constraint in schedule "${scheduleLabel}"`,
-        });
-      }
-      addEdge(dag, afterName, label);
-    }
+    addConstraintEdges(dag, label, meta, scheduleSystems, scheduleSets, scheduleLabel);
   }
 
   // Flatten: replace set nodes with edges to/from member systems
@@ -815,6 +809,8 @@ function rebuildPipeline(world: World): void {
  * @internal
  */
 function prepareSystems(world: World): void {
+  // Every path that leaves a runner or condition uninitialized also marks the
+  // schedules dirty, so this one flag gates both init and the rebuild.
   if (!world.schedules.dirty) {
     return;
   }
@@ -863,6 +859,8 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
   fireObserverEvent(world, "scheduleStarted", scheduleLabel);
 
   try {
+    // A set's condition is evaluated at most once per schedule invocation, so its
+    // members cannot disagree about whether the set ran.
     let setResults: Map<SystemSetLabel, boolean> | null = null;
 
     for (const systemId of order) {
@@ -1064,43 +1062,25 @@ function scheduleFrame(world: World): void {
  * Wait for the active frame and execute the shutdown schedule.
  */
 async function runShutdown(world: World): Promise<void> {
-  const frame = world.execution.framePromise;
-
-  let frameFailed = false;
-  let frameError: unknown;
-  let shutdownCompleted = false;
+  // Shutdown runs even if the frame threw, so its failure is settled, not awaited.
+  const [frame] = await Promise.allSettled([world.execution.framePromise]);
 
   try {
-    try {
-      await frame;
-    } catch (error) {
-      frameFailed = true;
-      frameError = error;
-    }
+    prepareSystems(world);
+    await executeSchedule(world, Shutdown);
+  } catch (shutdownError) {
+    // A failed shutdown leaves shutdownPromise set, so stop() keeps reporting it.
+    throw frame.status === "rejected"
+      ? new AggregateError([frame.reason, shutdownError], "Frame and shutdown both failed")
+      : shutdownError;
+  }
 
-    try {
-      prepareSystems(world);
-      await executeSchedule(world, Shutdown);
+  world.execution.shutdownRan = true;
+  world.execution.startupRan = false;
+  world.execution.shutdownPromise = null;
 
-      world.execution.shutdownRan = true;
-      world.execution.startupRan = false;
-
-      shutdownCompleted = true;
-    } catch (shutdownError) {
-      if (frameFailed) {
-        throw new AggregateError([frameError, shutdownError], "Frame and shutdown both failed");
-      }
-
-      throw shutdownError;
-    }
-
-    if (frameFailed) {
-      throw frameError;
-    }
-  } finally {
-    if (shutdownCompleted) {
-      world.execution.shutdownPromise = null;
-    }
+  if (frame.status === "rejected") {
+    throw frame.reason;
   }
 }
 
