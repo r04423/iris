@@ -126,7 +126,7 @@ export type SystemSetLabel = string & { [SYSTEM_SET_LABEL_BRAND]: true };
 /**
  * Reference to a system or system set in ordering constraints.
  */
-export type SystemReference = SystemFactory | SystemSetLabel | string;
+export type SystemReference = SystemRunner | SystemFactory | SystemSetLabel | string;
 
 /**
  * Options for system set registration.
