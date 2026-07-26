@@ -32,12 +32,11 @@ describe("World", () => {
       assert.ok(world.entities.byId);
     });
 
-    it("creates world with entity registry containing NameRegistry resource", () => {
+    it("creates world with an empty entity registry", () => {
       const world = createWorld();
 
       const entityRegistry = world.entities;
-      // NameRegistry resource is automatically added during world creation
-      assert.strictEqual(entityRegistry.byId.size, 1);
+      assert.strictEqual(entityRegistry.byId.size, 0);
       assert.strictEqual(entityRegistry.freeIds.length, 0);
       assert.strictEqual(entityRegistry.nextId, 1);
     });
@@ -57,8 +56,7 @@ describe("World", () => {
       assert.deepStrictEqual(root.types, []);
       assert.strictEqual(root.hash, "");
       assert.strictEqual(root.typesSet.size, 0);
-      // Root has edge to NameRegistry archetype from automatic resource init
-      assert.strictEqual(root.edges.size, 1);
+      assert.strictEqual(root.edges.size, 0);
     });
 
     it("registers root archetype in archetype map", () => {
@@ -114,8 +112,7 @@ describe("World", () => {
 
       resetWorld(world);
 
-      // All entities cleared (only NameRegistry resource remains)
-      assert.strictEqual(world.entities.byId.size, 1);
+      assert.strictEqual(world.entities.byId.size, 0);
     });
 
     it("preserves systems after reset", () => {
@@ -264,8 +261,7 @@ describe("World", () => {
         // Reset
         resetWorld(world);
 
-        // Verify clean state (only NameRegistry resource)
-        assert.strictEqual(world.entities.byId.size, 1);
+        assert.strictEqual(world.entities.byId.size, 0);
       }
     });
 

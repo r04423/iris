@@ -3,7 +3,6 @@ import type { EntityId, EntityWith } from "./encoding.js";
 import { assert, IrisDuplicate, IrisInvalidArgument } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent } from "./registry.js";
-import { addResource, getResourceValue } from "./resource.js";
 import { Type } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -25,62 +24,48 @@ import type { World } from "./world.js";
  */
 export const Name = defineComponent("Name", { value: Type.string() });
 
-/**
- * Dual-index registry for O(1) lookups in both directions. Stored as a world resource.
- */
-const NameRegistry = defineComponent("NameRegistry", {
-  nameToEntity: Type.ref<Map<string, EntityId>>(),
-  entityToName: Type.ref<Map<EntityId, string>>(),
-});
-
 // ============================================================================
 // Initialization
 // ============================================================================
 
 /**
- * Creates a fresh name registry resource.
+ * Clears the world's name indices.
  * @param world - World instance to initialize
  * @internal
  */
 export function resetNameSystem(world: World): void {
-  addResource(world, NameRegistry, {
-    nameToEntity: new Map(),
-    entityToName: new Map(),
-  });
+  world.entities.byName.clear();
+  world.entities.names.clear();
 }
 
 /**
- * Initializes the name system for a world by setting up the dual-index registry
- * and observer callbacks that keep name mappings synchronized with entity lifecycle.
+ * Initializes the name system for a world by registering the observer callbacks
+ * that keep the name indices synchronized with entity lifecycle.
  * Called automatically by createWorld().
  * @internal
  */
 export function initNameSystem(world: World): void {
-  resetNameSystem(world);
-
-  // Clean up registry when Name component is removed from an entity
+  // Clean up indices when Name component is removed from an entity
   registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
     if (componentId !== Name) {
       return;
     }
 
-    const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
-    const entityToName = getResourceValue(world, NameRegistry, "entityToName")!;
-    const name = entityToName.get(entityId)!;
+    const { byName, names } = world.entities;
+    const name = names.get(entityId)!;
 
-    nameToEntity.delete(name);
-    entityToName.delete(entityId);
+    byName.delete(name);
+    names.delete(entityId);
   });
 
-  // Sync registry when Name component is added or its value changes.
+  // Sync indices when Name component is added or its value changes.
   // Validates uniqueness and non-empty constraints before updating mappings.
   registerObserverCallback(world, "componentChanged", (componentId, entityId) => {
     if (componentId !== Name) {
       return;
     }
 
-    const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
-    const entityToName = getResourceValue(world, NameRegistry, "entityToName")!;
+    const { byName: nameToEntity, names: entityToName } = world.entities;
     const previous = entityToName.get(entityId);
     const current = getComponentValue(world, entityId, Name, "value");
 
@@ -100,18 +85,17 @@ export function initNameSystem(world: World): void {
     entityToName.set(entityId, current);
   });
 
-  // Clean up registry when a named entity is destroyed
+  // Clean up indices when a named entity is destroyed
   registerObserverCallback(world, "entityDestroyed", (entityId) => {
-    const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
-    const entityToName = getResourceValue(world, NameRegistry, "entityToName")!;
-    const name = entityToName.get(entityId);
+    const { byName, names } = world.entities;
+    const name = names.get(entityId);
 
     if (name === undefined) {
       return;
     }
 
-    nameToEntity.delete(name);
-    entityToName.delete(entityId);
+    byName.delete(name);
+    names.delete(entityId);
   });
 }
 
@@ -196,8 +180,7 @@ export function lookupByName<C extends EntityId[]>(
   name: string,
   components?: C
 ): EntityWith<C[number]> | undefined {
-  const nameToEntity = getResourceValue(world, NameRegistry, "nameToEntity")!;
-  const entityId = nameToEntity.get(name);
+  const entityId = world.entities.byName.get(name);
 
   if (!entityId) {
     return;

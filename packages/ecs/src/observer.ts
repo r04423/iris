@@ -57,6 +57,9 @@ export type ObserverMeta<T extends EventType> = {
 /**
  * Registers a callback to be invoked when an event of the specified type is fired.
  *
+ * Dispatch order is unspecified: a callback must not rely on observing the effects of
+ * another callback for the same event.
+ *
  * During observer dispatch, a callback may unregister itself but must not
  * register or unregister other callbacks for the event being dispatched.
  *

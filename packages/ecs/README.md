@@ -1014,7 +1014,7 @@ readEvents(world, removed(Health), (event) => {
 
 #### Under the Hood
 
-Removal detection works differently because when an entity loses a component, it moves to a new archetype -- the old archetype's data becomes inaccessible. Rather than maintain slow global storage for deleted components, `removed()` emits events before the transition occurs. This keeps the fast archetype-local design while enabling removal detection.
+Removal detection works differently because when an entity loses a component, it moves to a new archetype -- the old archetype's data becomes inaccessible. Rather than maintain slow global storage for deleted components, `removed()` emits an event carrying just the entity as the transition happens. This keeps the fast archetype-local des ign while enabling removal detection.
 
 ### Observers
 
@@ -1052,8 +1052,8 @@ During observer dispatch, a callback may unregister itself. It must not register
 | `entityDestroying` | `(entityId)` | Before cleanup -- entity is alive and its component data is still readable |
 | `entityDestroyed` | `(entityId)` | After removal -- the entity is gone, so reads through the handle throw |
 | `componentAdded` | `(componentId, entityId)` | After component added |
-| `componentRemoved` | `(componentId, entityId)` | Before component removed |
-| `componentChanged` | `(componentId, entityId)` | After `setComponentValue()` |
+| `componentRemoved` | `(componentId, entityId)` | After removal -- the component is gone, so reads for it return `undefined` |
+| `componentChanged` | `(componentId, entityId)` | After a value write, including the initial data write of `addComponent()` (which precedes `componentAdded`) |
 | `archetypeCreated` | `(archetype)` | After archetype created |
 | `archetypeDestroyed` | `(archetype)` | Before archetype cleanup |
 | `worldReset` | `(world)` | After `resetWorld()` |

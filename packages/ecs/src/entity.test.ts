@@ -37,7 +37,6 @@ describe("Entity", () => {
     it("updates entity registry counters", () => {
       const world = createWorld();
       const registry = world.entities;
-      // World starts with 1 entity (NameRegistry resource)
       const initialSize = registry.byId.size;
 
       createEntity(world);
@@ -288,7 +287,6 @@ describe("Entity", () => {
     it("allocates new ID when no dead entities available", () => {
       const world = createWorld();
       const registry = world.entities;
-      // World starts with 1 entity (NameRegistry resource)
       const initialSize = registry.byId.size;
 
       createEntity(world);

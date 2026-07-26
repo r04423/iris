@@ -144,8 +144,7 @@ describe("Observer", () => {
       // Trigger event (createEntity fires "entityCreated" internally)
       createEntity(world);
 
-      // Both should have been called
-      // Note: Since we iterate backwards, callback2 is called first, then callback1.
+      // Both should have been called; dispatch order is unspecified
       assert.deepStrictEqual(callOrder.sort(), ["callback1", "callback2"]);
 
       // callback1 should be removed

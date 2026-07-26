@@ -51,6 +51,16 @@ export type World = {
      * Generation lookup for pair target reconstruction (rawId -> generation).
      */
     generations: Map<number, number>;
+
+    /**
+     * Name lookup (name -> entity ID).
+     */
+    byName: Map<string, EntityId>;
+
+    /**
+     * Reverse name lookup (entity ID -> name).
+     */
+    names: Map<EntityId, string>;
   };
 
   /**
@@ -254,6 +264,8 @@ export function createWorld(): World {
   const world: World = {
     entities: {
       byId: new Map(),
+      byName: new Map(),
+      names: new Map(),
       freeIds: [],
       nextId: 1,
       generations: new Map(),
@@ -333,7 +345,9 @@ export function createWorld(): World {
 /**
  * Resets world to initial state, clearing all entities and caches.
  *
- * Does NOT fire per-entity lifecycle events (entityDestroying, entityDestroyed, componentRemoved).
+ * Does NOT fire teardown events (entityDestroying, entityDestroyed, componentRemoved,
+ * archetypeDestroyed): observers should treat "worldReset" as "discard every cached
+ * entity and archetype".
  * For per-entity cleanup, run a "shutdown" schedule before calling resetWorld().
  * Factory systems and attached conditions initialize again before the next
  * `runOnce()` or `stop()`.

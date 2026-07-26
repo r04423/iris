@@ -805,7 +805,6 @@ describe("Archetype", () => {
       const healthId = createEntity(world);
 
       const root = world.archetypes.root;
-      // Root starts with 1 edge to NameRegistry archetype
       const initialEdges = root.edges.size;
 
       // Add different components
