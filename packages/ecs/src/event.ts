@@ -325,6 +325,8 @@ function iterateEventQueue<S extends EventSchema>(
  * Per-system isolated: each system has independent tracking of which events
  * it has consumed. Multiple systems can consume the same events independently.
  *
+ * Consumes the whole unread window up front; outside systems does nothing.
+ *
  * @param world - World instance
  * @param event - Event definition
  * @param callback - Called for each unread event. Return `false` to stop iteration early
@@ -357,6 +359,8 @@ export function readEvents<S extends EventSchema>(
 
 /**
  * Collect all unread events into an array.
+ *
+ * Consumes the unread window; outside systems returns an empty array.
  *
  * @param world - World instance
  * @param event - Event definition
@@ -464,6 +468,7 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
  * Read only the most recent event, marking all as read.
  *
  * Useful when only the latest state matters (e.g., input, config changes).
+ * Outside systems returns undefined.
  *
  * @param world - World instance
  * @param event - Event definition
@@ -522,6 +527,7 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Event<
  * Clear events (mark as read without processing).
  *
  * Useful when a system needs to skip events under certain conditions.
+ * Outside systems does nothing.
  *
  * @param world - World instance
  * @param event - Event definition
