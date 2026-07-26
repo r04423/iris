@@ -666,9 +666,14 @@ export function insertScheduleAfter(world: World, schedule: ScheduleLabel, ancho
  */
 function insertScheduleAt(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel, offset: 0 | 1): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
+  // Startup and Shutdown already own a lifecycle slot outside the pipeline.
+  const reserved = schedule === Startup || schedule === Shutdown;
 
   assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
-  assert(!world.schedules.pipeline.includes(schedule), IrisDuplicate, { resource: "Schedule", id: schedule });
+  assert(!reserved && !world.schedules.pipeline.includes(schedule), IrisDuplicate, {
+    resource: "Schedule",
+    id: schedule,
+  });
 
   world.schedules.pipeline.splice(idx + offset, 0, schedule);
   world.schedules.dirty = true;
@@ -821,6 +826,19 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
  * Rebuilds all schedules in the pipeline plus Startup and Shutdown.
  */
 function rebuildPipeline(world: World): void {
+  // No slot ever executes a label outside these, so such a system is inert.
+  const executable = new Set<string>(world.schedules.pipeline);
+  executable.add(Startup);
+  executable.add(Shutdown);
+
+  for (const [name, meta] of world.systems.byId) {
+    assert(executable.has(meta.schedule), IrisNotFound, {
+      resource: "Schedule",
+      id: meta.schedule,
+      context: `"${name}" schedule option`,
+    });
+  }
+
   // Build Startup and Shutdown schedules
   buildSchedule(world, Startup);
   buildSchedule(world, Shutdown);
@@ -961,9 +979,11 @@ async function executeFrame(world: World): Promise<void> {
       world.execution.startupRan = true;
     }
 
-    // Run all pipeline schedules in order
-    for (let i = 0; i < world.schedules.pipeline.length; i++) {
-      await executeSchedule(world, world.schedules.pipeline[i]!);
+    // Run all pipeline schedules in order.
+    const pipeline = world.schedules.pipeline.slice();
+
+    for (let i = 0; i < pipeline.length; i++) {
+      await executeSchedule(world, pipeline[i]!);
     }
 
     // Flush events at end of frame

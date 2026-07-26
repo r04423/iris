@@ -617,6 +617,13 @@ describe("Scheduler", () => {
       assert.throws(() => insertScheduleAfter(world, First, Update), IrisDuplicate);
     });
 
+    it("throws when inserting a lifecycle schedule", () => {
+      const world = createWorld();
+
+      assert.throws(() => insertScheduleAfter(world, Startup, Update), IrisDuplicate);
+      assert.throws(() => insertScheduleBefore(world, Shutdown, Update), IrisDuplicate);
+    });
+
     it("marks pipeline dirty on insert", async () => {
       const world = createWorld();
       await runOnce(world); // clears dirty flag
@@ -691,6 +698,41 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.strictEqual(calls.indexOf("physics") < calls.indexOf("update"), true);
+    });
+
+    it("throws for a system registered to a schedule outside the pipeline", async () => {
+      const world = createWorld();
+      const Physics = defineSchedule("Physics");
+
+      addSystem(world, function physicsSys() {}, { schedule: Physics });
+
+      await assert.rejects(() => runOnce(world), IrisNotFound);
+    });
+
+    it("insert from a running system takes effect on the next frame", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+      const Physics = defineSchedule("Physics");
+
+      addSystem(world, function updateSys() {
+        calls.push("update");
+
+        if (!world.schedules.pipeline.includes(Physics)) {
+          insertScheduleBefore(world, Physics, First);
+          addSystem(
+            world,
+            function physicsSys() {
+              calls.push("physics");
+            },
+            { schedule: Physics }
+          );
+        }
+      });
+
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["update", "physics", "update"]);
     });
   });
 
