@@ -142,7 +142,11 @@ export function not<C extends EntityId>(componentId: C): NotModifier<C> {
  * @returns Added modifier
  *
  * @example
- * const enemies = collectEntities(world, [added(Enemy)]);
+ * ```typescript
+ * addSystem(world, function spawnAlert() {
+ *   const enemies = collectEntities(world, [added(Enemy)]);
+ * });
+ * ```
  */
 export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
   return { type: "added", componentId };
@@ -158,7 +162,11 @@ export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
  * @returns Changed modifier
  *
  * @example
- * const damaged = collectEntities(world, [changed(Health)]);
+ * ```typescript
+ * addSystem(world, function healthReport() {
+ *   const damaged = collectEntities(world, [changed(Health)]);
+ * });
+ * ```
  */
 export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> {
   return { type: "changed", componentId };
@@ -168,6 +176,9 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
  * Create disjunction modifier for query.
  *
  * Matches entities that have at least one of the given components.
+ *
+ * Alternatives multiply across groups: a query's `or()` groups are
+ * capped at 32 combinations.
  *
  * @param componentIds - Alternative components (at least one must be present)
  * @returns Or modifier

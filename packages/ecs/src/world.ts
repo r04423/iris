@@ -337,6 +337,8 @@ export function createWorld(): World {
  * For per-entity cleanup, run a "shutdown" schedule before calling resetWorld().
  * Factory systems and attached conditions initialize again before the next
  * `runOnce()` or `stop()`.
+ * Queries cached before the reset are invalidated: they match nothing afterwards
+ * and must be re-created with `cacheQuery()`.
  * Fires the "worldReset" observer event after reset completes.
  *
  * @param world - World instance to reset
