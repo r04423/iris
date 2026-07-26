@@ -1,4 +1,4 @@
-import type { Archetype } from "./archetype.js";
+import type { Archetype, Column } from "./archetype.js";
 import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype, getColumnStride } from "./archetype.js";
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
@@ -127,7 +127,7 @@ export function addComponent<S extends SchemaRecord>(
 
   moveEntityToArchetype(world, meta, toArchetype);
 
-  const dataChanged = data !== undefined && writeComponentData(world, meta, componentId, data);
+  const dataWritten = data !== undefined && writeComponentData(world, meta, componentId, data);
 
   markPairTopologyChanged(world, meta, componentId);
 
@@ -140,7 +140,7 @@ export function addComponent<S extends SchemaRecord>(
     fireObserverEvent(world, "componentRemoved", removedTargetWildcard, entityId);
   }
 
-  if (dataChanged) {
+  if (dataWritten) {
     fireObserverEvent(world, "componentChanged", componentId, entityId);
   }
 
@@ -384,13 +384,7 @@ export function getComponentValue<S extends SchemaRecord, K extends ScalarFields
 ): InferSchema<S[K]> | undefined {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = archetype.columns.get(componentId);
-
-  if (!fieldColumns) {
-    return;
-  }
-
-  const column = fieldColumns[fieldName as string];
+  const column = resolveColumn(archetype, componentId, fieldName as string);
 
   if (!column) {
     return;
@@ -447,13 +441,7 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
 ): void {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = archetype.columns.get(componentId);
-
-  if (!fieldColumns) {
-    return;
-  }
-
-  const column = fieldColumns[fieldName as string];
+  const column = resolveColumn(archetype, componentId, fieldName as string);
 
   if (!column) {
     return;
@@ -461,13 +449,7 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
 
   column[row] = value;
 
-  const ticks = archetype.ticks.get(componentId);
-
-  if (ticks) {
-    ticks.changed[row] = world.revision;
-  }
-
-  fireObserverEvent(world, "componentChanged", componentId, entityId);
+  markChanged(world, archetype, row, componentId, entityId);
 }
 
 /**
@@ -480,18 +462,55 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
  * @param componentId - Component that was changed
  *
  * @example
- * markComponentChanged(world, entity, Position);  // Notify change tracking
+ * emitComponentChanged(world, entity, Position);  // Notify change tracking
  */
 export function emitComponentChanged(world: World, entityId: EntityId, componentId: EntityId): void {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const ticks = archetype.ticks.get(componentId);
-
-  if (!ticks) {
+  if (!archetype.typesSet.has(componentId)) {
     return;
   }
 
-  ticks.changed[row] = world.revision;
+  markChanged(world, archetype, row, componentId, entityId);
+}
+
+// ============================================================================
+// Column Access Internals
+// ============================================================================
+
+/**
+ * Look up the column backing one field of a component on an archetype.
+ *
+ * Returns undefined when the archetype lacks the component, or when the component
+ * has no such field -- both are the "not present" case for the value accessors.
+ *
+ * @param archetype - Archetype holding the entity
+ * @param componentId - Component or pair owning the columns
+ * @param fieldName - Field to resolve
+ * @returns The column, or undefined if component or field is absent
+ */
+function resolveColumn(archetype: Archetype, componentId: EntityId, fieldName: string): Column | undefined {
+  return archetype.columns.get(componentId)?.[fieldName];
+}
+
+/**
+ * Stamp the change tick and notify observers that a component was written.
+ *
+ * Callers establish that the entity has the component first, so its tick columns
+ * exist alongside the data columns.
+ *
+ * @param world - World instance
+ * @param archetype - Archetype holding the entity
+ * @param row - Entity's row within the archetype
+ * @param componentId - Component or pair that changed
+ * @param entityId - Entity that owns the component
+ */
+function markChanged(world: World, archetype: Archetype, row: number, componentId: EntityId, entityId: EntityId): void {
+  const ticks = archetype.ticks.get(componentId);
+
+  if (ticks) {
+    ticks.changed[row] = world.revision;
+  }
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
 }
@@ -510,7 +529,7 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
  * @param meta - Entity metadata, already moved to its new archetype
  * @param componentId - Component or pair owning the columns
  * @param data - Field values to write
- * @returns True if the component stores data, false for tags
+ * @returns True if columns were written, false when the component stores nothing
  */
 function writeComponentData(
   world: World,
@@ -724,13 +743,7 @@ export function getComponentVectorValue<S extends SchemaRecord, K extends Vector
 ): InferSchema<S[K]> | undefined {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = archetype.columns.get(componentId);
-
-  if (!fieldColumns) {
-    return;
-  }
-
-  const column = fieldColumns[fieldName as string];
+  const column = resolveColumn(archetype, componentId, fieldName as string);
 
   if (!column) {
     return;
@@ -798,13 +811,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
 ): void {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = archetype.columns.get(componentId);
-
-  if (!fieldColumns) {
-    return;
-  }
-
-  const column = fieldColumns[fieldName as string];
+  const column = resolveColumn(archetype, componentId, fieldName as string);
 
   if (!column) {
     return;
@@ -817,13 +824,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
     column[offset + i] = (value as number[])[i]!;
   }
 
-  const ticks = archetype.ticks.get(componentId);
-
-  if (ticks) {
-    ticks.changed[row] = world.revision;
-  }
-
-  fireObserverEvent(world, "componentChanged", componentId, entityId);
+  markChanged(world, archetype, row, componentId, entityId);
 }
 
 /**
@@ -876,13 +877,7 @@ export function getComponentVectorView<S extends SchemaRecord, K extends VectorF
 ): TypedArrayInstance | undefined {
   const { archetype, row } = ensureEntity(world, entityId);
 
-  const fieldColumns = archetype.columns.get(componentId);
-
-  if (!fieldColumns) {
-    return;
-  }
-
-  const column = fieldColumns[fieldName as string];
+  const column = resolveColumn(archetype, componentId, fieldName as string);
 
   if (!column || Array.isArray(column)) {
     return;
