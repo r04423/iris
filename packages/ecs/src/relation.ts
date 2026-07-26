@@ -234,3 +234,47 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
     destroyEntity(world, entityId);
   }
 }
+
+/**
+ * Clean up all pairs using a specific relation when it is destroyed.
+ *
+ * Mirrors {@link cleanupPairsTargetingEntity} for the relation side. `onDeleteTarget`
+ * describes target deletion only, so subjects are always kept.
+ *
+ * @param world - World instance
+ * @param relation - Relation being destroyed that may be used by pairs
+ *
+ * @internal
+ */
+export function cleanupPairsUsingRelation(world: World, relation: Relation): void {
+  // Use wildcard pair to find all archetypes containing pairs with this relation
+  const relationWildcardPair = encodePair(relation, Wildcard);
+
+  if (!isEntityAlive(world, relationWildcardPair)) {
+    // Relation was never used in a pair, nothing to clean up
+    return;
+  }
+
+  const wildcardMeta = world.entities.byId.get(relationWildcardPair)!;
+  const relationRawId = extractId(relation);
+
+  const pairsToRemove = new Set<EntityId>();
+
+  for (const archetype of wildcardMeta.records) {
+    for (const typeId of archetype.types) {
+      if (typeId === relationWildcardPair || !isPair(typeId) || extractPairRelationId(typeId) !== relationRawId) {
+        continue;
+      }
+
+      pairsToRemove.add(typeId);
+    }
+  }
+
+  for (const pairId of pairsToRemove) {
+    destroyEntity(world, pairId);
+  }
+
+  // Destroy the relation aggregate last - the concrete pair removals should've already
+  // dropped it from every subject, so no entity still holds it
+  destroyEntity(world, relationWildcardPair);
+}

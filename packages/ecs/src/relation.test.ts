@@ -422,6 +422,68 @@ describe("Relation", () => {
       assert.ok(isEntityAlive(world, child));
     });
 
+    it("removes pair from subject when tag target is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesRemovesPairTagTargetDestroyed");
+      const Food = defineTag("FoodRemovesPairTagTargetDestroyed");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, Food));
+      destroyEntity(world, Food);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, Food)), false);
+      assert.ok(isEntityAlive(world, entity));
+    });
+
+    it("removes pair from subject when component target is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesRemovesPairComponentTargetDestroyed");
+      const Position = defineComponent("PositionRemovesPairComponentTargetDestroyed", { x: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, Position));
+      destroyEntity(world, Position);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, Position)), false);
+    });
+
+    it("removes pair from subject when relation target is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesRemovesPairRelationTargetDestroyed");
+      const ChildOf = defineRelation("ChildOfRemovesPairRelationTargetDestroyed");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, ChildOf));
+      destroyEntity(world, ChildOf);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, ChildOf)), false);
+    });
+
+    it("cleans up target wildcard when tag target is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesCleansWildcardTagTargetDestroyed");
+      const Food = defineTag("FoodCleansWildcardTagTargetDestroyed");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, Food));
+      destroyEntity(world, Food);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Wildcard, Food)), false);
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, Wildcard)), false);
+    });
+
+    it("cascades to subjects when tag target is destroyed", () => {
+      const world = createWorld();
+      const StoredIn = defineRelation("StoredInCascadesTagTargetDestroyed", { onDeleteTarget: "delete" });
+      const Chest = defineTag("ChestCascadesTagTargetDestroyed");
+      const item = createEntity(world);
+
+      addComponent(world, item, pair(StoredIn, Chest));
+      destroyEntity(world, Chest);
+
+      assert.strictEqual(isEntityAlive(world, item), false);
+    });
+
     it("preserves unaffected pairs when one target is destroyed", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfPreservesUnaffectedPairsOneTargetDestroyed");
@@ -534,6 +596,78 @@ describe("Relation", () => {
       assert.ok(hasComponent(world, child, pair(ChildOf, parent)));
       assert.ok(isEntityAlive(world, parent));
       assert.ok(isEntityAlive(world, child));
+    });
+  });
+
+  describe("Relation Deletion Cleanup", () => {
+    it("removes pairs from subjects when the relation is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesRemovesPairsRelationDestroyed");
+      const entity = createEntity(world);
+      const friend = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, friend));
+      destroyEntity(world, Likes);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, friend)), false);
+      assert.ok(isEntityAlive(world, entity));
+      assert.ok(isEntityAlive(world, friend));
+    });
+
+    it("preserves pairs of other relations when one relation is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesPreservesOtherRelationsDestroyed");
+      const ChildOf = defineRelation("ChildOfPreservesOtherRelationsDestroyed");
+      const entity = createEntity(world);
+      const target = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, target));
+      addComponent(world, entity, pair(ChildOf, target));
+
+      destroyEntity(world, Likes);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, target)), false);
+      assert.ok(hasComponent(world, entity, pair(ChildOf, target)));
+      assert.ok(hasComponent(world, entity, pair(Wildcard, target)));
+    });
+
+    it("cleans up wildcards when the relation is destroyed", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesCleansWildcardsRelationDestroyed");
+      const entity = createEntity(world);
+      const friend = createEntity(world);
+
+      addComponent(world, entity, pair(Likes, friend));
+      destroyEntity(world, Likes);
+
+      assert.strictEqual(hasComponent(world, entity, pair(Likes, Wildcard)), false);
+      assert.strictEqual(hasComponent(world, entity, pair(Wildcard, friend)), false);
+    });
+
+    it("keeps subjects alive when destroying a cascading relation", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfKeepsSubjectsRelationDestroyed", { onDeleteTarget: "delete" });
+      const parent = createEntity(world);
+      const child = createEntity(world);
+
+      addComponent(world, child, pair(ChildOf, parent));
+      destroyEntity(world, ChildOf);
+
+      // onDeleteTarget describes target deletion, not relation deletion
+      assert.ok(isEntityAlive(world, child));
+      assert.strictEqual(hasComponent(world, child, pair(ChildOf, parent)), false);
+    });
+
+    it("does nothing when the destroyed relation was never used in a pair", () => {
+      const world = createWorld();
+      const Likes = defineRelation("LikesUnusedRelationDestroyed");
+      const entity = createEntity(world);
+
+      ensureEntity(world, Likes);
+      destroyEntity(world, Likes);
+
+      assert.ok(isEntityAlive(world, entity));
+      assert.strictEqual(isEntityAlive(world, Likes), false);
     });
   });
 

@@ -674,6 +674,26 @@ describe("Entity", () => {
       assert.ok(world.entities.byId.has(ChildOf), "Relation should be auto-registered with pair");
     });
 
+    it("auto-registers definition target when pair is registered", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfAutoRegistersDefinitionTarget");
+      const target = defineTag("TargetAutoRegistersDefinitionTarget");
+
+      ensureEntity(world, pair(ChildOf, target));
+
+      assert.ok(world.entities.byId.has(target), "Tag target should be auto-registered with pair");
+    });
+
+    it("throws when pair target entity is not alive", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfThrowsPairTargetNotAlive");
+      const target = createEntity(world);
+
+      destroyEntity(world, target);
+
+      assert.throws(() => ensureEntity(world, pair(ChildOf, target)), IrisNotFound);
+    });
+
     it("returns existing meta for already-registered pair", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfReturnsExistingMetaAlreadyRegisteredPair");

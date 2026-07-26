@@ -19,7 +19,7 @@ import {
 import { assert, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, OnDeleteTarget } from "./registry.js";
-import { cleanupPairsTargetingEntity, getPairRelation } from "./relation.js";
+import { cleanupPairsTargetingEntity, cleanupPairsUsingRelation, getPairRelation, getPairTarget } from "./relation.js";
 import type { SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -105,7 +105,7 @@ function registerEntity(world: World, entityId: EntityId, schema?: SchemaRecord)
  * @param world - World instance
  * @param entityId - Entity or component ID
  * @returns Entity metadata
- * @throws {IrisNotFound} If entity not registered (ENTITY_TYPE)
+ * @throws {IrisNotFound} If entity not registered (ENTITY_TYPE), or if a pair's entity target is not alive
  * @throws {IrisInvalidState} If unknown entity type
  *
  * @example
@@ -125,6 +125,9 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
   if (isPair(entityId)) {
     const relation = getPairRelation(entityId);
     const relationMeta = ensureEntity(world, relation);
+
+    // Registering the target keeps every pair's target resolvable
+    ensureEntity(world, getPairTarget(world, entityId));
 
     return registerEntity(world, entityId, relationMeta.schema);
   }
@@ -243,6 +246,11 @@ export function destroyEntity(world: World, entityId: EntityId): void {
 
   // Clean up pairs targeting this entity (handles cascade delete)
   cleanupPairsTargetingEntity(world, entityId);
+
+  // Clean up pairs built from this entity as their relation
+  if (!isPair(entityId) && extractType(entityId) === RELATIONSHIP_TYPE) {
+    cleanupPairsUsingRelation(world, entityId as Relation);
+  }
 
   // Remove this entity from any entities that have it as a component
   cascadeRemoveComponent(world, entityId);
