@@ -865,6 +865,31 @@ describe("Relation", () => {
       assert.ok(hasComponent(world, child, pair(ChildOf, Wildcard)));
     });
 
+    it("reports wildcard target churn during exclusive replacement", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfReportsWildcardChurn", { exclusive: true });
+      const parent1 = createEntity(world);
+      const parent2 = createEntity(world);
+      const child = createEntity(world);
+      const removals: EntityId[] = [];
+      const added: EntityId[] = [];
+
+      addComponent(world, child, pair(ChildOf, parent1));
+
+      registerObserverCallback(world, "componentRemoved", (componentId) => {
+        removals.push(componentId);
+      });
+      registerObserverCallback(world, "componentAdded", (componentId) => {
+        added.push(componentId);
+      });
+
+      addComponent(world, child, pair(ChildOf, parent2));
+
+      // pair(ChildOf, Wildcard) never lapses, so it is neither added nor removed
+      assert.deepStrictEqual(removals, [pair(ChildOf, parent1), pair(Wildcard, parent1)]);
+      assert.deepStrictEqual(added, [pair(ChildOf, parent2), pair(Wildcard, parent2)]);
+    });
+
     it("preserves other relations when exclusive replacement occurs", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfPreserve", { exclusive: true });

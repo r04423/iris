@@ -65,6 +65,7 @@ export function addComponent<S extends SchemaRecord>(
 
   const componentIsPair = isPair(componentId);
   let removedPair: Pair | undefined;
+  let removedTargetWildcard: Pair | undefined;
 
   // Exclusive replacement is one transition so observers never see an intermediate state
   if (componentIsPair) {
@@ -114,19 +115,29 @@ export function addComponent<S extends SchemaRecord>(
     }
 
     if (!hasOtherRelation) {
+      removedTargetWildcard = oldTargetWildcardPair;
       toArchetype = archetypeTraverseRemove(world, toArchetype, oldTargetWildcardPair);
     }
   }
 
   toArchetype = archetypeTraverseAdd(world, toArchetype, componentId, schema);
 
+  let addedTargetWildcard: Pair | undefined;
+  let addedRelationWildcard: Pair | undefined;
+
   // Add wildcard pairs for query patterns: pair(Wildcard, target) and pair(relation, Wildcard)
   if (componentIsPair) {
-    const target = getPairTarget(world, componentId);
-    const relation = getPairRelation(componentId);
+    const targetWildcardPair = encodePair(Wildcard, getPairTarget(world, componentId));
+    const relationWildcardPair = encodePair(getPairRelation(componentId), Wildcard);
 
-    toArchetype = archetypeTraverseAdd(world, toArchetype, encodePair(Wildcard, target));
-    toArchetype = archetypeTraverseAdd(world, toArchetype, encodePair(relation, Wildcard));
+    // Traversal is a no-op for an aggregate inherited from a sibling pair
+    let next = archetypeTraverseAdd(world, toArchetype, targetWildcardPair);
+    addedTargetWildcard = next === toArchetype ? undefined : targetWildcardPair;
+    toArchetype = next;
+
+    next = archetypeTraverseAdd(world, toArchetype, relationWildcardPair);
+    addedRelationWildcard = next === toArchetype ? undefined : relationWildcardPair;
+    toArchetype = next;
   }
 
   moveEntityToArchetype(world, entityMeta, toArchetype);
@@ -178,12 +189,25 @@ export function addComponent<S extends SchemaRecord>(
     fireObserverEvent(world, "componentRemoved", removedPair, entityId);
   }
 
+  if (removedTargetWildcard !== undefined) {
+    fireObserverEvent(world, "componentRemoved", removedTargetWildcard, entityId);
+  }
+
   if (dataChanged) {
     fireObserverEvent(world, "componentChanged", componentId, entityId);
   }
 
   // Fire after move so observers can access component data
   fireObserverEvent(world, "componentAdded", componentId, entityId);
+
+  // Aggregates are components too, so observers hear about them like any other type
+  if (addedTargetWildcard !== undefined) {
+    fireObserverEvent(world, "componentAdded", addedTargetWildcard, entityId);
+  }
+
+  if (addedRelationWildcard !== undefined) {
+    fireObserverEvent(world, "componentAdded", addedRelationWildcard, entityId);
+  }
 }
 
 // ============================================================================
@@ -296,6 +320,9 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
     return;
   }
 
+  let removedTargetWildcard: Pair | undefined;
+  let removedRelationWildcard: Pair | undefined;
+
   // Remove wildcard pairs only if no other pairs need them
   if (componentIsPair) {
     const target = getPairTarget(world, componentId);
@@ -332,10 +359,12 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
     }
 
     if (!hasOtherTarget) {
+      removedTargetWildcard = wildcardTargetPair;
       toArchetype = archetypeTraverseRemove(world, toArchetype, wildcardTargetPair);
     }
 
     if (!hasOtherRelation) {
+      removedRelationWildcard = relationWildcardPair;
       toArchetype = archetypeTraverseRemove(world, toArchetype, relationWildcardPair);
     }
   }
@@ -348,6 +377,15 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
 
   // Fire after move so observers see the entity's new archetype
   fireObserverEvent(world, "componentRemoved", componentId, entityId);
+
+  // Aggregates are components too, so observers hear about them like any other type
+  if (removedTargetWildcard !== undefined) {
+    fireObserverEvent(world, "componentRemoved", removedTargetWildcard, entityId);
+  }
+
+  if (removedRelationWildcard !== undefined) {
+    fireObserverEvent(world, "componentRemoved", removedRelationWildcard, entityId);
+  }
 }
 
 /**

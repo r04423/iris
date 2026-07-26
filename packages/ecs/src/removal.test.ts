@@ -4,7 +4,7 @@ import { addComponent, removeComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity } from "./entity.js";
 import { readEvents } from "./event.js";
-import { defineComponent, defineRelation, defineTag } from "./registry.js";
+import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { removed } from "./removal.js";
 import { addSystem, runOnce } from "./scheduler.js";
@@ -384,6 +384,59 @@ describe("Removal", () => {
 
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], child);
+    });
+
+    it("detects wildcard pair removal when the target is destroyed", async () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("RD_WildcardTargetDestroyed");
+      const relationResults: number[] = [];
+      const targetResults: number[] = [];
+
+      const parent = createEntity(world);
+      const child = createEntity(world);
+
+      addSystem(world, function reader() {
+        readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
+          relationResults.push(entity);
+        });
+        readEvents(world, removed(pair(Wildcard, parent)), ({ entity }) => {
+          targetResults.push(entity);
+        });
+      });
+
+      addComponent(world, child, pair(ChildOf, parent));
+      destroyEntity(world, parent);
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(relationResults, [child]);
+      assert.deepStrictEqual(targetResults, [child]);
+    });
+
+    it("detects wildcard pair removal identically for removeComponent and destroyEntity", async () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("RD_WildcardSymmetry");
+      const results: number[] = [];
+
+      const parent = createEntity(world);
+      const viaRemove = createEntity(world);
+      const viaDestroy = createEntity(world);
+
+      addSystem(world, function reader() {
+        readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
+          results.push(entity);
+        });
+      });
+
+      addComponent(world, viaRemove, pair(ChildOf, parent));
+      addComponent(world, viaDestroy, pair(ChildOf, parent));
+
+      removeComponent(world, viaRemove, pair(ChildOf, parent));
+      destroyEntity(world, viaDestroy);
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(results, [viaRemove, viaDestroy]);
     });
 
     it("tracks different pair targets independently", async () => {

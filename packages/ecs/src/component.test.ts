@@ -1102,6 +1102,33 @@ describe("Component", () => {
       assert.ok(meta.archetype.typesSet.has(encodePair(ChildOf, Wildcard)));
     });
 
+    it("reports newly added wildcard pairs to observers", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfReportsAddedWildcards");
+      const Likes = defineRelation("LikesReportsAddedWildcards");
+      const child = createEntity(world);
+      const parent = createEntity(world);
+      const added: EntityId[] = [];
+
+      registerObserverCallback(world, "componentAdded", (componentId, entityId) => {
+        if (entityId === child) {
+          added.push(componentId);
+        }
+      });
+
+      addComponent(world, child, pair(ChildOf, parent));
+      addComponent(world, child, pair(Likes, parent));
+
+      // pair(Wildcard, parent) is reported once - the second pair inherits it
+      assert.deepStrictEqual(added, [
+        pair(ChildOf, parent),
+        encodePair(Wildcard, parent),
+        encodePair(ChildOf, Wildcard),
+        pair(Likes, parent),
+        encodePair(Likes, Wildcard),
+      ]);
+    });
+
     it("shares wildcard pairs across multiple pairs with same target", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfSharesWildcardPairsAcrossMultiplePairsTarget");
@@ -1175,6 +1202,36 @@ describe("Component", () => {
       assert.strictEqual(meta.archetype.types.length, 0);
       assert.strictEqual(meta.archetype.typesSet.has(encodePair(Wildcard, parent)), false);
       assert.strictEqual(meta.archetype.typesSet.has(encodePair(ChildOf, Wildcard)), false);
+    });
+
+    it("reports removed wildcard pairs to observers", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfReportsRemovedWildcards");
+      const Likes = defineRelation("LikesReportsRemovedWildcards");
+      const child = createEntity(world);
+      const parent = createEntity(world);
+      const removals: EntityId[] = [];
+
+      addComponent(world, child, pair(ChildOf, parent));
+      addComponent(world, child, pair(Likes, parent));
+
+      registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
+        if (entityId === child) {
+          removals.push(componentId);
+        }
+      });
+
+      removeComponent(world, child, pair(ChildOf, parent));
+      removeComponent(world, child, pair(Likes, parent));
+
+      // pair(Wildcard, parent) is reported only once Likes stops needing it
+      assert.deepStrictEqual(removals, [
+        pair(ChildOf, parent),
+        encodePair(ChildOf, Wildcard),
+        pair(Likes, parent),
+        encodePair(Wildcard, parent),
+        encodePair(Likes, Wildcard),
+      ]);
     });
 
     it("keeps wildcard target pair when other pairs share target", () => {
