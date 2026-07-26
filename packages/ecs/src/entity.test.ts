@@ -142,6 +142,28 @@ describe("Entity", () => {
       assert.strictEqual(newGeneration, oldGeneration + 1);
     });
 
+    it("recycles only the target's raw ID when destroying a relation target", () => {
+      const world = createWorld();
+      const registry = world.entities;
+      const Owns = defineRelation("entity.test.OwnsRecycle");
+
+      const target = createEntity(world);
+      const subject = createEntity(world);
+      addComponent(world, subject, pair(Owns, target));
+
+      const generationsBefore = new Map(registry.generations);
+
+      destroyEntity(world, target);
+
+      const rawId = extractId(target);
+
+      assert.deepStrictEqual(registry.freeIds, [rawId]);
+
+      for (const [id, generation] of registry.generations) {
+        assert.strictEqual(generation, id === rawId ? generationsBefore.get(id)! + 1 : generationsBefore.get(id));
+      }
+    });
+
     it("double destroy is idempotent", () => {
       const world = createWorld();
       const entity = createEntity(world);

@@ -4,7 +4,7 @@ import { addComponent, getComponentValue, hasComponent, removeComponent } from "
 import type { EntityId, Pair } from "./encoding.js";
 import { isPair, PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
-import { IrisInvalidState } from "./error.js";
+import { IrisInvalidArgument, IrisInvalidState } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets, pair } from "./relation.js";
@@ -83,6 +83,18 @@ describe("Relation", () => {
       const pair2 = pair(ChildOf, parent);
 
       assert.strictEqual(pair1, pair2, "Same relation+target should produce same pair");
+    });
+
+    it("throws when target is a pair", () => {
+      const world = createWorld();
+      const Owns = defineRelation("OwnsRejectsPairTarget");
+      const Likes = defineRelation("LikesRejectsPairTarget");
+      const target = createEntity(world);
+
+      // Widened to EntityId to defeat the compile-time rejection
+      const nested = pair(Likes, target) as EntityId;
+
+      assert.throws(() => pair(Owns, nested), IrisInvalidArgument);
     });
   });
 

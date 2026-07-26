@@ -264,6 +264,11 @@ export function destroyEntity(world: World, entityId: EntityId): void {
 
   fireObserverEvent(world, "entityDestroyed", entityId);
 
+  // Return early for pairs, whose target-type bits alias ENTITY_TYPE
+  if (isPair(entityId)) {
+    return;
+  }
+
   // Only entity IDs are recycled; component/tag/relation IDs are permanent
   if (extractType(entityId) === ENTITY_TYPE) {
     const rawId = extractId(entityId);
