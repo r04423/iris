@@ -1,12 +1,13 @@
+import type { Archetype } from "./archetype.js";
 import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype, getColumnStride } from "./archetype.js";
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
-import { encodePair, isPair } from "./encoding.js";
+import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
 import { ensureEntity, moveEntityToArchetype } from "./entity.js";
 import { assert, IrisInvalidArgument } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
-import { getPairRelation, getPairTarget, getRelationTargets } from "./relation.js";
+import { getPairRelation, getPairTarget } from "./relation.js";
 import type {
   InferSchema,
   InferSchemaRecord,
@@ -56,136 +57,82 @@ export function addComponent<S extends SchemaRecord>(
   componentId: EntityId,
   data?: InferSchemaRecord<S>
 ): void {
-  const entityMeta = ensureEntity(world, entityId);
+  const meta = ensureEntity(world, entityId);
 
   // Idempotent: already has component
-  if (entityMeta.archetype.typesSet.has(componentId)) {
+  if (meta.archetype.typesSet.has(componentId)) {
     return;
   }
 
-  const componentIsPair = isPair(componentId);
+  const { schema } = ensureEntity(world, componentId);
+
+  if (!isPair(componentId)) {
+    moveEntityToArchetype(world, meta, archetypeTraverseAdd(world, meta.archetype, componentId, schema));
+
+    // Fire after move so observers can access component data
+    if (data !== undefined && writeComponentData(world, meta, componentId, data)) {
+      fireObserverEvent(world, "componentChanged", componentId, entityId);
+    }
+
+    fireObserverEvent(world, "componentAdded", componentId, entityId);
+
+    return;
+  }
+
+  const relation = getPairRelation(componentId);
+  const target = getPairTarget(world, componentId);
+
+  assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
+    expected: "concrete pair",
+    actual: "wildcard pair (wildcards are query patterns)",
+  });
+
+  const targetWildcard = encodePair(Wildcard, target);
+  const relationWildcard = encodePair(relation, Wildcard);
+
+  let toArchetype = meta.archetype;
   let removedPair: Pair | undefined;
   let removedTargetWildcard: Pair | undefined;
 
-  // Exclusive replacement is one transition so observers never see an intermediate state
-  if (componentIsPair) {
-    const target = getPairTarget(world, componentId);
-    const relation = getPairRelation(componentId);
-
-    assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
-      expected: "concrete pair",
-      actual: "wildcard pair (wildcards are query patterns)",
-    });
-
-    if (hasComponent(world, relation, Exclusive)) {
-      const oldTargets = getRelationTargets(world, entityId, relation);
-
-      if (oldTargets.length > 0) {
-        removedPair = encodePair(relation, oldTargets[0]!);
-      }
-    }
+  // Exclusive replacement rides along in this transition so observers never see
+  // an intermediate state where the entity has both targets or neither
+  if (hasComponent(world, relation, Exclusive)) {
+    removedPair = findPairBehindAggregate(meta.archetype, relationWildcard);
   }
 
-  const componentMeta = ensureEntity(world, componentId);
-  const schema = componentMeta.schema;
-
-  // Find target archetype
-  let toArchetype = entityMeta.archetype;
-
   if (removedPair !== undefined) {
-    const oldTarget = getPairTarget(world, removedPair);
-    const oldTargetWildcardPair = encodePair(Wildcard, oldTarget);
+    const oldTargetWildcard = encodePair(Wildcard, getPairTarget(world, removedPair));
 
-    let hasOtherRelation = false;
+    // The incoming pair keeps the relation aggregate alive, so only the old target's can drop
+    const targetKept = hasSiblingWithTarget(meta.archetype, removedPair, oldTargetWildcard);
 
     toArchetype = archetypeTraverseRemove(world, toArchetype, removedPair);
 
-    for (let i = 0; i < entityMeta.archetype.types.length; i++) {
-      const typeId = entityMeta.archetype.types[i]!;
-
-      if (typeId === removedPair || typeId === oldTargetWildcardPair || !isPair(typeId)) {
-        continue;
-      }
-
-      if (getPairTarget(world, typeId) === oldTarget) {
-        hasOtherRelation = true;
-
-        break;
-      }
-    }
-
-    if (!hasOtherRelation) {
-      removedTargetWildcard = oldTargetWildcardPair;
-      toArchetype = archetypeTraverseRemove(world, toArchetype, oldTargetWildcardPair);
+    if (!targetKept) {
+      removedTargetWildcard = oldTargetWildcard;
+      toArchetype = archetypeTraverseRemove(world, toArchetype, oldTargetWildcard);
     }
   }
 
   toArchetype = archetypeTraverseAdd(world, toArchetype, componentId, schema);
 
-  let addedTargetWildcard: Pair | undefined;
-  let addedRelationWildcard: Pair | undefined;
+  // Add the query aggregates. Traversal is a no-op for one inherited from a sibling pair
+  let next = archetypeTraverseAdd(world, toArchetype, targetWildcard);
+  const addedTargetWildcard = next !== toArchetype;
+  toArchetype = next;
 
-  // Add wildcard pairs for query patterns: pair(Wildcard, target) and pair(relation, Wildcard)
-  if (componentIsPair) {
-    const targetWildcardPair = encodePair(Wildcard, getPairTarget(world, componentId));
-    const relationWildcardPair = encodePair(getPairRelation(componentId), Wildcard);
+  next = archetypeTraverseAdd(world, toArchetype, relationWildcard);
+  const addedRelationWildcard = next !== toArchetype;
+  toArchetype = next;
 
-    // Traversal is a no-op for an aggregate inherited from a sibling pair
-    let next = archetypeTraverseAdd(world, toArchetype, targetWildcardPair);
-    addedTargetWildcard = next === toArchetype ? undefined : targetWildcardPair;
-    toArchetype = next;
+  moveEntityToArchetype(world, meta, toArchetype);
 
-    next = archetypeTraverseAdd(world, toArchetype, relationWildcardPair);
-    addedRelationWildcard = next === toArchetype ? undefined : relationWildcardPair;
-    toArchetype = next;
-  }
+  const dataChanged = data !== undefined && writeComponentData(world, meta, componentId, data);
 
-  moveEntityToArchetype(world, entityMeta, toArchetype);
-
-  // Write initial field data inline to avoid repeated ensureEntity lookups
-  // and support stride-aware writes for vector fields
-  let dataChanged = false;
-
-  if (data) {
-    const fieldColumns = entityMeta.archetype.columns.get(componentId);
-
-    if (fieldColumns) {
-      for (const fieldName in data) {
-        const value = data[fieldName];
-        const column = fieldColumns[fieldName as string];
-
-        if (!column) {
-          continue;
-        }
-
-        const stride = getColumnStride(column, entityMeta.archetype.capacity);
-
-        if (stride === 1) {
-          column[entityMeta.row] = value;
-        } else {
-          const offset = entityMeta.row * stride;
-
-          for (let i = 0; i < stride; i++) {
-            column[offset + i] = (value as number[])[i]!;
-          }
-        }
-      }
-
-      const ticks = entityMeta.archetype.ticks.get(componentId);
-      if (ticks) {
-        ticks.changed[entityMeta.row] = world.revision;
-      }
-
-      dataChanged = true;
-    }
-  }
-
-  if (componentIsPair) {
-    markPairTopologyChanged(world, entityMeta, componentId);
-  }
+  markPairTopologyChanged(world, meta, componentId);
 
   if (removedPair !== undefined) {
-    markPairTopologyChanged(world, entityMeta, removedPair);
+    markPairTopologyChanged(world, meta, removedPair);
     fireObserverEvent(world, "componentRemoved", removedPair, entityId);
   }
 
@@ -201,12 +148,12 @@ export function addComponent<S extends SchemaRecord>(
   fireObserverEvent(world, "componentAdded", componentId, entityId);
 
   // Aggregates are components too, so observers hear about them like any other type
-  if (addedTargetWildcard !== undefined) {
-    fireObserverEvent(world, "componentAdded", addedTargetWildcard, entityId);
+  if (addedTargetWildcard) {
+    fireObserverEvent(world, "componentAdded", targetWildcard, entityId);
   }
 
-  if (addedRelationWildcard !== undefined) {
-    fireObserverEvent(world, "componentAdded", addedRelationWildcard, entityId);
+  if (addedRelationWildcard) {
+    fireObserverEvent(world, "componentAdded", relationWildcard, entityId);
   }
 }
 
@@ -310,81 +257,59 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
  */
 export function removeComponent(world: World, entityId: EntityId, componentId: EntityId): void {
   const meta = ensureEntity(world, entityId);
-  const componentIsPair = isPair(componentId);
 
-  // Find target archetype
   let toArchetype = archetypeTraverseRemove(world, meta.archetype, componentId);
 
-  // Idempotent check
+  // Idempotent: component not present
   if (toArchetype === meta.archetype) {
     return;
   }
 
-  let removedTargetWildcard: Pair | undefined;
-  let removedRelationWildcard: Pair | undefined;
+  if (!isPair(componentId)) {
+    moveEntityToArchetype(world, meta, toArchetype);
 
-  // Remove wildcard pairs only if no other pairs need them
-  if (componentIsPair) {
-    const target = getPairTarget(world, componentId);
-    const relation = getPairRelation(componentId);
+    // Fire after move so observers see the entity's new archetype
+    fireObserverEvent(world, "componentRemoved", componentId, entityId);
 
-    assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
-      expected: "concrete pair",
-      actual: "wildcard pair (maintained automatically)",
-    });
+    return;
+  }
 
-    const wildcardTargetPair = encodePair(Wildcard, target);
-    const relationWildcardPair = encodePair(relation, Wildcard);
+  const relation = getPairRelation(componentId);
+  const target = getPairTarget(world, componentId);
 
-    let hasOtherTarget = false;
-    let hasOtherRelation = false;
+  assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
+    expected: "concrete pair",
+    actual: "wildcard pair (maintained automatically)",
+  });
 
-    for (const typeId of meta.archetype.types) {
-      if (
-        typeId === componentId ||
-        typeId === wildcardTargetPair ||
-        typeId === relationWildcardPair ||
-        !isPair(typeId)
-      ) {
-        continue;
-      }
+  const targetWildcard = encodePair(Wildcard, target);
+  const relationWildcard = encodePair(relation, Wildcard);
 
-      if (getPairTarget(world, typeId) === target) {
-        hasOtherTarget = true;
-      }
+  // Aggregates are shared, so they only drop once the last pair needing them goes
+  const removedTargetWildcard = !hasSiblingWithTarget(meta.archetype, componentId, targetWildcard);
+  const removedRelationWildcard = !hasSiblingWithRelation(meta.archetype, componentId, relationWildcard);
 
-      if (getPairRelation(typeId) === relation) {
-        hasOtherRelation = true;
-      }
-    }
+  if (removedTargetWildcard) {
+    toArchetype = archetypeTraverseRemove(world, toArchetype, targetWildcard);
+  }
 
-    if (!hasOtherTarget) {
-      removedTargetWildcard = wildcardTargetPair;
-      toArchetype = archetypeTraverseRemove(world, toArchetype, wildcardTargetPair);
-    }
-
-    if (!hasOtherRelation) {
-      removedRelationWildcard = relationWildcardPair;
-      toArchetype = archetypeTraverseRemove(world, toArchetype, relationWildcardPair);
-    }
+  if (removedRelationWildcard) {
+    toArchetype = archetypeTraverseRemove(world, toArchetype, relationWildcard);
   }
 
   moveEntityToArchetype(world, meta, toArchetype);
-
-  if (componentIsPair) {
-    markPairTopologyChanged(world, meta, componentId);
-  }
+  markPairTopologyChanged(world, meta, componentId);
 
   // Fire after move so observers see the entity's new archetype
   fireObserverEvent(world, "componentRemoved", componentId, entityId);
 
   // Aggregates are components too, so observers hear about them like any other type
-  if (removedTargetWildcard !== undefined) {
-    fireObserverEvent(world, "componentRemoved", removedTargetWildcard, entityId);
+  if (removedTargetWildcard) {
+    fireObserverEvent(world, "componentRemoved", targetWildcard, entityId);
   }
 
-  if (removedRelationWildcard !== undefined) {
-    fireObserverEvent(world, "componentRemoved", removedRelationWildcard, entityId);
+  if (removedRelationWildcard) {
+    fireObserverEvent(world, "componentRemoved", relationWildcard, entityId);
   }
 }
 
@@ -569,6 +494,155 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
   ticks.changed[row] = world.revision;
 
   fireObserverEvent(world, "componentChanged", componentId, entityId);
+}
+
+// ============================================================================
+// Transition Internals
+// ============================================================================
+
+/**
+ * Write initial field values into an entity's columns.
+ *
+ * Written inline rather than through the value setters: the archetype and row are
+ * already resolved here, and vector fields need stride-aware writes.
+ *
+ * @param world - World instance
+ * @param meta - Entity metadata, already moved to its new archetype
+ * @param componentId - Component or pair owning the columns
+ * @param data - Field values to write
+ * @returns True if the component stores data, false for tags
+ */
+function writeComponentData(
+  world: World,
+  meta: EntityMeta,
+  componentId: EntityId,
+  data: Record<string, unknown>
+): boolean {
+  const { archetype, row } = meta;
+  const fieldColumns = archetype.columns.get(componentId);
+
+  if (!fieldColumns) {
+    return false;
+  }
+
+  for (const fieldName in data) {
+    const column = fieldColumns[fieldName];
+
+    if (!column) {
+      continue;
+    }
+
+    const value = data[fieldName];
+    const stride = getColumnStride(column, archetype.capacity);
+
+    if (stride === 1) {
+      column[row] = value;
+    } else {
+      const offset = row * stride;
+
+      for (let i = 0; i < stride; i++) {
+        column[offset + i] = (value as number[])[i]!;
+      }
+    }
+  }
+
+  const ticks = archetype.ticks.get(componentId);
+
+  if (ticks) {
+    ticks.changed[row] = world.revision;
+  }
+
+  return true;
+}
+
+/**
+ * Check whether another pair on the entity still points at this pair's target.
+ *
+ * `pair(Wildcard, target)` is shared by every pair with that target, so it may only be
+ * dropped once the last one goes. The aggregate itself is skipped since it shares the
+ * target; `pair(relation, Wildcard)` cannot match because its target is the wildcard.
+ *
+ * Targets are compared while still encoded, which avoids resolving entity targets
+ * through the generation map. Encoding drops generation, so the comparison agrees
+ * with `getPairTarget`.
+ *
+ * @param archetype - Archetype holding the entity before the transition
+ * @param pairId - Concrete pair being added or removed
+ * @param targetWildcard - `pair(Wildcard, target)` aggregate to skip
+ * @returns True if the target aggregate must stay
+ */
+function hasSiblingWithTarget(archetype: Archetype, pairId: Pair, targetWildcard: Pair): boolean {
+  const { types } = archetype;
+  const targetId = extractPairTargetId(pairId);
+  const targetType = extractPairTargetType(pairId);
+
+  for (let i = 0; i < types.length; i++) {
+    const typeId = types[i]!;
+
+    if (typeId === pairId || typeId === targetWildcard || !isPair(typeId)) {
+      continue;
+    }
+
+    if (extractPairTargetId(typeId) === targetId && extractPairTargetType(typeId) === targetType) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check whether another pair on the entity still uses this pair's relation.
+ *
+ * The mirror of {@link hasSiblingWithTarget}: `pair(Wildcard, target)` cannot match
+ * because it carries the wildcard relation.
+ *
+ * @param archetype - Archetype holding the entity before the transition
+ * @param pairId - Concrete pair being removed
+ * @param relationWildcard - `pair(relation, Wildcard)` aggregate to skip
+ * @returns True if the relation aggregate must stay
+ */
+function hasSiblingWithRelation(archetype: Archetype, pairId: Pair, relationWildcard: Pair): boolean {
+  const { types } = archetype;
+  const relationId = extractPairRelationId(pairId);
+
+  for (let i = 0; i < types.length; i++) {
+    const typeId = types[i]!;
+
+    if (typeId === pairId || typeId === relationWildcard || !isPair(typeId)) {
+      continue;
+    }
+
+    if (extractPairRelationId(typeId) === relationId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Find the concrete pair behind a relation aggregate.
+ *
+ * An exclusive relation has at most one, which is the target it currently holds.
+ *
+ * @param archetype - Archetype holding the entity
+ * @param relationWildcard - `pair(relation, Wildcard)` aggregate to search behind
+ * @returns The concrete pair, or undefined if the relation is unused
+ */
+function findPairBehindAggregate(archetype: Archetype, relationWildcard: Pair): Pair | undefined {
+  const { types } = archetype;
+  const relationId = extractPairRelationId(relationWildcard);
+
+  for (let i = 0; i < types.length; i++) {
+    const typeId = types[i]!;
+
+    if (typeId !== relationWildcard && isPair(typeId) && extractPairRelationId(typeId) === relationId) {
+      return typeId;
+    }
+  }
+
+  return;
 }
 
 /**
