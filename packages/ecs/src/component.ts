@@ -399,10 +399,10 @@ export function getComponentValue<S extends SchemaRecord, N extends string, K ex
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
+export function getComponentValue<S extends SchemaRecord, N extends string, T, K extends ScalarFields<S>>(
   world: World,
-  entityId: EntityWith<Pair<Relation<S, N>>>,
-  componentId: Pair<Relation<S, N>>,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>,
   fieldName: K
 ): InferSchema<S[K]>;
 
@@ -459,10 +459,10 @@ export function setComponentValue<S extends SchemaRecord, N extends string, K ex
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
+export function setComponentValue<S extends SchemaRecord, N extends string, T, K extends ScalarFields<S>>(
   world: World,
-  entityId: EntityWith<Pair<Relation<S, N>>>,
-  componentId: Pair<Relation<S, N>>,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>,
   fieldName: K,
   value: InferSchema<S[K]>
 ): void;
@@ -590,10 +590,10 @@ export function getComponentVectorValue<S extends SchemaRecord, N extends string
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+export function getComponentVectorValue<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
   world: World,
-  entityId: EntityWith<Pair<Relation<S, N>>>,
-  componentId: Pair<Relation<S, N>>,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>,
   fieldName: K
 ): InferSchema<S[K]>;
 
@@ -661,10 +661,10 @@ export function setComponentVectorValue<S extends SchemaRecord, N extends string
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+export function setComponentVectorValue<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
   world: World,
-  entityId: EntityWith<Pair<Relation<S, N>>>,
-  componentId: Pair<Relation<S, N>>,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>,
   fieldName: K,
   value: InferSchema<S[K]>
 ): void;
@@ -742,10 +742,10 @@ export function getComponentVectorView<S extends SchemaRecord, N extends string,
   fieldName: K
 ): TypedArrayInstance;
 
-export function getComponentVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+export function getComponentVectorView<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
   world: World,
-  entityId: EntityWith<Pair<Relation<S, N>>>,
-  componentId: Pair<Relation<S, N>>,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>,
   fieldName: K
 ): TypedArrayInstance;
 

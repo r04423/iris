@@ -3,6 +3,7 @@ import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding
 import { assert, IrisInvalidArgument, IrisLimitExceeded } from "./error.js";
 import type { FilterMeta, FilterTerms } from "./filters.js";
 import { ensureFilter } from "./filters.js";
+import type { SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
 /**
@@ -194,17 +195,22 @@ export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[
 
 /**
  * Extract union of guaranteed-present component IDs from query terms tuple.
+ *
+ * Only terms a match proves present may be extracted -- the union feeds
+ * `EntityWith`, which suppresses the `undefined` return of a missing component.
  */
 export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...infer Tail]
   ? Head extends NotModifier
     ? ExtractIncluded<Tail>
-    : Head extends AddedModifier<infer C>
+    : // Change modifiers still require the component, so unwrap it
+      Head extends AddedModifier<infer C>
       ? C | ExtractIncluded<Tail>
       : Head extends ChangedModifier<infer C>
         ? C | ExtractIncluded<Tail>
         : Head extends EntityId
           ? Head | ExtractIncluded<Tail>
-          : ExtractIncluded<Tail>
+          : // or() proves only that one branch matched, never which
+            ExtractIncluded<Tail>
   : never;
 
 /**
@@ -221,23 +227,33 @@ function isModifier(arg: unknown): arg is QueryModifier {
 /**
  * Map a query terms tuple to a tuple of field column types.
  *
- * Data-bearing terms (Components, Pairs with schema) produce a `FieldColumnsOf` entry.
- * Non-data terms (Tags, data-less Pairs, NotModifiers, OrModifiers) are skipped.
+ * Mirrors the term-skipping `queryColumns` performs at runtime: only terms with an
+ * entry in `archetype.columns` produce a parameter. Every skip below must stay in
+ * step with that lookup, or callback parameters silently shift left.
  *
  * @experimental Associated with the experimental live-column traversal API.
  */
 export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
-  ? Head extends NotModifier
+  ? // Excluded from matching archetypes, so never stored
+    Head extends NotModifier
     ? ColumnsTuple<Tail>
-    : Head extends Component<infer S>
+    : // Components always carry a schema
+      Head extends Component<infer S>
       ? [FieldColumnsOf<S>, ...ColumnsTuple<Tail>]
-      : Head extends Pair<infer R>
-        ? R extends Relation<infer S>
-          ? keyof S extends never
-            ? ColumnsTuple<Tail>
-            : [FieldColumnsOf<S>, ...ColumnsTuple<Tail>]
-          : ColumnsTuple<Tail>
-        : ColumnsTuple<Tail>
+      : Head extends Pair<infer R, infer Target>
+        ? // Archetypes store concrete pairs, and one can hold several targets for the
+          // same relation, so no single column answers to a wildcard term
+          Target extends Relation<SchemaRecord, "Wildcard">
+          ? ColumnsTuple<Tail>
+          : R extends Relation<infer S>
+            ? // A schema-less relation types as `Record<string, never>`, whose keyof
+              // is `string` -- that wide key marks the pair as data-less
+              string extends keyof S
+              ? ColumnsTuple<Tail>
+              : [FieldColumnsOf<S>, ...ColumnsTuple<Tail>]
+            : ColumnsTuple<Tail>
+        : // Tags, or() groups, and bare entity IDs have no columns
+          ColumnsTuple<Tail>
   : [];
 
 // ============================================================================
@@ -661,6 +677,10 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
  * callback is unsupported: it can duplicate or skip visits, or prevent
  * traversal from terminating. Use `collectEntities()` before structural
  * mutation.
+ *
+ * `added()`/`changed()` terms read a per-system revision window, and the read
+ * consumes it whole -- a second read returns nothing, and stopping early
+ * discards the rest.
  *
  * @param world - World instance
  * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query

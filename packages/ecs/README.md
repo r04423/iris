@@ -945,7 +945,7 @@ Events use double-buffered storage. Buffers rotate automatically at the end of e
 
 ### Change Detection
 
-**Change detection** tracks when components are added, modified, or removed, letting systems process only what changed since their last run.
+**Change detection** tracks when components are added, modified, or removed, letting systems process only what changed since they last looked.
 
 ```typescript
 import {
@@ -963,7 +963,7 @@ const physicsSetupSystem = defineSystem("physicsSetupSystem", (world) => {
   const newBodies = cacheQuery(world, [added(Position)]);
 
   return () => {
-    // Entities where Position was added since this system's last run
+    // Entities where Position was added since this system last read this query
     const entities = collectEntities(world, newBodies);
 
     for (const entity of entities) {

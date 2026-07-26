@@ -40,7 +40,7 @@ import type { World } from "./world.js";
 export function pair<R extends Relation, T extends EntityId>(
   relation: R,
   target: T & (T extends Pair ? never : unknown)
-): Pair<R> {
+): Pair<R, T> {
   assert(!isPair(target), IrisInvalidArgument, {
     expected: "entity, tag, component, or relation target",
     actual: "pair",

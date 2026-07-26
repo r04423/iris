@@ -83,6 +83,11 @@ declare const NAME_BRAND: unique symbol;
 declare const PAIR_RELATION_BRAND: unique symbol;
 
 /**
+ * Pair target brand for preserving target identity in pairs.
+ */
+declare const PAIR_TARGET_BRAND: unique symbol;
+
+/**
  * Component presence brand for type-safe narrowing.
  */
 declare const HAS_COMPONENT_BRAND: unique symbol;
@@ -128,10 +133,11 @@ export type Relation<S extends SchemaRecord = SchemaRecord, N extends string = s
  *
  * Nominal type for relation-target pairs. Inherits schema and identity from relation.
  */
-export type Pair<R extends Relation = Relation> = number & {
+export type Pair<R extends Relation = Relation, T = unknown> = number & {
   [PAIR_BRAND]: true;
   [SCHEMA_BRAND]: R extends Relation<infer S> ? S : never;
   [PAIR_RELATION_BRAND]: R;
+  [PAIR_TARGET_BRAND]: T;
 };
 
 /**
@@ -250,15 +256,15 @@ export function encodeRelation<S extends Record<string, Schema> = Record<string,
  * @param target - Target ID (entity, tag, component, or relation)
  * @returns Encoded pair ID
  */
-export function encodePair<R extends Relation>(relation: R, target: EntityId): Pair<R> {
+export function encodePair<R extends Relation, T extends EntityId>(relation: R, target: T): Pair<R, T> {
   const relationRawId = extractId(relation);
   const targetType = extractType(target);
   const targetRawId = extractId(target);
 
-  return ((1 << PAIR_FLAG_SHIFT) |
-    (targetType << TYPE_SHIFT) |
-    (targetRawId << META_SHIFT_20) |
-    relationRawId) as Pair<R>;
+  return ((1 << PAIR_FLAG_SHIFT) | (targetType << TYPE_SHIFT) | (targetRawId << META_SHIFT_20) | relationRawId) as Pair<
+    R,
+    T
+  >;
 }
 
 // ============================================================================
