@@ -14,7 +14,7 @@ import {
 } from "./archetype.js";
 import { addComponent, removeComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
-import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
+import { createEntity, destroyEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { defineComponent, defineTag } from "./registry.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -901,17 +901,15 @@ describe("Archetype", () => {
       const entityA = createEntity(world);
       const entityB = createEntity(world);
 
-      const registry = world.entities;
-
       // Create archetype using entityA as component
       const archetype = createAndRegisterArchetype(world, [entityA], new Map());
 
       // Check that archetype reference is in entityA's records
-      const metaA = registry.byId.get(entityA)!;
+      const metaA = getEntityMeta(world, entityA)!;
       assert.ok(metaA.records.includes(archetype));
 
       // entityB should have empty records (not used as component)
-      const metaB = registry.byId.get(entityB)!;
+      const metaB = getEntityMeta(world, entityB)!;
       assert.strictEqual(metaB.records.length, 0);
     });
 
@@ -938,14 +936,12 @@ describe("Archetype", () => {
       const entityA = createEntity(world);
       const entityB = createEntity(world);
 
-      const registry = world.entities;
-
       // Create archetype with both entities as components
       const archetype = createAndRegisterArchetype(world, [entityA, entityB], new Map());
 
       // Both should have records pointing to archetype
-      const metaA = registry.byId.get(entityA)!;
-      const metaB = registry.byId.get(entityB)!;
+      const metaA = getEntityMeta(world, entityA)!;
+      const metaB = getEntityMeta(world, entityB)!;
       assert.ok(metaA.records.includes(archetype));
       assert.ok(metaB.records.includes(archetype));
 
@@ -953,7 +949,7 @@ describe("Archetype", () => {
       destroyEntity(world, entityA);
 
       // Archetype destroyed, so entityB's records should be cleaned up
-      const metaBAfter = registry.byId.get(entityB)!;
+      const metaBAfter = getEntityMeta(world, entityB)!;
       assert.strictEqual(metaBAfter.records.includes(archetype), false);
     });
 
@@ -1090,7 +1086,7 @@ describe("Archetype", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
 
       // Schema should be cached in archetype
@@ -1110,7 +1106,7 @@ describe("Archetype", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Health, { current: 80, max: 100 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
 
       // Columns should exist for each field
@@ -1132,7 +1128,7 @@ describe("Archetype", () => {
       addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
       addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
 
       // Both schemas should be stored
@@ -1173,8 +1169,8 @@ describe("Archetype", () => {
       const e2 = createEntity(world);
       addComponent(world, e2, Position, { x: 30.0, y: 40.0 });
 
-      const meta1 = world.entities.byId.get(e1)!;
-      const meta2 = world.entities.byId.get(e2)!;
+      const meta1 = getEntityMeta(world, e1)!;
+      const meta2 = getEntityMeta(world, e2)!;
 
       // Both entities should share same archetype
       assert.strictEqual(meta1.archetype, meta2.archetype);
@@ -1195,14 +1191,14 @@ describe("Archetype", () => {
       addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
 
       // Get archetype with Position
-      const meta1 = world.entities.byId.get(entity)!;
+      const meta1 = getEntityMeta(world, entity)!;
       const archetype1 = meta1.archetype;
       assert.ok(archetype1.schemas.get(Position));
 
       // Add Velocity (transitions to new archetype)
       addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
 
-      const meta2 = world.entities.byId.get(entity)!;
+      const meta2 = getEntityMeta(world, entity)!;
       const archetype2 = meta2.archetype;
 
       // New archetype should have both schemas
@@ -1220,14 +1216,14 @@ describe("Archetype", () => {
       addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
 
       // Archetype has both schemas
-      const meta1 = world.entities.byId.get(entity)!;
+      const meta1 = getEntityMeta(world, entity)!;
       assert.ok(meta1.archetype.schemas.get(Position));
       assert.ok(meta1.archetype.schemas.get(Velocity));
 
       // Remove Position
       removeComponent(world, entity, Position);
 
-      const meta2 = world.entities.byId.get(entity)!;
+      const meta2 = getEntityMeta(world, entity)!;
 
       // New archetype should only have Velocity schema
       assert.strictEqual(meta2.archetype.schemas.get(Position), undefined);
@@ -1260,7 +1256,7 @@ describe("Archetype", () => {
       // Add Health (transition 2)
       addComponent(world, entity, Health, { current: 100, max: 100 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
 
       // All schemas should be present
@@ -1285,9 +1281,9 @@ describe("Archetype", () => {
       const archetype = createAndRegisterArchetype(world, [typeA, typeB, typeC], new Map());
 
       // Each type entity should have the archetype in its records
-      const metaA = world.entities.byId.get(typeA)!;
-      const metaB = world.entities.byId.get(typeB)!;
-      const metaC = world.entities.byId.get(typeC)!;
+      const metaA = getEntityMeta(world, typeA)!;
+      const metaB = getEntityMeta(world, typeB)!;
+      const metaC = getEntityMeta(world, typeC)!;
 
       assert.ok(metaA.records.includes(archetype), "typeA should track archetype");
       assert.ok(metaB.records.includes(archetype), "typeB should track archetype");
@@ -1303,8 +1299,8 @@ describe("Archetype", () => {
       const archetype = createAndRegisterArchetype(world, [typeA, typeB], new Map());
 
       // Verify records exist
-      const metaA = world.entities.byId.get(typeA)!;
-      const metaB = world.entities.byId.get(typeB)!;
+      const metaA = getEntityMeta(world, typeA)!;
+      const metaB = getEntityMeta(world, typeB)!;
       assert.ok(metaA.records.includes(archetype));
       assert.ok(metaB.records.includes(archetype));
 
@@ -1312,7 +1308,7 @@ describe("Archetype", () => {
       destroyEntity(world, typeA);
 
       // typeB should no longer reference the destroyed archetype
-      const metaBAfter = world.entities.byId.get(typeB)!;
+      const metaBAfter = getEntityMeta(world, typeB)!;
       assert.strictEqual(
         metaBAfter.records.includes(archetype),
         false,
@@ -1331,7 +1327,7 @@ describe("Archetype", () => {
       const archetype2 = createAndRegisterArchetype(world, [sharedType, uniqueType2], new Map());
 
       // sharedType should track both archetypes
-      const sharedMeta = world.entities.byId.get(sharedType)!;
+      const sharedMeta = getEntityMeta(world, sharedType)!;
       assert.ok(sharedMeta.records.includes(archetype1));
       assert.ok(sharedMeta.records.includes(archetype2));
       assert.strictEqual(sharedMeta.records.length, 2);
@@ -1356,20 +1352,20 @@ describe("Archetype", () => {
       const archetypeABC = createAndRegisterArchetype(world, [typeA, typeB, typeC], new Map());
 
       // typeA should be in all three archetypes
-      const metaA = world.entities.byId.get(typeA)!;
+      const metaA = getEntityMeta(world, typeA)!;
       assert.strictEqual(metaA.records.length, 3);
       assert.ok(metaA.records.includes(archetypeA));
       assert.ok(metaA.records.includes(archetypeAB));
       assert.ok(metaA.records.includes(archetypeABC));
 
       // typeB should be in two archetypes
-      const metaB = world.entities.byId.get(typeB)!;
+      const metaB = getEntityMeta(world, typeB)!;
       assert.strictEqual(metaB.records.length, 2);
       assert.ok(metaB.records.includes(archetypeAB));
       assert.ok(metaB.records.includes(archetypeABC));
 
       // typeC should be in one archetype
-      const metaC = world.entities.byId.get(typeC)!;
+      const metaC = getEntityMeta(world, typeC)!;
       assert.strictEqual(metaC.records.length, 1);
       assert.ok(metaC.records.includes(archetypeABC));
     });
@@ -1386,7 +1382,7 @@ describe("Archetype", () => {
       const archABC = createAndRegisterArchetype(world, [typeA, typeB, typeC], new Map());
 
       // All archetypes should be tracked
-      const metaA = world.entities.byId.get(typeA)!;
+      const metaA = getEntityMeta(world, typeA)!;
       assert.strictEqual(metaA.records.length, 3);
 
       // Destroy typeA - all archetypes containing it should be destroyed
@@ -1398,8 +1394,8 @@ describe("Archetype", () => {
       assert.strictEqual(world.archetypes.byId.has(archABC.hash), false);
 
       // typeB and typeC records should be empty (their archetypes were destroyed)
-      const metaB = world.entities.byId.get(typeB)!;
-      const metaC = world.entities.byId.get(typeC)!;
+      const metaB = getEntityMeta(world, typeB)!;
+      const metaC = getEntityMeta(world, typeC)!;
       assert.strictEqual(metaB.records.length, 0);
       assert.strictEqual(metaC.records.length, 0);
     });
@@ -1416,7 +1412,7 @@ describe("Archetype", () => {
       const archBC = createAndRegisterArchetype(world, [typeB, typeC], new Map());
 
       // typeB is in archAB and archBC
-      const metaB = world.entities.byId.get(typeB)!;
+      const metaB = getEntityMeta(world, typeB)!;
       assert.strictEqual(metaB.records.length, 2);
 
       // Destroy typeA - should only destroy archA and archAB
@@ -1434,7 +1430,7 @@ describe("Archetype", () => {
       assert.ok(metaB.records.includes(archBC));
 
       // typeC should still track archBC
-      const metaC = world.entities.byId.get(typeC)!;
+      const metaC = getEntityMeta(world, typeC)!;
       assert.strictEqual(metaC.records.length, 1);
       assert.ok(metaC.records.includes(archBC));
     });
@@ -1452,7 +1448,7 @@ describe("Archetype", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const column = meta.archetype.columns.get(Position)!.value!;
 
       // Column length should be capacity * stride
@@ -1476,13 +1472,13 @@ describe("Archetype", () => {
       addComponent(world, e1, Tag);
 
       // e2 should still have its original data
-      const meta2 = world.entities.byId.get(e2)!;
+      const meta2 = getEntityMeta(world, e2)!;
       const col2 = meta2.archetype.columns.get(Position)!.value! as Float32Array;
       const stride = col2.length / meta2.archetype.capacity;
       assert.strictEqual(col2[meta2.row * stride], 3);
       assert.strictEqual(col2[meta2.row * stride + 1], 4);
 
-      const meta3 = world.entities.byId.get(e3)!;
+      const meta3 = getEntityMeta(world, e3)!;
       const col3 = meta3.archetype.columns.get(Position)!.value! as Float32Array;
       assert.strictEqual(col3[meta3.row * stride], 5);
       assert.strictEqual(col3[meta3.row * stride + 1], 6);
@@ -1495,7 +1491,7 @@ describe("Archetype", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position, { value: [10, 20] });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
       const column = archetype.columns.get(Position)!.value! as Float32Array;
 
@@ -1520,7 +1516,7 @@ describe("Archetype", () => {
 
       // Verify all data survived the resize
       for (let i = 0; i < 20; i++) {
-        const meta = world.entities.byId.get(entities[i]!)!;
+        const meta = getEntityMeta(world, entities[i]!)!;
         const column = meta.archetype.columns.get(Position)!.value! as Float32Array;
         const stride = column.length / meta.archetype.capacity;
         assert.strictEqual(column[meta.row * stride], i * 10);

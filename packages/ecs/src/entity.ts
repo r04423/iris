@@ -7,12 +7,14 @@ import {
   COMPONENT_TYPE,
   ENTITY_TYPE,
   encodeEntity,
-  extractId,
+  extractEntityId,
   extractMeta,
   extractType,
   ID_MASK_8,
   ID_MASK_20,
+  isEntity,
   isPair,
+  isRelation,
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
@@ -33,6 +35,11 @@ import type { World } from "./world.js";
  * Stores entity's current location (archetype + row) and component records.
  */
 export type EntityMeta = {
+  /**
+   * Encoded ID this metadata belongs to.
+   */
+  id: EntityId;
+
   /**
    * Current archetype (direct reference).
    */
@@ -64,11 +71,16 @@ export type EntityMeta = {
 // ============================================================================
 
 /**
- * Entity registry (direct Map-based tracking).
+ * Entity registry.
  */
 export type EntityState = {
   /**
-   * Entity metadata lookup (entity ID -> metadata).
+   * Entity metadata lookup (raw entity ID -> metadata).
+   */
+  byRawId: (EntityMeta | undefined)[];
+
+  /**
+   * Metadata lookup for tags, components, relations, and pairs.
    */
   byId: Map<EntityId, EntityMeta>;
 
@@ -83,9 +95,9 @@ export type EntityState = {
   nextId: number;
 
   /**
-   * Generation lookup for pair target reconstruction (rawId -> generation).
+   * Generation lookup (raw entity ID -> generation).
    */
-  generations: Map<number, number>;
+  generations: number[];
 };
 
 /**
@@ -94,10 +106,11 @@ export type EntityState = {
  */
 export function createEntityState(): EntityState {
   return {
+    byRawId: [],
     byId: new Map(),
     freeIds: [],
     nextId: 1,
-    generations: new Map(),
+    generations: [],
   };
 }
 
@@ -106,10 +119,29 @@ export function createEntityState(): EntityState {
  * @internal
  */
 export function resetEntityState(world: World): void {
+  world.entities.byRawId.length = 0;
   world.entities.byId.clear();
   world.entities.freeIds.length = 0;
   world.entities.nextId = 1;
-  world.entities.generations.clear();
+  world.entities.generations.length = 0;
+}
+
+/**
+ * Looks up entity metadata. Returns undefined for dead and stale references.
+ * @internal
+ */
+export function getEntityMeta(world: World, entityId: EntityId): EntityMeta | undefined {
+  if (!isEntity(entityId)) {
+    return world.entities.byId.get(entityId);
+  }
+
+  const meta = world.entities.byRawId[extractEntityId(entityId)];
+
+  if (meta?.id === entityId) {
+    return meta;
+  }
+
+  return;
 }
 
 /**
@@ -120,7 +152,7 @@ function allocateEntityId(world: World): Entity {
   const rawId = world.entities.freeIds.pop();
   if (rawId !== undefined) {
     // Reuse recycled ID with its current generation
-    const generation = world.entities.generations.get(rawId)!;
+    const generation = world.entities.generations[rawId]!;
     return encodeEntity(rawId, generation);
   }
 
@@ -130,7 +162,7 @@ function allocateEntityId(world: World): Entity {
     throw new IrisEntityLimitExceeded(newRawId);
   }
 
-  world.entities.generations.set(newRawId, 0);
+  world.entities.generations[newRawId] = 0;
   return encodeEntity(newRawId, 0);
 }
 
@@ -143,13 +175,18 @@ function registerEntity(world: World, entityId: EntityId, schema?: SchemaRecord)
   const row = addEntityToArchetype(rootArchetype, entityId);
 
   const meta: EntityMeta = {
+    id: entityId,
     archetype: rootArchetype,
     row,
     records: [],
     schema,
   };
 
-  world.entities.byId.set(entityId, meta);
+  if (isEntity(entityId)) {
+    world.entities.byRawId[extractEntityId(entityId)] = meta;
+  } else {
+    world.entities.byId.set(entityId, meta);
+  }
 
   return meta;
 }
@@ -170,7 +207,7 @@ function registerEntity(world: World, entityId: EntityId, schema?: SchemaRecord)
  * ```
  */
 export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
-  const meta = world.entities.byId.get(entityId);
+  const meta = getEntityMeta(world, entityId);
 
   if (meta) {
     return meta;
@@ -291,7 +328,7 @@ export function destroyEntity(world: World, entityId: EntityId): void {
     return;
   }
 
-  const meta = world.entities.byId.get(entityId)!;
+  const meta = getEntityMeta(world, entityId)!;
 
   // Cycle protection - prevent infinite loops from cascade deletes
   if (meta.destroying) {
@@ -303,8 +340,8 @@ export function destroyEntity(world: World, entityId: EntityId): void {
   cleanupPairsTargetingEntity(world, entityId);
 
   // Clean up pairs built from this entity as their relation
-  if (!isPair(entityId) && extractType(entityId) === RELATIONSHIP_TYPE) {
-    cleanupPairsUsingRelation(world, entityId as Relation);
+  if (isRelation(entityId)) {
+    cleanupPairsUsingRelation(world, entityId);
   }
 
   // Remove this entity from any entities that have it as a component
@@ -318,28 +355,27 @@ export function destroyEntity(world: World, entityId: EntityId): void {
 
   // Swap-remove updates: entity swapped into our slot needs row update
   if (swappedEntityId !== undefined) {
-    const swappedMeta = world.entities.byId.get(swappedEntityId)!;
+    const swappedMeta = getEntityMeta(world, swappedEntityId)!;
     swappedMeta.row = meta.row;
   }
 
   // Delete before firing so the entity reads as gone
-  world.entities.byId.delete(entityId);
+  if (isEntity(entityId)) {
+    world.entities.byRawId[extractEntityId(entityId)] = undefined;
+  } else {
+    world.entities.byId.delete(entityId);
+  }
 
   fireObserverEvent(world, "entityDestroyed", entityId);
 
-  // Return early for pairs, whose target-type bits alias ENTITY_TYPE
-  if (isPair(entityId)) {
-    return;
-  }
-
   // Only entity IDs are recycled; component/tag/relation IDs are permanent
-  if (extractType(entityId) === ENTITY_TYPE) {
-    const rawId = extractId(entityId);
+  if (isEntity(entityId)) {
+    const rawId = extractEntityId(entityId);
     const oldGeneration = extractMeta(entityId);
     // Increment generation so stale references become detectable
     const newGeneration = (oldGeneration + 1) & ID_MASK_8;
 
-    world.entities.generations.set(rawId, newGeneration);
+    world.entities.generations[rawId] = newGeneration;
     world.entities.freeIds.push(rawId);
   }
 }
@@ -359,7 +395,7 @@ export function destroyEntity(world: World, entityId: EntityId): void {
  * ```
  */
 export function isEntityAlive(world: World, entity: EntityId): boolean {
-  return world.entities.byId.has(entity);
+  return getEntityMeta(world, entity) !== undefined;
 }
 
 /**
@@ -390,7 +426,7 @@ export function moveEntityToArchetype(world: World, meta: EntityMeta, toArchetyp
 
   // Swap-remove updates: entity swapped into our old slot needs row update
   if (swappedEntityId !== undefined) {
-    const swappedMeta = world.entities.byId.get(swappedEntityId)!;
+    const swappedMeta = getEntityMeta(world, swappedEntityId)!;
     swappedMeta.row = fromRow;
   }
 }
@@ -431,7 +467,7 @@ export function addEntityRecord(world: World, archetype: Archetype): void {
 export function removeEntityRecord(world: World, archetype: Archetype): void {
   for (let i = 0; i < archetype.types.length; i++) {
     const typeId = archetype.types[i]!;
-    const meta = world.entities.byId.get(typeId)!;
+    const meta = getEntityMeta(world, typeId)!;
     const idx = meta.records.indexOf(archetype);
 
     if (idx !== -1) {

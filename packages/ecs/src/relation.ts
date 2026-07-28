@@ -16,7 +16,7 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
-import { destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { IrisInvalidPair, IrisInvalidState } from "./error.js";
 import { OnDeleteTarget, Wildcard } from "./registry.js";
 import type { World } from "./world.js";
@@ -82,9 +82,7 @@ export function getPairTarget(world: World, pairId: Pair): EntityId {
   switch (targetType) {
     case ENTITY_TYPE: {
       // Entity targets use weak reference semantics - look up current generation
-      const generation = world.entities.generations.get(targetRawId)!;
-
-      return encodeEntity(targetRawId, generation);
+      return encodeEntity(targetRawId, world.entities.generations[targetRawId]!);
     }
 
     case TAG_TYPE: {
@@ -176,7 +174,7 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
     return;
   }
 
-  const wildcardMeta = world.entities.byId.get(wildcardTargetPair)!;
+  const wildcardMeta = getEntityMeta(world, wildcardTargetPair)!;
 
   // Separate pairs by their OnDeleteTarget policy:
   // - pairsToRemove: Just destroy the pair entity (default behavior)
@@ -205,7 +203,7 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
   const subjectsToDelete = new Set<EntityId>();
 
   for (const pairId of pairsToDelete) {
-    const pairMeta = world.entities.byId.get(pairId)!;
+    const pairMeta = getEntityMeta(world, pairId)!;
 
     for (const archetype of pairMeta.records) {
       for (const entityId of archetype.entities) {
@@ -254,7 +252,7 @@ export function cleanupPairsUsingRelation(world: World, relation: Relation): voi
     return;
   }
 
-  const wildcardMeta = world.entities.byId.get(relationWildcardPair)!;
+  const wildcardMeta = getEntityMeta(world, relationWildcardPair)!;
   const relationRawId = extractId(relation);
 
   const pairsToRemove = new Set<EntityId>();

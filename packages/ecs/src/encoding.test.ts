@@ -16,7 +16,9 @@ import {
   extractType,
   ID_MASK_8,
   ID_MASK_20,
+  isEntity,
   isPair,
+  isRelation,
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
@@ -180,6 +182,43 @@ describe("Encoding", () => {
       const pair = encodePair(relation, target);
 
       assert.strictEqual(isPair(pair), true);
+    });
+  });
+
+  describe("Entity Detection", () => {
+    it("returns true for encoded entities", () => {
+      assert.strictEqual(isEntity(encodeEntity(1, 0)), true);
+      assert.strictEqual(isEntity(encodeEntity(1, 255)), true);
+    });
+
+    it("returns false for all non-entity types", () => {
+      assert.strictEqual(isEntity(encodeComponent(1)), false);
+      assert.strictEqual(isEntity(encodeTag(1)), false);
+      assert.strictEqual(isEntity(encodeRelation(1)), false);
+    });
+
+    it("returns false for pairs with entity targets", () => {
+      const pair = encodePair(encodeRelation(1), encodeEntity(1, 0));
+
+      assert.strictEqual(isEntity(pair), false);
+    });
+  });
+
+  describe("Relation Detection", () => {
+    it("returns true for encoded relations", () => {
+      assert.strictEqual(isRelation(encodeRelation(1)), true);
+    });
+
+    it("returns false for all non-relation types", () => {
+      assert.strictEqual(isRelation(encodeEntity(1, 0)), false);
+      assert.strictEqual(isRelation(encodeComponent(1)), false);
+      assert.strictEqual(isRelation(encodeTag(1)), false);
+    });
+
+    it("returns false for pairs with relation targets", () => {
+      const pair = encodePair(encodeRelation(1), encodeRelation(2));
+
+      assert.strictEqual(isRelation(pair), false);
     });
   });
 });

@@ -1,4 +1,5 @@
 import type { EntityId } from "./encoding.js";
+import { getEntityMeta } from "./entity.js";
 import type { Event } from "./event.js";
 import { defineEvent, emitEvent } from "./event.js";
 import { registerObserverCallback } from "./observer.js";
@@ -68,7 +69,7 @@ export function initRemovalSystem(world: World): void {
   // component, so we emit removal events for all components on the entity here
   registerObserverCallback(world, "entityDestroying", (entityId) => {
     // Fires before any cleanup, so meta is guaranteed to exist
-    const meta = world.entities.byId.get(entityId)!;
+    const meta = getEntityMeta(world, entityId)!;
 
     for (const componentId of meta.archetype.types) {
       // Skip the entity's own ID (entities are components in ECS)

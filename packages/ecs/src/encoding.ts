@@ -338,6 +338,39 @@ export function isPair(id: number): id is Pair {
 }
 
 /**
+ * Check if ID is a plain entity.
+ *
+ * @param id - Encoded ID
+ * @returns True if ID is a non-pair entity ID, false otherwise
+ * @internal
+ */
+export function isEntity(id: number): id is Entity {
+  return id >>> TYPE_SHIFT === ENTITY_TYPE;
+}
+
+/**
+ * Check if ID is a relation.
+ *
+ * @param id - Encoded ID
+ * @returns True if ID is a non-pair relation ID, false otherwise
+ * @internal
+ */
+export function isRelation(id: number): id is Relation {
+  return id >>> TYPE_SHIFT === RELATIONSHIP_TYPE;
+}
+
+/**
+ * Extract raw ID from an entity ID.
+ *
+ * @param id - Encoded entity ID
+ * @returns Raw ID (20-bit)
+ * @internal
+ */
+export function extractEntityId(id: Entity): number {
+  return id & ID_MASK_20;
+}
+
+/**
  * Extract relation raw ID from pair.
  *
  * @param pairId - Encoded pair ID

@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 
 import { addComponent, hasComponent } from "./component.js";
-import { createEntity } from "./entity.js";
+import { createEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidState } from "./error.js";
 import { defineEvent, emitEvent } from "./event.js";
 import { lookupByName, setName } from "./name.js";
@@ -62,6 +62,7 @@ describe("World", () => {
       resetWorld(world);
 
       assert.strictEqual(world.entities.byId.size, 0);
+      assert.strictEqual(world.entities.byRawId.length, 0);
     });
 
     it("preserves systems after reset", () => {
@@ -177,7 +178,7 @@ describe("World", () => {
       const frame = runOnce(world);
 
       assert.throws(() => resetWorld(world), IrisInvalidState);
-      assert.strictEqual(world.entities.byId.has(entity), true);
+      assert.strictEqual(isEntityAlive(world, entity), true);
 
       release();
       await frame;
@@ -211,6 +212,7 @@ describe("World", () => {
         resetWorld(world);
 
         assert.strictEqual(world.entities.byId.size, 0);
+        assert.strictEqual(world.entities.byRawId.length, 0);
       }
     });
 

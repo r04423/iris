@@ -14,7 +14,7 @@ import {
 } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
-import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { changed, queryEntities } from "./query.js";
@@ -40,16 +40,15 @@ describe("Component", () => {
       const world = createWorld();
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
-      const registry = world.entities;
 
       // Entity starts in root archetype
-      const meta = registry.byId.get(entity1)!;
+      const meta = getEntityMeta(world, entity1)!;
       assert.strictEqual(meta.archetype, world.archetypes.root);
 
       // Add component transitions to new archetype
       addComponent(world, entity1, entity2);
 
-      const metaAfter = registry.byId.get(entity1)!;
+      const metaAfter = getEntityMeta(world, entity1)!;
       assert.notStrictEqual(metaAfter.archetype, world.archetypes.root);
 
       // Verify archetype contains component
@@ -60,19 +59,18 @@ describe("Component", () => {
       const world = createWorld();
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
-      const registry = world.entities;
 
       addComponent(world, entity1, entity2);
 
       // Get archetype after first add
-      const meta1 = registry.byId.get(entity1)!;
+      const meta1 = getEntityMeta(world, entity1)!;
       const archetype1 = meta1.archetype;
 
       // Add again (should be no-op)
       addComponent(world, entity1, entity2);
 
       // Archetype should be unchanged
-      const meta2 = registry.byId.get(entity1)!;
+      const meta2 = getEntityMeta(world, entity1)!;
       assert.strictEqual(meta2.archetype, archetype1);
     });
 
@@ -157,14 +155,13 @@ describe("Component", () => {
     it("handles empty entries array", () => {
       const world = createWorld();
       const entity = createEntity(world);
-      const registry = world.entities;
 
-      const metaBefore = registry.byId.get(entity)!;
+      const metaBefore = getEntityMeta(world, entity)!;
       const archBefore = metaBefore.archetype;
 
       addComponents(world, entity, []);
 
-      const metaAfter = registry.byId.get(entity)!;
+      const metaAfter = getEntityMeta(world, entity)!;
       assert.strictEqual(metaAfter.archetype, archBefore);
     });
 
@@ -207,19 +204,18 @@ describe("Component", () => {
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
       const entity3 = createEntity(world);
-      const registry = world.entities;
 
       // Add two components
       addComponent(world, entity1, entity2);
       addComponent(world, entity1, entity3);
 
-      const metaBefore = registry.byId.get(entity1)!;
+      const metaBefore = getEntityMeta(world, entity1)!;
       const hashBefore = metaBefore.archetype.hash;
 
       // Remove one component
       removeComponent(world, entity1, entity2);
 
-      const metaAfter = registry.byId.get(entity1)!;
+      const metaAfter = getEntityMeta(world, entity1)!;
       const hashAfter = metaAfter.archetype.hash;
       assert.notStrictEqual(hashBefore, hashAfter);
 
@@ -232,13 +228,12 @@ describe("Component", () => {
       const world = createWorld();
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
-      const registry = world.entities;
 
       addComponent(world, entity1, entity2);
       removeComponent(world, entity1, entity2);
 
       // Should be back in root archetype
-      const meta = registry.byId.get(entity1)!;
+      const meta = getEntityMeta(world, entity1)!;
       assert.strictEqual(meta.archetype.hash, world.archetypes.root.hash);
     });
 
@@ -246,17 +241,16 @@ describe("Component", () => {
       const world = createWorld();
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
-      const registry = world.entities;
 
       // Entity has no components
-      const meta1 = registry.byId.get(entity1)!;
+      const meta1 = getEntityMeta(world, entity1)!;
       const hash1 = meta1.archetype.hash;
 
       // Remove non-existent component (should be no-op)
       removeComponent(world, entity1, entity2);
 
       // Archetype should be unchanged
-      const meta2 = registry.byId.get(entity1)!;
+      const meta2 = getEntityMeta(world, entity1)!;
       assert.strictEqual(meta2.archetype.hash, hash1);
     });
 
@@ -327,8 +321,7 @@ describe("Component", () => {
       // Entity2 used as component (no schema, no columns)
       addComponent(world, entity1, entity2);
 
-      const registry = world.entities;
-      const meta = registry.byId.get(entity1)!;
+      const meta = getEntityMeta(world, entity1)!;
       const archetype = meta.archetype;
 
       // Entity2 appears in types
@@ -491,24 +484,24 @@ describe("Component", () => {
       const world = createWorld();
       const Dead = defineTag("Dead");
 
-      assert.strictEqual(world.entities.byId.has(Dead), false);
+      assert.strictEqual(isEntityAlive(world, Dead), false);
 
       const entity = createEntity(world);
       addComponent(world, entity, Dead);
 
-      assert.strictEqual(world.entities.byId.has(Dead), true);
+      assert.strictEqual(isEntityAlive(world, Dead), true);
     });
 
     it("registers silently via ensureEntity", () => {
       const world = createWorld();
       const Frozen = defineTag("Frozen");
 
-      assert.strictEqual(world.entities.byId.has(Frozen), false);
+      assert.strictEqual(isEntityAlive(world, Frozen), false);
 
       const meta = ensureEntity(world, Frozen);
 
       assert.ok(meta);
-      assert.strictEqual(world.entities.byId.has(Frozen), true);
+      assert.strictEqual(isEntityAlive(world, Frozen), true);
     });
 
     it("does not fire observer events", () => {
@@ -532,10 +525,10 @@ describe("Component", () => {
       const Burning = defineTag("Burning");
 
       ensureEntity(world, Burning);
-      assert.strictEqual(world.entities.byId.has(Burning), true);
+      assert.strictEqual(isEntityAlive(world, Burning), true);
 
       destroyEntity(world, Burning);
-      assert.strictEqual(world.entities.byId.has(Burning), false);
+      assert.strictEqual(isEntityAlive(world, Burning), false);
     });
 
     it("does not recycle tag IDs", () => {
@@ -748,7 +741,7 @@ describe("Component", () => {
       addComponent(world, entity, Enemy);
       addComponent(world, entity, Health, { current: 50, max: 100 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
 
       // Both tag and component in archetype types
@@ -798,7 +791,7 @@ describe("Component", () => {
 
       assert.strictEqual(hasComponent(world, entity, Marker), true);
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const fieldColumns = meta.archetype.columns.get(Marker);
 
       // Empty schema means no columns
@@ -885,7 +878,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const ticks = meta.archetype.ticks.get(Position)!;
 
       assert.strictEqual(ticks.added[meta.row], 2 ** 32 + 10);
@@ -1194,7 +1187,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
       const ticks = meta.archetype.ticks.get(Position)!;
 
       assert.strictEqual(ticks.changed[meta.row], 10);

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { addComponent, getComponentValue, hasComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
-import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
+import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
@@ -296,7 +296,7 @@ describe("Entity", () => {
       const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
 
       // Component not yet registered in world
-      assert.strictEqual(world.entities.byId.has(Position), false);
+      assert.strictEqual(isEntityAlive(world, Position), false);
 
       // ensureEntity auto-registers component with schema
       const meta = ensureEntity(world, Position);
@@ -319,7 +319,7 @@ describe("Entity", () => {
       addComponent(world, entity, Velocity, { x: 1.0, y: 2.0 });
 
       // Schema should be in EntityMeta
-      const meta = world.entities.byId.get(Velocity);
+      const meta = getEntityMeta(world, Velocity);
       assert.ok(meta);
       assert.ok(meta.schema);
       assert.strictEqual(Object.keys(meta.schema).length, 2);
@@ -329,12 +329,12 @@ describe("Entity", () => {
       const world = createWorld();
       const Score = defineComponent("Score", { value: Type.i32() });
 
-      assert.strictEqual(world.entities.byId.has(Score), false);
+      assert.strictEqual(isEntityAlive(world, Score), false);
 
       const entity = createEntity(world);
       addComponent(world, entity, Score, { value: 100 });
 
-      assert.strictEqual(world.entities.byId.has(Score), true);
+      assert.strictEqual(isEntityAlive(world, Score), true);
     });
 
     it("stores schema for multiple component types", () => {
@@ -345,8 +345,8 @@ describe("Entity", () => {
       ensureEntity(world, Position);
       ensureEntity(world, Health);
 
-      const positionMeta = world.entities.byId.get(Position)!;
-      const healthMeta = world.entities.byId.get(Health)!;
+      const positionMeta = getEntityMeta(world, Position)!;
+      const healthMeta = getEntityMeta(world, Health)!;
 
       assert.ok(positionMeta.schema);
       assert.ok(healthMeta.schema);
@@ -358,7 +358,7 @@ describe("Entity", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
-      const meta = world.entities.byId.get(entity)!;
+      const meta = getEntityMeta(world, entity)!;
 
       assert.strictEqual(meta.schema, undefined);
     });
@@ -434,13 +434,13 @@ describe("Entity", () => {
       const pairId = pair(ChildOf, target);
 
       // Relation not yet registered in world
-      assert.ok(!world.entities.byId.has(ChildOf), "Relation should not be registered yet");
+      assert.ok(!isEntityAlive(world, ChildOf), "Relation should not be registered yet");
 
       // Register the pair
       ensureEntity(world, pairId);
 
       // Relation should now be registered
-      assert.ok(world.entities.byId.has(ChildOf), "Relation should be auto-registered with pair");
+      assert.ok(isEntityAlive(world, ChildOf), "Relation should be auto-registered with pair");
     });
 
     it("auto-registers definition target when pair is registered", () => {
@@ -450,7 +450,7 @@ describe("Entity", () => {
 
       ensureEntity(world, pair(ChildOf, target));
 
-      assert.ok(world.entities.byId.has(target), "Tag target should be auto-registered with pair");
+      assert.ok(isEntityAlive(world, target), "Tag target should be auto-registered with pair");
     });
 
     it("throws when pair target entity is not alive", () => {

@@ -3,7 +3,7 @@ import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype, getCol
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
-import { ensureEntity, moveEntityToArchetype } from "./entity.js";
+import { ensureEntity, getEntityMeta, moveEntityToArchetype } from "./entity.js";
 import { IrisInvalidPair } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
@@ -898,7 +898,7 @@ export function getComponentVectorView<S extends SchemaRecord, K extends VectorF
  * @param componentId - Component to remove from all entities
  */
 export function cascadeRemoveComponent(world: World, componentId: EntityId): void {
-  const meta = world.entities.byId.get(componentId)!;
+  const meta = getEntityMeta(world, componentId)!;
 
   // Copy records - will be modified during iteration as entities move
   const archetypes = [...meta.records];
