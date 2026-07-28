@@ -136,14 +136,10 @@ export type ExecutionState = {
   shutdownPromise: Promise<void> | null;
 
   /**
-   * Whether startup schedule has been executed.
+   * Lifecycle position: "initial" before Startup runs, "active" after,
+   * "stopped" after Shutdown runs.
    */
-  startupRan: boolean;
-
-  /**
-   * Whether shutdown schedule has been executed.
-   */
-  shutdownRan: boolean;
+  lifecycle: "initial" | "active" | "stopped";
 };
 
 /**
@@ -192,8 +188,7 @@ export function createExecutionState(): ExecutionState {
     frameDriver: null,
     frameHandle: null,
     framePromise: null,
-    startupRan: false,
-    shutdownRan: false,
+    lifecycle: "initial",
     shutdownPromise: null,
   };
 }
@@ -249,8 +244,7 @@ export function resetExecutionState(world: World): void {
   world.execution.frameHandle = null;
   world.execution.framePromise = null;
   world.execution.shutdownPromise = null;
-  world.execution.startupRan = false;
-  world.execution.shutdownRan = false;
+  world.execution.lifecycle = "initial";
 }
 
 // ============================================================================
@@ -1256,9 +1250,9 @@ async function executeFrame(world: World): Promise<void> {
     prepareSystems(world);
 
     // Run startup schedule on first call
-    if (!world.execution.startupRan) {
+    if (world.execution.lifecycle === "initial") {
       await executeSchedule(world, Startup);
-      world.execution.startupRan = true;
+      world.execution.lifecycle = "active";
     }
 
     // Run all pipeline schedules in order.
@@ -1298,7 +1292,10 @@ function startFrame(world: World): Promise<void> {
     throw new IrisSchedulerBusy("Shutdown is executing");
   }
 
-  world.execution.shutdownRan = false;
+  // A frame after stop() re-arms the lifecycle so Startup and Shutdown run again.
+  if (world.execution.lifecycle === "stopped") {
+    world.execution.lifecycle = "initial";
+  }
 
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   world.execution.framePromise = promise;
@@ -1426,8 +1423,7 @@ async function runShutdown(world: World): Promise<void> {
       : shutdownError;
   }
 
-  world.execution.shutdownRan = true;
-  world.execution.startupRan = false;
+  world.execution.lifecycle = "stopped";
   world.execution.shutdownPromise = null;
 
   if (frame.status === "rejected") {
@@ -1456,7 +1452,7 @@ export function stop(world: World): Promise<void> {
     return world.execution.shutdownPromise;
   }
 
-  if (world.execution.shutdownRan) {
+  if (world.execution.lifecycle === "stopped") {
     return Promise.resolve();
   }
 
