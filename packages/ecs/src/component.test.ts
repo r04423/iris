@@ -99,6 +99,29 @@ describe("Component", () => {
         addComponent(world, entity1, entity2);
       }, IrisNotFound);
     });
+
+    it("narrows the entity for typed accessors", () => {
+      const world = createWorld();
+      const Position = defineComponent("ca_narrow_Position", { x: Type.f32(), y: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponent(world, entity, Position, { x: 1, y: 2 });
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      assert.strictEqual(x, 1);
+    });
+
+    it("narrows the entity for typed pair accessors", () => {
+      const world = createWorld();
+      const Amount = defineRelation("ca_narrow_Amount", { schema: { value: Type.f32() } });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+
+      addComponent(world, entity, pair(Amount, target), { value: 42 });
+
+      const value: number = getComponentValue(world, entity, pair(Amount, target), "value");
+      assert.strictEqual(value, 42);
+    });
   });
 
   describe("Batch Component Add", () => {
@@ -183,6 +206,21 @@ describe("Component", () => {
       addComponents(world, entity, [Player]);
 
       assert.strictEqual(hasComponent(world, entity, Player), true);
+    });
+
+    it("narrows the entity for every entry", () => {
+      const world = createWorld();
+      const Player = defineTag("ba_narrow_Player");
+      const Position = defineComponent("ba_narrow_Position", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("ba_narrow_Velocity", { vx: Type.f32(), vy: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [Player, [Position, { x: 1, y: 2 }], [Velocity, { vx: 3, vy: 4 }]]);
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      const vx: number = getComponentValue(world, entity, Velocity, "vx");
+      assert.strictEqual(x, 1);
+      assert.strictEqual(vx, 3);
     });
   });
 

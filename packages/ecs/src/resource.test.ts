@@ -29,6 +29,16 @@ describe("Resource", () => {
       assert.strictEqual(getResourceValue(world, Time, "elapsed"), 100.0);
     });
 
+    it("narrows the resource for typed accessors", () => {
+      const world = createWorld();
+      const Time = defineComponent("TimeNarrowsResource", { delta: Type.f64() });
+
+      addResource(world, Time, { delta: 0.016 });
+
+      const dt: number = getResourceValue(world, Time, "delta");
+      assert.strictEqual(dt, 0.016);
+    });
+
     it("modifies global resource", () => {
       const world = createWorld();
       const Config = defineComponent("Config", { mode: Type.string<"debug" | "release">() });

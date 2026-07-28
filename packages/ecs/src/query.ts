@@ -1,8 +1,9 @@
 import type { FieldColumnsOf } from "./archetype.js";
 import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding.js";
-import { IrisInvalidQuery, IrisQueryLimitExceeded, IrisRevisionOverflow } from "./error.js";
+import { IrisInvalidQuery, IrisQueryLimitExceeded } from "./error.js";
 import type { FilterMeta, FilterTerms } from "./filters.js";
 import { ensureFilter } from "./filters.js";
+import { consumeRevisionWindow, inRevisionWindow } from "./revision.js";
 import type { SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -590,17 +591,9 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
     return;
   }
 
+  // Consume the window up front: stopping early still discards the remainder
   const boundary = world.revision;
-  const lastRevision = queryMeta.lastRevision.get(systemId) ?? 0;
-
-  if (boundary >= Number.MAX_SAFE_INTEGER) {
-    throw new IrisRevisionOverflow();
-  }
-
-  // Consume the window up front: stopping early still discards the remainder.
-  // Bumping the revision puts writes made after this read outside the window
-  queryMeta.lastRevision.set(systemId, boundary);
-  world.revision = boundary + 1;
+  const lastRevision = consumeRevisionWindow(world, queryMeta.lastRevision, systemId, boundary);
 
   // Pre-allocated arrays reused across archetypes to avoid allocation in hot loop
   const addedRevisionArrays: Float64Array[] = [];
@@ -640,18 +633,14 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
 
         // Check added modifiers against the captured (lastRevision, boundary] window
         for (let j = 0; j < addedRevisionArrays.length; j++) {
-          const addedRevision = addedRevisionArrays[j]![i]!;
-
-          if (addedRevision <= lastRevision || addedRevision > boundary) {
+          if (!inRevisionWindow(addedRevisionArrays[j]![i]!, lastRevision, boundary)) {
             continue entityLoop;
           }
         }
 
         // Check changed modifiers against the captured (lastRevision, boundary] window
         for (let j = 0; j < changedRevisionArrays.length; j++) {
-          const changedRevision = changedRevisionArrays[j]![i]!;
-
-          if (changedRevision <= lastRevision || changedRevision > boundary) {
+          if (!inRevisionWindow(changedRevisionArrays[j]![i]!, lastRevision, boundary)) {
             continue entityLoop;
           }
         }

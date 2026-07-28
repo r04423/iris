@@ -1,4 +1,5 @@
-import { IrisDuplicateEvent, IrisRevisionOverflow } from "./error.js";
+import { IrisDuplicateEvent } from "./error.js";
+import { consumeRevisionWindow, inRevisionWindow } from "./revision.js";
 import type { Schema, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -299,29 +300,6 @@ function lastConsumedRevision(queue: EventQueueMeta, systemId: string): number {
 }
 
 /**
- * Whether an entry falls inside the (lastRevision, boundary] consumption window.
- */
-function inWindow(entry: EventEntry, lastRevision: number, boundary: number): boolean {
-  return entry.revision > lastRevision && entry.revision <= boundary;
-}
-
-/**
- * Commits one validated event consumption window and returns its previous boundary.
- */
-function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: string, boundary: number): number {
-  const previous = lastConsumedRevision(queue, systemId);
-
-  if (boundary >= Number.MAX_SAFE_INTEGER) {
-    throw new IrisRevisionOverflow();
-  }
-
-  queue.lastRevision.set(systemId, boundary);
-  world.revision = boundary + 1;
-
-  return previous;
-}
-
-/**
  * Core event iteration over a resolved queue.
  *
  * Iterates both buffers (previous then current) with revision filtering.
@@ -338,7 +316,7 @@ function iterateEventQueue<S extends EventSchema>(
 
   for (let i = 0; i < prevLen; i++) {
     const entry = queue.previous[i]!;
-    if (inWindow(entry, lastRevision, boundary)) {
+    if (inRevisionWindow(entry.revision, lastRevision, boundary)) {
       if (callback(entry.data) === false) {
         return;
       }
@@ -347,7 +325,7 @@ function iterateEventQueue<S extends EventSchema>(
 
   for (let i = 0; i < currLen; i++) {
     const entry = queue.current[i]!;
-    if (inWindow(entry, lastRevision, boundary)) {
+    if (inRevisionWindow(entry.revision, lastRevision, boundary)) {
       if (callback(entry.data) === false) {
         return;
       }
@@ -386,7 +364,7 @@ function findLastInWindow<S extends EventSchema>(
   for (let i = buffer.length - 1; i >= 0; i--) {
     const entry = buffer[i]!;
 
-    if (inWindow(entry, lastRevision, boundary)) {
+    if (inRevisionWindow(entry.revision, lastRevision, boundary)) {
       return entry;
     }
   }
@@ -429,7 +407,7 @@ export function readEvents<S extends EventSchema>(
 
   const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
-  const previous = consumeEventWindow(world, queue, systemId, boundary);
+  const previous = consumeRevisionWindow(world, queue.lastRevision, systemId, boundary);
 
   iterateEventQueue(queue, previous, boundary, callback);
 }
@@ -548,7 +526,7 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Event<
 
   const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
-  const lastRevision = consumeEventWindow(world, queue, systemId, boundary);
+  const lastRevision = consumeRevisionWindow(world, queue.lastRevision, systemId, boundary);
 
   // Current buffer holds the newer events, so search it first
   const entry =
@@ -585,7 +563,7 @@ export function clearEvents<S extends EventSchema>(world: World, event: Event<S>
   const boundary = world.revision;
   const queue = ensureEventQueue(world, event);
 
-  consumeEventWindow(world, queue, systemId, boundary);
+  consumeRevisionWindow(world, queue.lastRevision, systemId, boundary);
 }
 
 /**

@@ -18,6 +18,7 @@ import { createQueryState, resetQueryState } from "./query.js";
 import type { ComponentState } from "./registry.js";
 import { createComponentState } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
+import { createRevision, resetRevision } from "./revision.js";
 import type { ExecutionState, ScheduleState, SystemSetState, SystemState } from "./scheduler.js";
 import {
   createExecutionState,
@@ -105,7 +106,7 @@ export function createWorld(): World {
     execution: createExecutionState(),
     events: createEventState(),
     actions: createActionState(),
-    revision: 1,
+    revision: createRevision(),
   };
 
   // Filter dispatch must observe before the root archetype registers
@@ -141,8 +142,7 @@ export function resetWorld(world: World): void {
     throw new IrisSchedulerBusy("Cannot reset world while scheduler execution is active");
   }
 
-  world.revision = 1;
-
+  resetRevision(world);
   resetFilterState(world);
   resetQueryState(world);
   resetArchetypeState(world);

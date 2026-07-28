@@ -30,17 +30,20 @@ import type { World } from "./world.js";
  * existing values are not overwritten. Read fields back with
  * {@link getResourceValue}.
  *
+ * Acts as an assertion: after the call the component is narrowed, making the
+ * typed accessors like {@link getResourceValue} return non-optional values.
+ *
  * @example
  * ```typescript
  * const Time = defineComponent("Time", { delta: Type.f32() });
  * addResource(world, Time, { delta: 0.016 });
  * ```
  */
-export function addResource<S extends SchemaRecord>(
+export function addResource<S extends SchemaRecord, N extends string>(
   world: World,
-  component: Component<S>,
+  component: Component<S, N>,
   data: InferSchemaRecord<S>
-): void {
+): asserts component is Component<S, N> & EntityWith<Component<S, N>> {
   addComponent(world, component, component, data);
 }
 

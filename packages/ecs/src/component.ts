@@ -30,6 +30,9 @@ import type { World } from "./world.js";
  * pair on an exclusive relation replaces the previous target in a single
  * transition.
  *
+ * Acts as an assertion: after the call the entity is narrowed, making the
+ * typed accessors like {@link getComponentValue} return non-optional values.
+ *
  * @throws {IrisEntityNotFound} If the entity is not alive
  * @throws {IrisInvalidPair} If the pair contains a wildcard
  *
@@ -40,18 +43,25 @@ import type { World } from "./world.js";
  * addComponent(world, child, pair(ChildOf, parent));
  * ```
  */
-export function addComponent(
+export function addComponent<C extends Entity | Tag | Pair<Relation<Record<string, never>>>>(
   world: World,
   entityId: EntityId,
-  componentId: Entity | Tag | Pair<Relation<Record<string, never>>>
-): void;
+  componentId: C
+): asserts entityId is EntityWith<C>;
 
-export function addComponent<S extends SchemaRecord>(
+export function addComponent<S extends SchemaRecord, N extends string>(
   world: World,
   entityId: EntityId,
-  componentId: Component<S> | Pair<Relation<S>>,
+  componentId: Component<S, N>,
   data: InferSchemaRecord<S>
-): void;
+): asserts entityId is EntityWith<Component<S, N>>;
+
+export function addComponent<S extends SchemaRecord, N extends string, T>(
+  world: World,
+  entityId: EntityId,
+  componentId: Pair<Relation<S, N>, T>,
+  data: InferSchemaRecord<S>
+): asserts entityId is EntityWith<Pair<Relation<S, N>, T>>;
 
 export function addComponent<S extends SchemaRecord>(
   world: World,
@@ -196,10 +206,17 @@ export type ValidateEntries<T extends readonly ComponentEntry[]> = {
         : T[I];
 };
 
+/** Component IDs carried by an entries tuple; bare entries are the ID itself. */
+type EntryComponent<E extends ComponentEntry> = E extends readonly [infer C extends EntityId, unknown] ? C : E;
+
 /**
  * Adds multiple components to an entity in one call.
  *
  * Equivalent to calling {@link addComponent} for each entry in order.
+ *
+ * Acts as an assertion: after the call the entity is narrowed for every entry,
+ * making the typed accessors like {@link getComponentValue} return
+ * non-optional values.
  *
  * @example
  * ```typescript
@@ -214,7 +231,7 @@ export function addComponents<const T extends readonly ComponentEntry[]>(
   world: World,
   entityId: EntityId,
   entries: T & ValidateEntries<T>
-): void;
+): asserts entityId is EntityWith<EntryComponent<T[number]>>;
 
 export function addComponents(world: World, entityId: EntityId, entries: readonly ComponentEntry[]): void {
   for (let i = 0; i < entries.length; i++) {
@@ -228,7 +245,9 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
       addComponent(
         world,
         entityId,
-        componentId as Component<SchemaRecord> | Pair<Relation<SchemaRecord>>,
+        // May also be a data pair; the component overload stands in for both since
+        // entries were already validated by ValidateEntries and the overloads share one implementation
+        componentId as Component<SchemaRecord>,
         data as InferSchemaRecord<SchemaRecord>
       );
     }

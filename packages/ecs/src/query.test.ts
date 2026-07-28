@@ -1265,7 +1265,7 @@ describe("Query", () => {
         addComponent(world, child3, pair(ChildOf, parent1));
 
         // Query: entities with ANY ChildOf relation
-        const entities = collectEntities(world, [pair(ChildOf, Wildcard)]);
+        const entities: EntityId[] = collectEntities(world, [pair(ChildOf, Wildcard)]);
 
         assert.strictEqual(entities.length, 3);
         assert.ok(entities.some((e) => e === child1));
@@ -1320,7 +1320,7 @@ describe("Query", () => {
         addComponent(world, entity2, pair(Likes, target));
 
         // Query: all entities targeting 'target' (any relation)
-        const entities = collectEntities(world, [pair(Wildcard, target)]);
+        const entities: EntityId[] = collectEntities(world, [pair(Wildcard, target)]);
 
         assert.strictEqual(entities.length, 2);
         assert.ok(entities.some((e) => e === entity1));
@@ -1570,7 +1570,7 @@ describe("Query", () => {
         addComponent(world, child2, pair(ChildOf, parent2));
 
         let processed = 0;
-        queryEntities(world, [pair(ChildOf, Wildcard)], (entity) => {
+        queryEntities(world, [pair(ChildOf, Wildcard)], (entity: EntityId) => {
           removeComponent(world, entity, pair(ChildOf, entity === child1 ? parent1 : parent2));
           processed++;
         });
