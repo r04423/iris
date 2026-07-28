@@ -25,6 +25,38 @@ export type ActionInitializer<T extends Actions> = (world: World) => T;
  */
 export type ActionGetter<T extends Actions> = (world: World) => T;
 
+// ============================================================================
+// Action State
+// ============================================================================
+
+/**
+ * Actions registry for cached world-bound action getters.
+ */
+export type ActionState = {
+  /**
+   * Actions lookup by initializer function.
+   */
+  byInitializer: Map<ActionInitializer<Actions>, Actions>;
+};
+
+/**
+ * Creates an empty actions registry.
+ * @internal
+ */
+export function createActionState(): ActionState {
+  return {
+    byInitializer: new Map(),
+  };
+}
+
+/**
+ * Clears the world's cached actions.
+ * @internal
+ */
+export function resetActionState(world: World): void {
+  world.actions.byInitializer.clear();
+}
+
 /**
  * Define reusable actions bound to a world via closure. Actions are initialized
  * once per world and cached for subsequent access.

@@ -108,6 +108,45 @@ export type QueryTrieNode = {
 };
 
 // ============================================================================
+// Query State
+// ============================================================================
+
+/**
+ * Query registry for metadata caching.
+ */
+export type QueryState = {
+  /**
+   * Query metadata lookup (query hash -> metadata).
+   */
+  byId: Map<string, QueryMeta>;
+
+  /**
+   * Parametric query caches keyed by builder function identity.
+   */
+  byBuilder: Map<(...args: EntityId[]) => (EntityId | QueryModifier)[], QueryTrieNode>;
+};
+
+/**
+ * Creates an empty query registry.
+ * @internal
+ */
+export function createQueryState(): QueryState {
+  return {
+    byId: new Map(),
+    byBuilder: new Map(),
+  };
+}
+
+/**
+ * Clears the world's cached queries.
+ * @internal
+ */
+export function resetQueryState(world: World): void {
+  world.queries.byId.clear();
+  world.queries.byBuilder.clear();
+}
+
+// ============================================================================
 // Query Modifiers
 // ============================================================================
 

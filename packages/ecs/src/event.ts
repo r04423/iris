@@ -130,6 +130,45 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
 };
 
 // ============================================================================
+// Event State
+// ============================================================================
+
+/**
+ * Event queue registry.
+ */
+export type EventState = {
+  /**
+   * Event queue metadata lookup (event ID -> queue metadata).
+   */
+  byId: Map<EventId, EventQueueMeta>;
+
+  /**
+   * Queues with non-empty buffers, the only ones flushEvents visits.
+   */
+  active: EventQueueMeta[];
+};
+
+/**
+ * Creates an empty event queue registry.
+ * @internal
+ */
+export function createEventState(): EventState {
+  return {
+    byId: new Map(),
+    active: [],
+  };
+}
+
+/**
+ * Clears the world's event queues.
+ * @internal
+ */
+export function resetEventState(world: World): void {
+  world.events.byId.clear();
+  world.events.active.length = 0;
+}
+
+// ============================================================================
 // Global Event Registry
 // ============================================================================
 

@@ -1,21 +1,34 @@
-import type { ActionInitializer, Actions } from "./actions.js";
-import type { Archetype } from "./archetype.js";
-import { createArchetype, registerArchetype } from "./archetype.js";
-import type { Component, EntityId, Relation, Tag } from "./encoding.js";
-import type { EntityMeta } from "./entity.js";
+import type { ActionState } from "./actions.js";
+import { createActionState, resetActionState } from "./actions.js";
+import type { ArchetypeState } from "./archetype.js";
+import { createArchetypeState, registerArchetype, resetArchetypeState } from "./archetype.js";
+import type { EntityState } from "./entity.js";
+import { createEntityState, resetEntityState } from "./entity.js";
 import { assert, IrisInvalidState } from "./error.js";
-import type { EventId, EventQueueMeta } from "./event.js";
-import type { FilterMeta } from "./filters.js";
-import { initFilterDispatch } from "./filters.js";
-import { initNameSystem, resetNameSystem } from "./name.js";
-import type { EventType, ObserverMeta } from "./observer.js";
-import { fireObserverEvent } from "./observer.js";
-import type { QueryMeta, QueryModifier, QueryTrieNode } from "./query.js";
-import type { ComponentMeta } from "./registry.js";
-import { COMPONENT_REGISTRY } from "./registry.js";
+import type { EventState } from "./event.js";
+import { createEventState, resetEventState } from "./event.js";
+import type { FilterState } from "./filters.js";
+import { createFilterState, initFilterDispatch, resetFilterState } from "./filters.js";
+import type { NameState } from "./name.js";
+import { createNameState, initNameSystem, resetNameState } from "./name.js";
+import type { ObserverState } from "./observer.js";
+import { createObserverState, fireObserverEvent } from "./observer.js";
+import type { QueryState } from "./query.js";
+import { createQueryState, resetQueryState } from "./query.js";
+import type { ComponentState } from "./registry.js";
+import { createComponentState } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
-import type { FrameDriver, ScheduleLabel, SystemMeta, SystemSetLabel, SystemSetMeta } from "./scheduler.js";
-import { First, Last, PostUpdate, PreUpdate, Update } from "./scheduler.js";
+import type { ExecutionState, ScheduleState, SystemSetState, SystemState } from "./scheduler.js";
+import {
+  createExecutionState,
+  createScheduleState,
+  createSystemSetState,
+  createSystemState,
+  resetExecutionState,
+  resetScheduleState,
+  resetSystemSetState,
+  resetSystemState,
+} from "./scheduler.js";
 
 // ============================================================================
 // World Type
@@ -24,233 +37,62 @@ import { First, Last, PostUpdate, PreUpdate, Update } from "./scheduler.js";
 /**
  * World instance.
  *
- * Contains entity registry, archetype index, filter registry, query registry,
- * observer system, system registry, schedule registry, and execution state.
+ * Composes per-domain state; each domain module owns its state type along with
+ * the create/reset functions for it.
  */
 export type World = {
   /**
    * Entity registry (direct Map-based tracking).
    */
-  entities: {
-    /**
-     * Entity metadata lookup (entity ID -> metadata).
-     */
-    byId: Map<EntityId, EntityMeta>;
-
-    /**
-     * Freelist of dead entity raw IDs for recycling.
-     */
-    freeIds: number[];
-
-    /**
-     * Next raw ID to allocate.
-     */
-    nextId: number;
-
-    /**
-     * Generation lookup for pair target reconstruction (rawId -> generation).
-     */
-    generations: Map<number, number>;
-
-    /**
-     * Name lookup (name -> entity ID).
-     */
-    byName: Map<string, EntityId>;
-
-    /**
-     * Reverse name lookup (entity ID -> name).
-     */
-    names: Map<EntityId, string>;
-  };
-
+  entities: EntityState;
+  /**
+   * Name indices maintained by the name system.
+   */
+  names: NameState;
   /**
    * Component registry
    */
-  components: {
-    /**
-     * Component metadata lookup (component ID -> metadata).
-     */
-    byId: Map<Tag | Component | Relation, ComponentMeta>;
-  };
-
+  components: ComponentState;
   /**
    * Archetype registry and transition graph.
    */
-  archetypes: {
-    /**
-     * Root archetype (empty - no components).
-     */
-    root: Archetype;
-
-    /**
-     * Archetype lookup by hash key (hash -> archetype).
-     */
-    byId: Map<string, Archetype>;
-  };
-
+  archetypes: ArchetypeState;
   /**
    * Filter registry for query caching.
    */
-  filters: {
-    /**
-     * Filter metadata lookup (filter hash -> metadata).
-     */
-    byId: Map<string, FilterMeta>;
-
-    /**
-     * Reverse index: type ID -> filters that include it.
-     */
-    byType: Map<EntityId, FilterMeta[]>;
-  };
-
+  filters: FilterState;
   /**
    * Query registry for metadata caching.
    */
-  queries: {
-    /**
-     * Query metadata lookup (query hash -> metadata).
-     */
-    byId: Map<string, QueryMeta>;
-
-    /**
-     * Parametric query caches keyed by builder function identity.
-     */
-    byBuilder: Map<(...args: EntityId[]) => (EntityId | QueryModifier)[], QueryTrieNode>;
-  };
-
+  queries: QueryState;
   /**
    * Observer system for lifecycle events.
    */
-  observers: {
-    [K in EventType]: ObserverMeta<K>;
-  };
-
+  observers: ObserverState;
   /**
    * System registry.
    */
-  systems: {
-    /**
-     * System metadata by name.
-     */
-    byId: Map<string, SystemMeta>;
-
-    /**
-     * Next registration index for stable ordering.
-     */
-    nextIndex: number;
-  };
-
+  systems: SystemState;
   /**
    * System set registry.
    */
-  systemSets: {
-    /**
-     * System set metadata by label.
-     */
-    byId: Map<SystemSetLabel, SystemSetMeta>;
-  };
-
+  systemSets: SystemSetState;
   /**
    * Schedule registry and pipeline configuration.
    */
-  schedules: {
-    /**
-     * Built schedules (schedule label -> sorted system IDs).
-     */
-    byId: Map<ScheduleLabel, string[]>;
-
-    /**
-     * Pipeline: ordered list of schedule labels for the main loop.
-     */
-    pipeline: ScheduleLabel[];
-
-    /**
-     * Whether pipeline needs rebuilding.
-     */
-    dirty: boolean;
-  };
-
+  schedules: ScheduleState;
   /**
    * Current execution state.
    */
-  execution: {
-    /**
-     * Active schedule label (null if not executing).
-     */
-    scheduleLabel: ScheduleLabel | null;
-
-    /**
-     * Currently executing system ID (null if not executing).
-     */
-    systemId: string | null;
-
-    /**
-     * Frame counter. Starts and resets at 0, then increments once per accepted
-     * manual or animation frame attempt, including empty and failed attempts.
-     */
-    tick: number;
-
-    /**
-     * Whether the main loop is currently active.
-     */
-    running: boolean;
-
-    /**
-     * Frame driver used by the active loop.
-     */
-    frameDriver: FrameDriver | null;
-
-    /**
-     * Pending frame handle for cancellation via the frame driver.
-     */
-    frameHandle: unknown;
-
-    /**
-     * Current frame promise.
-     */
-    framePromise: Promise<void> | null;
-
-    /**
-     * Current shutdown promise.
-     */
-    shutdownPromise: Promise<void> | null;
-
-    /**
-     * Whether startup schedule has been executed.
-     */
-    startupRan: boolean;
-
-    /**
-     * Whether shutdown schedule has been executed.
-     */
-    shutdownRan: boolean;
-  };
-
+  execution: ExecutionState;
   /**
    * Event queue registry.
    */
-  events: {
-    /**
-     * Event queue metadata lookup (event ID -> queue metadata).
-     */
-    byId: Map<EventId, EventQueueMeta>;
-
-    /**
-     * Queues with non-empty buffers, the only ones flushEvents visits.
-     */
-    active: EventQueueMeta[];
-  };
-
+  events: EventState;
   /**
    * Actions registry for cached world-bound action getters.
    */
-  actions: {
-    /**
-     * Actions lookup by initializer function.
-     */
-    byInitializer: Map<ActionInitializer<Actions>, Actions>;
-  };
-
+  actions: ActionState;
   /**
    * Structural observation revision.
    */
@@ -269,85 +111,26 @@ export type World = {
  * ```
  */
 export function createWorld(): World {
-  const root = createArchetype([], new Map());
-
   const world: World = {
-    entities: {
-      byId: new Map(),
-      byName: new Map(),
-      names: new Map(),
-      freeIds: [],
-      nextId: 1,
-      generations: new Map(),
-    },
-    components: {
-      byId: COMPONENT_REGISTRY.byId,
-    },
-    archetypes: {
-      root,
-      byId: new Map(),
-    },
-    filters: {
-      byId: new Map(),
-      byType: new Map(),
-    },
-    queries: {
-      byId: new Map(),
-      byBuilder: new Map(),
-    },
-    systems: {
-      byId: new Map(),
-      nextIndex: 0,
-    },
-    systemSets: {
-      byId: new Map(),
-    },
-    schedules: {
-      byId: new Map(),
-      pipeline: [First, PreUpdate, Update, PostUpdate, Last],
-      dirty: true,
-    },
-    execution: {
-      scheduleLabel: null,
-      systemId: null,
-      tick: 0,
-      running: false,
-      frameDriver: null,
-      frameHandle: null,
-      framePromise: null,
-      startupRan: false,
-      shutdownRan: false,
-      shutdownPromise: null,
-    },
-    events: {
-      byId: new Map(),
-      active: [],
-    },
-    actions: {
-      byInitializer: new Map(),
-    },
-    observers: {
-      archetypeCreated: { callbacks: [] },
-      archetypeDestroyed: { callbacks: [] },
-      filterCreated: { callbacks: [] },
-      entityCreated: { callbacks: [] },
-      entityDestroying: { callbacks: [] },
-      entityDestroyed: { callbacks: [] },
-      componentAdded: { callbacks: [] },
-      componentRemoved: { callbacks: [] },
-      componentChanged: { callbacks: [] },
-      worldReset: { callbacks: [] },
-      scheduleStarted: { callbacks: [] },
-      scheduleFinished: { callbacks: [] },
-      systemStarted: { callbacks: [] },
-      systemFinished: { callbacks: [] },
-      frameFailed: { callbacks: [] },
-    },
+    entities: createEntityState(),
+    names: createNameState(),
+    components: createComponentState(),
+    archetypes: createArchetypeState(),
+    filters: createFilterState(),
+    queries: createQueryState(),
+    observers: createObserverState(),
+    systems: createSystemState(),
+    systemSets: createSystemSetState(),
+    schedules: createScheduleState(),
+    execution: createExecutionState(),
+    events: createEventState(),
+    actions: createActionState(),
     revision: 1,
   };
 
+  // Filter dispatch must observe before the root archetype registers
   initFilterDispatch(world);
-  registerArchetype(world, root);
+  registerArchetype(world, world.archetypes.root);
 
   initNameSystem(world);
   initRemovalSystem(world);
@@ -357,16 +140,6 @@ export function createWorld(): World {
 
 /**
  * Resets world to initial state, clearing all entities and caches.
- *
- * Does NOT fire teardown events (entityDestroying, entityDestroyed, componentRemoved,
- * archetypeDestroyed): observers should treat "worldReset" as "discard every cached
- * entity and archetype".
- * For per-entity cleanup, run a "shutdown" schedule before calling resetWorld().
- * Factory systems and attached conditions initialize again before the next
- * `runOnce()` or `stop()`.
- * Queries cached before the reset are invalidated: they match nothing afterwards
- * and must be re-created with `cacheQuery()`.
- * Fires the "worldReset" observer event after reset completes.
  *
  * @param world - World instance to reset
  * @throws {IrisInvalidState} If scheduler execution is active
@@ -387,70 +160,19 @@ export function resetWorld(world: World): void {
 
   world.revision = 1;
 
-  // 1. Clear filters and reverse index
-  for (const filter of world.filters.byId.values()) {
-    filter.archetypes.length = 0;
-  }
+  resetFilterState(world);
+  resetQueryState(world);
+  resetArchetypeState(world);
+  resetEntityState(world);
+  resetNameState(world);
+  resetExecutionState(world);
+  resetSystemState(world);
+  resetSystemSetState(world);
+  resetScheduleState(world);
+  resetEventState(world);
+  resetActionState(world);
 
-  world.filters.byId.clear();
-  world.filters.byType.clear();
+  registerArchetype(world, world.archetypes.root);
 
-  // 2. Clear queries
-  world.queries.byId.clear();
-  world.queries.byBuilder.clear();
-
-  // 3. Clear archetypes (break circular refs via edges)
-  for (const archetype of world.archetypes.byId.values()) {
-    archetype.edges.clear();
-  }
-  world.archetypes.byId.clear();
-
-  // 4. Reinitialize entity registry
-  world.entities.byId.clear();
-  world.entities.freeIds.length = 0;
-  world.entities.nextId = 1;
-  world.entities.generations.clear();
-
-  // 5. Reset execution state
-  world.execution.tick = 0;
-  world.execution.scheduleLabel = null;
-  world.execution.systemId = null;
-  world.execution.running = false;
-  world.execution.frameDriver = null;
-  world.execution.frameHandle = null;
-  world.execution.framePromise = null;
-  world.execution.shutdownPromise = null;
-  world.execution.startupRan = false;
-  world.execution.shutdownRan = false;
-
-  // 6. Reset schedule state (preserve pipeline configuration)
-  for (const meta of world.systems.byId.values()) {
-    if (meta.factory !== null) {
-      meta.runner = null;
-    }
-    if (meta.conditionFactory !== null) {
-      meta.conditionRunner = null;
-    }
-  }
-  for (const meta of world.systemSets.byId.values()) {
-    if (meta.conditionFactory !== null) {
-      meta.conditionRunner = null;
-    }
-  }
-  world.schedules.byId.clear();
-  world.schedules.dirty = true;
-
-  // 7. Clear caches
-  world.events.byId.clear();
-  world.events.active.length = 0;
-  world.actions.byInitializer.clear();
-
-  // 8. Recreate root archetype and internal resources
-  const newRoot = createArchetype([], new Map());
-  world.archetypes.root = newRoot;
-  registerArchetype(world, newRoot);
-  resetNameSystem(world);
-
-  // 9. Fire worldReset event
   fireObserverEvent(world, "worldReset", world);
 }

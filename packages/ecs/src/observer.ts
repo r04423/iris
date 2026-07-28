@@ -52,6 +52,41 @@ export type ObserverMeta<T extends EventType> = {
 };
 
 // ============================================================================
+// Observer State
+// ============================================================================
+
+/**
+ * Observer system for lifecycle events.
+ */
+export type ObserverState = {
+  [K in EventType]: ObserverMeta<K>;
+};
+
+/**
+ * Creates an observer registry with empty callback lists for every event type.
+ * @internal
+ */
+export function createObserverState(): ObserverState {
+  return {
+    archetypeCreated: { callbacks: [] },
+    archetypeDestroyed: { callbacks: [] },
+    filterCreated: { callbacks: [] },
+    entityCreated: { callbacks: [] },
+    entityDestroying: { callbacks: [] },
+    entityDestroyed: { callbacks: [] },
+    componentAdded: { callbacks: [] },
+    componentRemoved: { callbacks: [] },
+    componentChanged: { callbacks: [] },
+    worldReset: { callbacks: [] },
+    scheduleStarted: { callbacks: [] },
+    scheduleFinished: { callbacks: [] },
+    systemStarted: { callbacks: [] },
+    systemFinished: { callbacks: [] },
+    frameFailed: { callbacks: [] },
+  };
+}
+
+// ============================================================================
 // Observer API
 // ============================================================================
 

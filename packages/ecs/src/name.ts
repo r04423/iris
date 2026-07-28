@@ -25,18 +25,47 @@ import type { World } from "./world.js";
 export const Name = defineComponent("Name", { value: Type.string() });
 
 // ============================================================================
-// Initialization
+// Name State
 // ============================================================================
 
 /**
- * Clears the world's name indices.
- * @param world - World instance to initialize
+ * Name indices kept in sync with entity lifecycle by the name system.
+ */
+export type NameState = {
+  /**
+   * Name lookup (name -> entity ID).
+   */
+  byName: Map<string, EntityId>;
+
+  /**
+   * Reverse name lookup (entity ID -> name).
+   */
+  byEntity: Map<EntityId, string>;
+};
+
+/**
+ * Creates empty name indices.
  * @internal
  */
-export function resetNameSystem(world: World): void {
-  world.entities.byName.clear();
-  world.entities.names.clear();
+export function createNameState(): NameState {
+  return {
+    byName: new Map(),
+    byEntity: new Map(),
+  };
 }
+
+/**
+ * Clears the world's name indices.
+ * @internal
+ */
+export function resetNameState(world: World): void {
+  world.names.byName.clear();
+  world.names.byEntity.clear();
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
 
 /**
  * Initializes the name system for a world by registering the observer callbacks
@@ -51,11 +80,11 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    const { byName, names } = world.entities;
-    const name = names.get(entityId)!;
+    const { byName, byEntity } = world.names;
+    const name = byEntity.get(entityId)!;
 
     byName.delete(name);
-    names.delete(entityId);
+    byEntity.delete(entityId);
   });
 
   // Sync indices when Name component is added or its value changes.
@@ -65,7 +94,7 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    const { byName: nameToEntity, names: entityToName } = world.entities;
+    const { byName: nameToEntity, byEntity: entityToName } = world.names;
     const previous = entityToName.get(entityId);
     const current = getComponentValue(world, entityId, Name, "value");
 
@@ -87,15 +116,15 @@ export function initNameSystem(world: World): void {
 
   // Clean up indices when a named entity is destroyed
   registerObserverCallback(world, "entityDestroyed", (entityId) => {
-    const { byName, names } = world.entities;
-    const name = names.get(entityId);
+    const { byName, byEntity } = world.names;
+    const name = byEntity.get(entityId);
 
     if (name === undefined) {
       return;
     }
 
     byName.delete(name);
-    names.delete(entityId);
+    byEntity.delete(entityId);
   });
 }
 
@@ -180,7 +209,7 @@ export function lookupByName<C extends EntityId[]>(
   name: string,
   components?: C
 ): EntityWith<C[number]> | undefined {
-  const entityId = world.entities.byName.get(name);
+  const entityId = world.names.byName.get(name);
 
   if (!entityId) {
     return;

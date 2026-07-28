@@ -59,6 +59,59 @@ export type EntityMeta = {
   destroying?: boolean;
 };
 
+// ============================================================================
+// Entity State
+// ============================================================================
+
+/**
+ * Entity registry (direct Map-based tracking).
+ */
+export type EntityState = {
+  /**
+   * Entity metadata lookup (entity ID -> metadata).
+   */
+  byId: Map<EntityId, EntityMeta>;
+
+  /**
+   * Freelist of dead entity raw IDs for recycling.
+   */
+  freeIds: number[];
+
+  /**
+   * Next raw ID to allocate.
+   */
+  nextId: number;
+
+  /**
+   * Generation lookup for pair target reconstruction (rawId -> generation).
+   */
+  generations: Map<number, number>;
+};
+
+/**
+ * Creates an empty entity registry.
+ * @internal
+ */
+export function createEntityState(): EntityState {
+  return {
+    byId: new Map(),
+    freeIds: [],
+    nextId: 1,
+    generations: new Map(),
+  };
+}
+
+/**
+ * Clears the world's entity registry back to its initial state.
+ * @internal
+ */
+export function resetEntityState(world: World): void {
+  world.entities.byId.clear();
+  world.entities.freeIds.length = 0;
+  world.entities.nextId = 1;
+  world.entities.generations.clear();
+}
+
 /**
  * Allocates entity ID, preferring recycled IDs from freelist.
  * Recycled IDs retain their generation for stale reference detection.

@@ -284,6 +284,51 @@ export function createAndRegisterArchetype(
 }
 
 // ============================================================================
+// Archetype State
+// ============================================================================
+
+/**
+ * Archetype registry and transition graph.
+ */
+export type ArchetypeState = {
+  /**
+   * Root archetype (empty - no components).
+   */
+  root: Archetype;
+
+  /**
+   * Archetype lookup by hash key (hash -> archetype).
+   */
+  byId: Map<string, Archetype>;
+};
+
+/**
+ * Creates an empty archetype registry with an unregistered root archetype.
+ * The caller registers the root once observers are in place.
+ * @internal
+ */
+export function createArchetypeState(): ArchetypeState {
+  return {
+    root: createArchetype([], new Map()),
+    byId: new Map(),
+  };
+}
+
+/**
+ * Clears the world's archetype registry and replaces the root with a fresh,
+ * unregistered archetype. Edges are cleared to break circular references.
+ * @internal
+ */
+export function resetArchetypeState(world: World): void {
+  for (const archetype of world.archetypes.byId.values()) {
+    archetype.edges.clear();
+  }
+
+  world.archetypes.byId.clear();
+  world.archetypes.root = createArchetype([], new Map());
+}
+
+// ============================================================================
 // Capacity Management
 // ============================================================================
 

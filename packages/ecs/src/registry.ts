@@ -102,6 +102,32 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
 };
 
 // ============================================================================
+// Component State
+// ============================================================================
+
+/**
+ * Component registry view exposed on a world.
+ */
+export type ComponentState = {
+  /**
+   * Component metadata lookup (component ID -> metadata).
+   */
+  byId: Map<Tag | Component | Relation, ComponentMeta>;
+};
+
+/**
+ * Creates the world's component registry view.
+ * Aliases the global registry: definitions are world-independent and survive
+ * world resets, so there is no reset counterpart.
+ * @internal
+ */
+export function createComponentState(): ComponentState {
+  return {
+    byId: COMPONENT_REGISTRY.byId,
+  };
+}
+
+// ============================================================================
 // Definition Name Validation
 // ============================================================================
 

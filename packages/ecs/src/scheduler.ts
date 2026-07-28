@@ -38,6 +38,218 @@ declare const SCHEDULE_LABEL_BRAND: unique symbol;
 export type ScheduleLabel = string & { [SCHEDULE_LABEL_BRAND]: true };
 
 // ============================================================================
+// Scheduler State
+// ============================================================================
+
+/**
+ * System registry.
+ */
+export type SystemState = {
+  /**
+   * System metadata by name.
+   */
+  byId: Map<string, SystemMeta>;
+
+  /**
+   * Next registration index for stable ordering.
+   */
+  nextIndex: number;
+};
+
+/**
+ * System set registry.
+ */
+export type SystemSetState = {
+  /**
+   * System set metadata by label.
+   */
+  byId: Map<SystemSetLabel, SystemSetMeta>;
+};
+
+/**
+ * Schedule registry and pipeline configuration.
+ */
+export type ScheduleState = {
+  /**
+   * Built schedules (schedule label -> sorted system IDs).
+   */
+  byId: Map<ScheduleLabel, string[]>;
+
+  /**
+   * Pipeline: ordered list of schedule labels for the main loop.
+   */
+  pipeline: ScheduleLabel[];
+
+  /**
+   * Whether pipeline needs rebuilding.
+   */
+  dirty: boolean;
+};
+
+/**
+ * Current execution state.
+ */
+export type ExecutionState = {
+  /**
+   * Active schedule label (null if not executing).
+   */
+  scheduleLabel: ScheduleLabel | null;
+
+  /**
+   * Currently executing system ID (null if not executing).
+   */
+  systemId: string | null;
+
+  /**
+   * Frame counter. Starts and resets at 0, then increments once per accepted
+   * manual or animation frame attempt, including empty and failed attempts.
+   */
+  tick: number;
+
+  /**
+   * Whether the main loop is currently active.
+   */
+  running: boolean;
+
+  /**
+   * Frame driver used by the active loop.
+   */
+  frameDriver: FrameDriver | null;
+
+  /**
+   * Pending frame handle for cancellation via the frame driver.
+   */
+  frameHandle: unknown;
+
+  /**
+   * Current frame promise.
+   */
+  framePromise: Promise<void> | null;
+
+  /**
+   * Current shutdown promise.
+   */
+  shutdownPromise: Promise<void> | null;
+
+  /**
+   * Whether startup schedule has been executed.
+   */
+  startupRan: boolean;
+
+  /**
+   * Whether shutdown schedule has been executed.
+   */
+  shutdownRan: boolean;
+};
+
+/**
+ * Creates an empty system registry.
+ * @internal
+ */
+export function createSystemState(): SystemState {
+  return {
+    byId: new Map(),
+    nextIndex: 0,
+  };
+}
+
+/**
+ * Creates an empty system set registry.
+ * @internal
+ */
+export function createSystemSetState(): SystemSetState {
+  return {
+    byId: new Map(),
+  };
+}
+
+/**
+ * Creates a schedule registry with the default pipeline.
+ * @internal
+ */
+export function createScheduleState(): ScheduleState {
+  return {
+    byId: new Map(),
+    pipeline: [First, PreUpdate, Update, PostUpdate, Last],
+    dirty: true,
+  };
+}
+
+/**
+ * Creates an idle execution state.
+ * @internal
+ */
+export function createExecutionState(): ExecutionState {
+  return {
+    scheduleLabel: null,
+    systemId: null,
+    tick: 0,
+    running: false,
+    frameDriver: null,
+    frameHandle: null,
+    framePromise: null,
+    startupRan: false,
+    shutdownRan: false,
+    shutdownPromise: null,
+  };
+}
+
+/**
+ * Discards initialized factory runners so they initialize again before the
+ * next execution. Registered systems survive world resets.
+ * @internal
+ */
+export function resetSystemState(world: World): void {
+  for (const meta of world.systems.byId.values()) {
+    if (meta.factory !== null) {
+      meta.runner = null;
+    }
+    if (meta.conditionFactory !== null) {
+      meta.conditionRunner = null;
+    }
+  }
+}
+
+/**
+ * Discards initialized set condition runners. Registered sets survive world resets.
+ * @internal
+ */
+export function resetSystemSetState(world: World): void {
+  for (const meta of world.systemSets.byId.values()) {
+    if (meta.conditionFactory !== null) {
+      meta.conditionRunner = null;
+    }
+  }
+}
+
+/**
+ * Discards built schedules for rebuilding. Pipeline configuration survives
+ * world resets.
+ * @internal
+ */
+export function resetScheduleState(world: World): void {
+  world.schedules.byId.clear();
+  world.schedules.dirty = true;
+}
+
+/**
+ * Returns execution state to idle with a zeroed frame counter.
+ * @internal
+ */
+export function resetExecutionState(world: World): void {
+  world.execution.tick = 0;
+  world.execution.scheduleLabel = null;
+  world.execution.systemId = null;
+  world.execution.running = false;
+  world.execution.frameDriver = null;
+  world.execution.frameHandle = null;
+  world.execution.framePromise = null;
+  world.execution.shutdownPromise = null;
+  world.execution.startupRan = false;
+  world.execution.shutdownRan = false;
+}
+
+// ============================================================================
 // Schedule Definition
 // ============================================================================
 

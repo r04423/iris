@@ -41,6 +41,49 @@ export type FilterMeta = {
 };
 
 // ============================================================================
+// Filter State
+// ============================================================================
+
+/**
+ * Filter registry for query caching.
+ */
+export type FilterState = {
+  /**
+   * Filter metadata lookup (filter hash -> metadata).
+   */
+  byId: Map<string, FilterMeta>;
+
+  /**
+   * Reverse index: type ID -> filters that include it.
+   */
+  byType: Map<EntityId, FilterMeta[]>;
+};
+
+/**
+ * Creates an empty filter registry.
+ * @internal
+ */
+export function createFilterState(): FilterState {
+  return {
+    byId: new Map(),
+    byType: new Map(),
+  };
+}
+
+/**
+ * Clears the world's filter registry and cached archetype matches.
+ * @internal
+ */
+export function resetFilterState(world: World): void {
+  for (const filter of world.filters.byId.values()) {
+    filter.archetypes.length = 0;
+  }
+
+  world.filters.byId.clear();
+  world.filters.byType.clear();
+}
+
+// ============================================================================
 // Filter Hashing
 // ============================================================================
 
