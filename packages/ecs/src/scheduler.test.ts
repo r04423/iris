@@ -7,11 +7,12 @@ import { registerObserverCallback } from "./observer.js";
 import { ensureQuery, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue } from "./resource.js";
-import type { ScheduleLabel } from "./scheduler.js";
+import type { FrameDriver, ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
   addSystemSet,
   addSystems,
+  createTimeoutDriver,
   defineCondition,
   defineSchedule,
   defineSystem,
@@ -1054,6 +1055,95 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.strictEqual(ticks, 1);
+    });
+  });
+
+  describe("Frame Drivers", () => {
+    function mockFrameDriver(): {
+      driver: FrameDriver;
+      hasFrame: () => boolean;
+      runFrame: () => Promise<void>;
+      cancelled: unknown[];
+    } {
+      let callback: (() => Promise<void>) | null = null;
+      let nextHandle = 0;
+      const cancelled: unknown[] = [];
+
+      return {
+        driver: {
+          request: (next) => {
+            callback = next as () => Promise<void>;
+            return ++nextHandle;
+          },
+          cancel: (handle) => {
+            cancelled.push(handle);
+            callback = null;
+          },
+        },
+        hasFrame: () => callback !== null,
+        runFrame: () => {
+          const frame = callback!;
+          callback = null;
+          return frame();
+        },
+        cancelled,
+      };
+    }
+
+    it("drives the loop through a custom driver", async () => {
+      const frames = mockFrameDriver();
+      const world = createWorld();
+      let runs = 0;
+      addSystem(world, function updateSys() {
+        runs++;
+      });
+
+      run(world, frames.driver);
+      assert.strictEqual(frames.hasFrame(), true);
+      await frames.runFrame();
+
+      assert.strictEqual(runs, 1);
+      assert.strictEqual(frames.hasFrame(), true);
+      await suspend(world);
+    });
+
+    it("suspend cancels the pending frame through the driver", async () => {
+      const frames = mockFrameDriver();
+      const world = createWorld();
+      addSystem(world, function updateSys() {});
+
+      run(world, frames.driver);
+      await suspend(world);
+
+      assert.deepStrictEqual(frames.cancelled, [1]);
+      assert.strictEqual(frames.hasFrame(), false);
+    });
+
+    it("resuming accepts a different driver", async () => {
+      const first = mockFrameDriver();
+      const second = mockFrameDriver();
+      const world = createWorld();
+      addSystem(world, function updateSys() {});
+
+      run(world, first.driver);
+      await suspend(world);
+      run(world, second.driver);
+
+      assert.strictEqual(first.hasFrame(), false);
+      assert.strictEqual(second.hasFrame(), true);
+      await suspend(world);
+    });
+
+    it("createTimeoutDriver schedules frames with setTimeout", async () => {
+      const world = createWorld();
+      const { promise, resolve } = Promise.withResolvers<void>();
+      addSystem(world, function updateSys() {
+        resolve();
+      });
+
+      run(world, createTimeoutDriver(1));
+      await promise;
+      await suspend(world);
     });
   });
 

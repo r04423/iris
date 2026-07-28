@@ -104,6 +104,8 @@ export {
   addSystem,
   addSystemSet,
   addSystems,
+  animationFrameDriver,
+  createTimeoutDriver,
   defineCondition,
   defineSchedule,
   defineSystem,
@@ -156,6 +158,7 @@ export type {
 export type {
   ConditionFactory,
   ConditionTick,
+  FrameDriver,
   ScheduleLabel,
   SystemFactory,
   SystemMeta,

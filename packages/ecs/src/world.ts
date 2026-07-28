@@ -14,7 +14,7 @@ import type { QueryMeta, QueryModifier, QueryTrieNode } from "./query.js";
 import type { ComponentMeta } from "./registry.js";
 import { COMPONENT_REGISTRY } from "./registry.js";
 import { initRemovalSystem } from "./removal.js";
-import type { ScheduleLabel, SystemMeta, SystemSetLabel, SystemSetMeta } from "./scheduler.js";
+import type { FrameDriver, ScheduleLabel, SystemMeta, SystemSetLabel, SystemSetMeta } from "./scheduler.js";
 import { First, Last, PostUpdate, PreUpdate, Update } from "./scheduler.js";
 
 // ============================================================================
@@ -191,14 +191,19 @@ export type World = {
     tick: number;
 
     /**
-     * Whether the RAF loop is currently active.
+     * Whether the main loop is currently active.
      */
     running: boolean;
 
     /**
-     * requestAnimationFrame handle for cancellation.
+     * Frame driver used by the active loop.
      */
-    rafHandle: number | null;
+    frameDriver: FrameDriver | null;
+
+    /**
+     * Pending frame handle for cancellation via the frame driver.
+     */
+    frameHandle: unknown;
 
     /**
      * Current frame promise.
@@ -307,11 +312,12 @@ export function createWorld(): World {
       systemId: null,
       tick: 0,
       running: false,
-      rafHandle: null,
+      frameDriver: null,
+      frameHandle: null,
       framePromise: null,
-      shutdownPromise: null,
       startupRan: false,
       shutdownRan: false,
+      shutdownPromise: null,
     },
     events: {
       byId: new Map(),
@@ -410,7 +416,8 @@ export function resetWorld(world: World): void {
   world.execution.scheduleLabel = null;
   world.execution.systemId = null;
   world.execution.running = false;
-  world.execution.rafHandle = null;
+  world.execution.frameDriver = null;
+  world.execution.frameHandle = null;
   world.execution.framePromise = null;
   world.execution.shutdownPromise = null;
   world.execution.startupRan = false;

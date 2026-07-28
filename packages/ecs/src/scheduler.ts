@@ -958,6 +958,70 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
 }
 
 // ============================================================================
+// Frame Drivers
+// ============================================================================
+
+/**
+ * Pluggable frame source for the main loop.
+ *
+ * The loop requests one frame at a time: after each frame completes, the
+ * driver's `request` is called again with the next frame callback. `cancel`
+ * receives the handle returned by `request` when the loop is suspended.
+ *
+ * @example
+ * ```typescript
+ * // Drive frames from a Web Worker message channel
+ * const workerDriver: FrameDriver = {
+ *   request: (cb) => { worker.onmessage = cb; return cb; },
+ *   cancel: () => { worker.onmessage = null; },
+ * };
+ * run(world, workerDriver);
+ * ```
+ */
+export type FrameDriver = {
+  /** Schedules a single frame callback and returns a cancellation handle. */
+  request: (callback: () => void) => unknown;
+  /** Cancels a pending frame using the handle returned by `request`. */
+  cancel: (handle: unknown) => void;
+};
+
+/**
+ * Frame driver backed by requestAnimationFrame.
+ *
+ * Browser-only: throttled or paused entirely in background tabs.
+ *
+ * @example
+ * ```typescript
+ * run(world, animationFrameDriver);
+ * ```
+ */
+export const animationFrameDriver: FrameDriver = {
+  request: (callback) => requestAnimationFrame(callback),
+  cancel: (handle) => cancelAnimationFrame(handle as number),
+};
+
+/**
+ * Create a frame driver backed by setTimeout.
+ *
+ * Works in any environment, including servers where requestAnimationFrame
+ * does not exist.
+ *
+ * @param intervalMs - Delay between frames in milliseconds (default 16)
+ * @returns Frame driver for `run()`
+ *
+ * @example
+ * ```typescript
+ * run(world, createTimeoutDriver(50));
+ * ```
+ */
+export function createTimeoutDriver(intervalMs = 16): FrameDriver {
+  return {
+    request: (callback) => setTimeout(callback, intervalMs),
+    cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  };
+}
+
+// ============================================================================
 // Public Execution API
 // ============================================================================
 
@@ -1022,8 +1086,8 @@ function startFrame(world: World): Promise<void> {
 
 /**
  * Execute one frame. Runs startup on first call, then all pipeline schedules,
- * then flushes events. Rejects if another frame, the animation frame loop,
- * or Shutdown is active.
+ * then flushes events. Rejects if another frame, the main loop, or Shutdown
+ * is active.
  *
  * @param world - World instance
  * @returns Promise that resolves when the frame completes
@@ -1034,13 +1098,13 @@ function startFrame(world: World): Promise<void> {
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
-  assert(!world.execution.running, IrisInvalidState, { message: "The animation frame loop is running" });
+  assert(!world.execution.running, IrisInvalidState, { message: "The main loop is running" });
 
   await startFrame(world);
 }
 
 /**
- * Start or resume the main loop using requestAnimationFrame.
+ * Start or resume the main loop using the given frame driver.
  *
  * Startup schedule runs automatically on first frame. Each frame executes
  * all pipeline schedules in order. Call `suspend()` to halt the loop without
@@ -1048,21 +1112,24 @@ export async function runOnce(world: World): Promise<void> {
  * shutdown is in progress.
  *
  * @param world - World instance
+ * @param driver - Frame source (defaults to `animationFrameDriver`)
  *
  * @example
  * ```typescript
  * addSystem(world, physicsSystem);
  * addSystem(world, renderSystem, { schedule: PostUpdate });
- * run(world);
+ * run(world); // requestAnimationFrame
+ * run(world, createTimeoutDriver(50)); // setTimeout, e.g. on a server
  * // ... later
  * await stop(world);
  * ```
  */
-export function run(world: World): void {
+export function run(world: World, driver: FrameDriver = animationFrameDriver): void {
   if (world.execution.running || world.execution.shutdownPromise !== null) {
     return;
   }
 
+  world.execution.frameDriver = driver;
   world.execution.running = true;
 
   if (world.execution.framePromise === null) {
@@ -1071,7 +1138,7 @@ export function run(world: World): void {
 }
 
 /**
- * Suspend the requestAnimationFrame loop without running Shutdown.
+ * Suspend the main loop without running Shutdown.
  * An active frame finishes before the returned promise resolves. Call `run()`
  * to resume without running Startup again.
  *
@@ -1087,20 +1154,20 @@ export function run(world: World): void {
 export function suspend(world: World): Promise<void> {
   world.execution.running = false;
 
-  if (world.execution.rafHandle !== null) {
-    cancelAnimationFrame(world.execution.rafHandle);
-    world.execution.rafHandle = null;
+  if (world.execution.frameHandle !== null) {
+    world.execution.frameDriver!.cancel(world.execution.frameHandle);
+    world.execution.frameHandle = null;
   }
 
   return world.execution.framePromise ?? Promise.resolve();
 }
 
 /**
- * Schedules the next animation frame for the game loop.
+ * Schedules the next frame of the main loop via the active frame driver.
  */
 function scheduleFrame(world: World): void {
-  world.execution.rafHandle = requestAnimationFrame(async () => {
-    world.execution.rafHandle = null;
+  world.execution.frameHandle = world.execution.frameDriver!.request(async () => {
+    world.execution.frameHandle = null;
 
     if (!world.execution.running) {
       return;
