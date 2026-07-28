@@ -10,16 +10,15 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Column storage type.
- *
- * Union of typed arrays (numeric values) and regular arrays (primitives/reference values).
+ * Backing store for one field across all rows: a TypedArray for numeric
+ * fields, a plain array for reference values.
+ * @internal
  */
 export type Column = Int8Array | Int16Array | Int32Array | Uint32Array | Float32Array | Float64Array | unknown[];
 
 /**
- * Field columns map.
- *
- * Maps field names to their storage columns for a single component.
+ * Field name -> storage column, for a single component.
+ * @internal
  */
 export type FieldColumns = {
   [fieldName: string]: Column;
@@ -27,23 +26,16 @@ export type FieldColumns = {
 
 /**
  * Typed array storage with narrowed numeric indexed access.
- *
- * @internal
  */
 type NarrowedTypedArray<T extends number> = TypedArrayInstance & { [index: number]: T };
 
 /**
  * Maps an inferred scalar value type to its column storage type.
- *
- * @internal
  */
 type FieldColumnOf<T> = [T] extends [number] ? NarrowedTypedArray<T & number> : T[];
 
 /**
- * Map a schema record to its column types.
- *
- * Each field maps to the runtime array type used for storage.
- *
+ * Maps a schema record to the column type backing each field.
  * @internal
  */
 export type FieldColumnsOf<S extends SchemaRecord> = {
@@ -57,12 +49,13 @@ export type FieldColumnsOf<S extends SchemaRecord> = {
 };
 
 /**
- * Component revision stamp storage for change detection.
- *
- * Parallel arrays to entity rows tracking when components were added/changed.
+ * Per-component change-detection stamps, parallel to the archetype's rows.
+ * @internal
  */
 export type ComponentTicks = {
+  /** World revision at which each row's entity gained the component. */
   added: Float64Array;
+  /** World revision of the last write to each row (also stamped on add). */
   changed: Float64Array;
 };
 
@@ -71,19 +64,27 @@ export type ComponentTicks = {
 // ============================================================================
 
 /**
- * Archetype structure.
- *
- * Groups entities with identical component sets for cache-efficient iteration.
+ * Columnar storage for all entities sharing one exact component set.
+ * @internal
  */
 export type Archetype = {
+  /** Component type IDs in ascending order. */
   types: EntityId[];
+  /** Set view of `types` for O(1) membership checks. */
   typesSet: Set<EntityId>;
+  /** Colon-joined `types`; the key in the world's archetype registry. */
   hash: string;
+  /** Dense entity list; the index is the entity's row in every column. */
   entities: EntityId[];
+  /** Data columns per data-bearing type; empty until the first entity (lazy allocation). */
   columns: Map<EntityId, FieldColumns>;
+  /** Field schemas per data-bearing type, used to allocate columns. */
   schemas: Map<EntityId, SchemaRecord>;
+  /** Transition graph: type ID -> the neighbor differing by exactly that type, linked both ways. */
   edges: Map<EntityId, Archetype>;
+  /** Allocated rows in every column; 0 until the first entity. */
   capacity: number;
+  /** Change-detection stamps per type, parallel to `entities`. */
   ticks: Map<EntityId, ComponentTicks>;
 };
 
@@ -195,15 +196,8 @@ function clearColumn(column: Column, index: number, capacity: number): void {
 // ============================================================================
 
 /**
- * Hashes a sorted array of type IDs into a unique archetype key.
- *
- * @param types - Sorted type IDs
- * @returns Colon-delimited hash key (e.g., "1:5:12")
- *
- * @example
- * ```ts
- * const hash = hashArchetypeTypes([1, 5, 12]); // "1:5:12"
- * ```
+ * Joins sorted type IDs into the archetype registry key (e.g. "1:5:12").
+ * @internal
  */
 export function hashArchetypeTypes(types: EntityId[]): string {
   return types.join(":");
@@ -214,18 +208,10 @@ export function hashArchetypeTypes(types: EntityId[]): string {
 // ============================================================================
 
 /**
- * Creates an archetype from sorted type IDs and their schemas.
- * Columns are allocated lazily on first entity insertion to avoid
- * memory allocation for transitional archetypes (graph traversal nodes).
- *
- * @param sortedTypes - Type IDs in ascending order
- * @param schemas - Map of type ID to field schemas
- * @returns New archetype with empty entity storage
- *
- * @example
- * ```ts
- * const archetype = createArchetype([positionId, velocityId], schemas);
- * ```
+ * Creates an archetype from sorted type IDs and their schemas. Columns
+ * allocate lazily on first entity insertion so transitional graph nodes
+ * cost no memory.
+ * @internal
  */
 export function createArchetype(sortedTypes: EntityId[], schemas: Map<EntityId, SchemaRecord>): Archetype {
   return {
@@ -242,17 +228,9 @@ export function createArchetype(sortedTypes: EntityId[], schemas: Map<EntityId, 
 }
 
 /**
- * Registers an archetype in the world's lookup table, updates entity records,
- * and fires the archetypeCreated observer event.
- *
- * @param world - World to register archetype in
- * @param archetype - Archetype to register
- *
- * @example
- * ```ts
- * const archetype = createArchetype(types, schemas);
- * registerArchetype(world, archetype);
- * ```
+ * Adds an archetype to the world registry and each type's entity records,
+ * then fires `archetypeCreated` so filter caches pick it up.
+ * @internal
  */
 export function registerArchetype(world: World, archetype: Archetype): void {
   world.archetypes.byId.set(archetype.hash, archetype);
@@ -261,17 +239,8 @@ export function registerArchetype(world: World, archetype: Archetype): void {
 }
 
 /**
- * Creates an archetype and registers it in the world.
- *
- * @param world - World to register archetype in
- * @param types - Sorted type IDs for the archetype
- * @param schemas - Map of type ID to field schemas
- * @returns Newly created and registered archetype
- *
- * @example
- * ```ts
- * const archetype = createAndRegisterArchetype(world, [positionId], schemas);
- * ```
+ * Creates an archetype and registers it in the world in one step.
+ * @internal
  */
 export function createAndRegisterArchetype(
   world: World,
@@ -289,16 +258,12 @@ export function createAndRegisterArchetype(
 
 /**
  * Archetype registry and transition graph.
+ * @internal
  */
 export type ArchetypeState = {
-  /**
-   * Root archetype (empty - no components).
-   */
+  /** Root archetype (empty - no components). */
   root: Archetype;
-
-  /**
-   * Archetype lookup by hash key (hash -> archetype).
-   */
+  /** Archetype lookup by hash key (hash -> archetype). */
   byId: Map<string, Archetype>;
 };
 
@@ -339,6 +304,7 @@ export function resetArchetypeState(world: World): void {
 function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number): void {
   if (archetype.capacity >= requiredCapacity) return;
 
+  // First entity: allocate all data and tick columns at the initial capacity
   if (archetype.capacity === 0) {
     const initialCapacity = Math.max(INITIAL_CAPACITY, requiredCapacity);
 
@@ -363,6 +329,7 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
     return;
   }
 
+  // Growth: quadruple until the requirement fits, then resize every column
   let newCapacity = archetype.capacity;
   while (newCapacity < requiredCapacity) {
     newCapacity *= 4;
@@ -387,17 +354,9 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
 // ============================================================================
 
 /**
- * Adds an entity to an archetype, initializing revision tracking for change detection.
- *
- * @param archetype - Target archetype
- * @param entityId - Entity to add
- * @param revision - Current world revision for change detection (defaults to 0)
- * @returns Row index where entity was inserted
- *
- * @example
- * ```ts
- * const row = addEntityToArchetype(archetype, entityId, world.revision);
- * ```
+ * Appends an entity to an archetype and returns its row, stamping every
+ * type's added/changed ticks with `revision`.
+ * @internal
  */
 export function addEntityToArchetype(archetype: Archetype, entityId: EntityId, revision = 0): number {
   const row = archetype.entities.length;
@@ -413,23 +372,16 @@ export function addEntityToArchetype(archetype: Archetype, entityId: EntityId, r
 }
 
 /**
- * Removes an entity from an archetype using swap-and-pop for O(1) removal.
- * The last entity in the archetype is moved into the vacated row.
- *
- * @param archetype - Archetype to remove entity from
- * @param row - Row index of entity to remove
- * @returns Entity ID that was swapped into the row, or undefined if row was last
- *
- * @example
- * ```ts
- * const swapped = removeEntityFromArchetypeByRow(archetype, row);
- * if (swapped) updateEntityRecord(world, swapped, archetype, row);
- * ```
+ * Removes a row via swap-and-pop, returning the entity moved into it (or
+ * undefined if the row was last). The caller must update the swapped
+ * entity's row metadata.
+ * @internal
  */
 export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number): EntityId | undefined {
   const lastIdx = archetype.entities.length - 1;
   let swappedEntityId: EntityId | undefined;
 
+  // Swap: copy the last row's entity, column data, and tick stamps into the vacated slot
   if (row !== lastIdx) {
     swappedEntityId = archetype.entities[lastIdx]!;
     archetype.entities[row] = swappedEntityId;
@@ -449,6 +401,7 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
 
   archetype.entities.pop();
 
+  // Clear the vacated last slot so reference columns release their objects
   for (const fieldColumns of archetype.columns.values()) {
     for (const fieldName in fieldColumns) {
       clearColumn(fieldColumns[fieldName]!, lastIdx, archetype.capacity);
@@ -464,21 +417,10 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
 }
 
 /**
- * Transfers an entity between archetypes, copying shared data and revision stamps.
- * Used when adding/removing components causes an entity to move archetypes.
- *
- * @param fromArchetype - Source archetype
- * @param fromRow - Row index in source archetype
- * @param toArchetype - Target archetype
- * @param revision - Current world revision for new component stamps (defaults to 0)
- * @returns New row index and swapped entity ID (if any was moved during removal)
- *
- * @example
- * ```ts
- * const { toRow, swappedEntityId } = transferEntityToArchetypeByRow(
- *   fromArchetype, fromRow, toArchetype, world.revision
- * );
- * ```
+ * Moves an entity between archetypes: shared types keep their data and tick
+ * stamps, new types stamp at `revision`. Returns the destination row and any
+ * entity swapped into the vacated source row (caller updates its metadata).
+ * @internal
  */
 export function transferEntityToArchetypeByRow(
   fromArchetype: Archetype,
@@ -489,6 +431,7 @@ export function transferEntityToArchetypeByRow(
   const entityId = fromArchetype.entities[fromRow]!;
   const toRow = addEntityToArchetype(toArchetype, entityId, revision);
 
+  // Copy data and tick stamps for every type both archetypes share
   for (let t = 0; t < toArchetype.types.length; t++) {
     const type = toArchetype.types[t]!;
     const destFieldColumns = toArchetype.columns.get(type);
@@ -511,6 +454,7 @@ export function transferEntityToArchetypeByRow(
     }
   }
 
+  // Vacate the source row last so the copy above reads intact data
   const swappedEntityId = removeEntityFromArchetypeByRow(fromArchetype, fromRow);
   return { toRow, swappedEntityId };
 }
@@ -581,18 +525,9 @@ function linkArchetypes(from: Archetype, to: Archetype, typeId: EntityId): Arche
 }
 
 /**
- * Destroys an archetype and cleans up all references.
- * Removes from world lookup, fires observer event, and clears bidirectional edges.
- *
- * @param world - World containing the archetype
- * @param archetype - Archetype to destroy (root archetype is protected)
- *
- * @example
- * ```ts
- * if (archetype.entities.length === 0) {
- *   destroyArchetype(world, archetype);
- * }
- * ```
+ * Unregisters an archetype, fires `archetypeDestroyed`, and severs its graph
+ * edges from both sides. No-op for the root archetype.
+ * @internal
  */
 export function destroyArchetype(world: World, archetype: Archetype): void {
   if (archetype === world.archetypes.root) {
@@ -609,19 +544,10 @@ export function destroyArchetype(world: World, archetype: Archetype): void {
 }
 
 /**
- * Traverses the archetype graph to find or create an archetype with a type added.
- * Uses edge caching for O(1) repeated traversals.
- *
- * @param world - World containing archetype graph
- * @param from - Starting archetype
- * @param typeId - Type ID to add
- * @param schema - Schema for the type (required if type is new to graph)
- * @returns Archetype with the type added, or same archetype if type already present
- *
- * @example
- * ```ts
- * const newArchetype = archetypeTraverseAdd(world, archetype, velocityId, velocitySchema);
- * ```
+ * Follows or creates the graph edge to the archetype with `typeId` added,
+ * returning `from` unchanged when the type is already present. Cached edges
+ * make repeated transitions O(1).
+ * @internal
  */
 export function archetypeTraverseAdd(
   world: World,
@@ -645,18 +571,10 @@ export function archetypeTraverseAdd(
 }
 
 /**
- * Traverses the archetype graph to find or create an archetype with a type removed.
- * Uses edge caching for O(1) repeated traversals.
- *
- * @param world - World containing archetype graph
- * @param from - Starting archetype
- * @param typeId - Type ID to remove
- * @returns Archetype with the type removed, or same archetype if type not present
- *
- * @example
- * ```ts
- * const newArchetype = archetypeTraverseRemove(world, archetype, velocityId);
- * ```
+ * Follows or creates the graph edge to the archetype with `typeId` removed,
+ * returning `from` unchanged when the type is absent. Cached edges make
+ * repeated transitions O(1).
+ * @internal
  */
 export function archetypeTraverseRemove(world: World, from: Archetype, typeId: EntityId): Archetype {
   if (!from.typesSet.has(typeId)) {

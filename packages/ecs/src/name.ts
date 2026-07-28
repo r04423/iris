@@ -11,10 +11,11 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Name component for entity identification.
+ * Name component: a unique, non-empty string identifying an entity.
  *
- * Stores a single string value that must be unique within the world. Set it via
- * {@link setName}, which enforces those constraints.
+ * Uniqueness and non-emptiness are enforced however the value is written --
+ * through {@link setName} or by adding or setting the component directly --
+ * and the index behind `lookupByName` stays in sync automatically.
  *
  * @example
  * ```typescript
@@ -30,16 +31,12 @@ export const Name = defineComponent("Name", { value: Type.string() });
 
 /**
  * Name indices kept in sync with entity lifecycle by the name system.
+ * @internal
  */
 export type NameState = {
-  /**
-   * Name lookup (name -> entity ID).
-   */
+  /** Name lookup (name -> entity ID). */
   byName: Map<string, EntityId>;
-
-  /**
-   * Reverse name lookup (entity ID -> name).
-   */
+  /** Reverse name lookup (entity ID -> name). */
   byEntity: Map<EntityId, string>;
 };
 
@@ -139,11 +136,14 @@ export function initNameSystem(world: World): void {
 
 /**
  * Gets the name of an entity.
- * @param world - World instance
- * @param entityId - Entity to get name from
- * @returns Entity name or undefined if not named
+ *
+ * Returns undefined when the entity is unnamed; assign names with
+ * {@link setName}.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ *
  * @example
- * ```ts
+ * ```typescript
  * const name = getName(world, entity);
  * ```
  */
@@ -153,13 +153,16 @@ export function getName(world: World, entityId: EntityId): string | undefined {
 
 /**
  * Sets or updates the name of an entity.
- * @param world - World instance
- * @param entityId - Entity to name
- * @param name - Name to assign (must be unique and non-empty)
- * @throws {IrisInvalidName} If name is empty
- * @throws {IrisDuplicateName} If name already exists
+ *
+ * No-op when the entity already has this exact name. Renaming frees the old
+ * name for reuse. Find named entities with {@link lookupByName}.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisInvalidName} If the name is empty
+ * @throws {IrisDuplicateName} If another entity already holds the name
+ *
  * @example
- * ```ts
+ * ```typescript
  * setName(world, player, "player-1");
  * ```
  */
@@ -185,11 +188,14 @@ export function setName(world: World, entityId: EntityId, name: string): void {
 }
 
 /**
- * Removes the name from an entity.
- * @param world - World instance
- * @param entityId - Entity to remove name from
+ * Removes the name from an entity, freeing it for reuse.
+ *
+ * Idempotent: removing from an unnamed entity does nothing.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ *
  * @example
- * ```ts
+ * ```typescript
  * removeName(world, entity);
  * ```
  */
@@ -202,15 +208,17 @@ export function removeName(world: World, entityId: EntityId): void {
 }
 
 /**
- * Looks up an entity by name, optionally validating required components.
- * @param world - World instance
- * @param name - Name to look up
- * @param components - Optional components to validate presence
- * @returns Entity ID or undefined if not found or missing required components
+ * Looks up an entity by name, optionally requiring components.
+ *
+ * Returns undefined when no entity holds the name or when the named entity
+ * lacks any of the required components. A successful lookup with components
+ * narrows the result, making typed accessors like {@link getComponentValue}
+ * return non-optional values.
+ *
  * @example
- * ```ts
+ * ```typescript
  * const player = lookupByName(world, "player-1");
- * const player = lookupByName(world, "player-1", [Position, Health]);
+ * const armed = lookupByName(world, "player-1", [Position, Health]);
  * ```
  */
 export function lookupByName<C extends EntityId[]>(

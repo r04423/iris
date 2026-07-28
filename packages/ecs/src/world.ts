@@ -35,79 +35,59 @@ import {
 // ============================================================================
 
 /**
- * World instance.
+ * Container for all ECS state: entities, components, archetypes, queries,
+ * schedules, events, and resources.
  *
- * Composes per-domain state; each domain module owns its state type along with
- * the create/reset functions for it.
+ * Created by {@link createWorld} and passed as the first argument to every API
+ * call. Plain data with no methods -- inspectable in a debugger and safe to
+ * hold several of for isolated simulations.
  */
 export type World = {
-  /**
-   * Entity registry (direct Map-based tracking).
-   */
+  /** Entity registry (direct Map-based tracking). */
   entities: EntityState;
-  /**
-   * Name indices maintained by the name system.
-   */
+  /** Name indices maintained by the name system. */
   names: NameState;
-  /**
-   * Component registry
-   */
+  /** Component definition registry. */
   components: ComponentState;
-  /**
-   * Archetype registry and transition graph.
-   */
+  /** Archetype registry and transition graph. */
   archetypes: ArchetypeState;
-  /**
-   * Filter registry for query caching.
-   */
+  /** Filter registry for query caching. */
   filters: FilterState;
-  /**
-   * Query registry for metadata caching.
-   */
+  /** Query registry for metadata caching. */
   queries: QueryState;
-  /**
-   * Observer system for lifecycle events.
-   */
+  /** Observer system for lifecycle events. */
   observers: ObserverState;
-  /**
-   * System registry.
-   */
+  /** System registry. */
   systems: SystemState;
-  /**
-   * System set registry.
-   */
+  /** System set registry. */
   systemSets: SystemSetState;
-  /**
-   * Schedule registry and pipeline configuration.
-   */
+  /** Schedule registry and pipeline configuration. */
   schedules: ScheduleState;
-  /**
-   * Current execution state.
-   */
+  /** Current execution state. */
   execution: ExecutionState;
-  /**
-   * Event queue registry.
-   */
+  /** Event queue registry. */
   events: EventState;
-  /**
-   * Actions registry for cached world-bound action getters.
-   */
+  /** Actions registry for cached world-bound action getters. */
   actions: ActionState;
-  /**
-   * Structural observation revision.
-   */
+  /** Logical clock for change detection and event delivery. */
   revision: number;
 };
 
+// ============================================================================
+// World Lifecycle
+// ============================================================================
+
 /**
- * Creates a new ECS world with empty entity registry and root archetype.
+ * Creates an empty world.
  *
- * @returns Initialized world instance ready for use
+ * The entry point of every Iris program: define components once, create a
+ * world, then populate it with entities and systems.
  *
  * @example
  * ```typescript
  * const world = createWorld();
- * const entity = spawnEntity(world);
+ * const player = createEntity(world);
+ * addComponent(world, player, Position, { x: 0, y: 0 });
  * ```
  */
 export function createWorld(): World {
@@ -139,15 +119,20 @@ export function createWorld(): World {
 }
 
 /**
- * Resets world to initial state, clearing all entities and caches.
+ * Resets the world to a fresh state: destroys all entities and clears event
+ * queues, name indices, and query caches.
  *
- * @param world - World instance to reset
- * @throws {IrisSchedulerBusy} If scheduler execution is active
+ * Registrations survive -- component, tag, and relation definitions, systems,
+ * system sets, and the schedule pipeline all remain, so nothing needs
+ * re-registering. System factories re-initialize on the next run.
+ *
+ * Fires the `worldReset` observer event when done.
+ *
+ * @throws {IrisSchedulerBusy} If a frame or shutdown is in progress
  *
  * @example
  * ```typescript
- * // Stop the world (runs shutdown systems), then reset
- * await stop(world);
+ * await stop(world); // Runs shutdown systems first
  * resetWorld(world);
  * ```
  */

@@ -22,6 +22,24 @@ import type { World } from "./world.js";
 // Component Operations (Public API)
 // ============================================================================
 
+/**
+ * Adds a tag, data component, or relation pair to an entity.
+ *
+ * Idempotent: adding a component the entity already has does nothing. Data
+ * components and pairs with schemas require initial field values. Adding a
+ * pair on an exclusive relation replaces the previous target in a single
+ * transition.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisInvalidPair} If the pair contains a wildcard
+ *
+ * @example
+ * ```typescript
+ * addComponent(world, entity, Player);
+ * addComponent(world, entity, Position, { x: 0, y: 0 });
+ * addComponent(world, child, pair(ChildOf, parent));
+ * ```
+ */
 export function addComponent(
   world: World,
   entityId: EntityId,
@@ -35,22 +53,6 @@ export function addComponent<S extends SchemaRecord>(
   data: InferSchemaRecord<S>
 ): void;
 
-/**
- * Add component to entity.
- *
- * Moves entity to new archetype with component. Idempotent if already present.
- * For data components/pairs, pass initial field values.
- *
- * @param world - World instance
- * @param entityId - Entity to modify
- * @param componentId - Tag, data component, or pair to add
- * @param data - Initial field values for data components (optional)
- *
- * @example
- * addComponent(world, entity, Player);
- * addComponent(world, entity, Position, { x: 0, y: 0 });
- * addComponent(world, child, pair(ChildOf, parent));
- */
 export function addComponent<S extends SchemaRecord>(
   world: World,
   entityId: EntityId,
@@ -195,14 +197,9 @@ export type ValidateEntries<T extends readonly ComponentEntry[]> = {
 };
 
 /**
- * Add multiple components to an entity in one call.
+ * Adds multiple components to an entity in one call.
  *
- * Each entry is either a standalone ID (tag/entity/schema-less pair) or a
- * `[component, data]` tuple for data components and pairs with schemas.
- *
- * @param world - World instance
- * @param entityId - Entity to modify
- * @param entries - Array of component entries
+ * Equivalent to calling {@link addComponent} for each entry in order.
  *
  * @example
  * ```typescript
@@ -239,19 +236,18 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
 }
 
 /**
- * Remove component from entity.
+ * Removes a component from an entity.
  *
- * Moves entity to new archetype without component. Idempotent if not present.
+ * Idempotent: removing a component the entity lacks does nothing. Removal is
+ * observable through `removed()` events.
  *
- * @param world - World instance
- * @param entityId - Entity to modify
- * @param componentId - Component to remove
- * @throws {IrisInvalidPair} If the component is a wildcard pair
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisInvalidPair} If the pair contains a wildcard
  *
  * @example
  * ```typescript
- * addComponent(world, entity, tag);
- * removeComponent(world, entity, tag);
+ * removeComponent(world, entity, Poisoned);
+ * removeComponent(world, child, pair(ChildOf, parent));
  * ```
  */
 export function removeComponent(world: World, entityId: EntityId, componentId: EntityId): void {
@@ -312,20 +308,18 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
 }
 
 /**
- * Check if entity has component.
+ * Checks whether an entity has a component.
  *
- * Returns false if the component is not present.
+ * Acts as a type guard: a true result narrows the entity, making the typed
+ * accessors like {@link getComponentValue} return non-optional values.
  *
- * @param world - World instance
- * @param entityId - Entity to check
- * @param componentId - Component to check
- * @returns True if entity has component
- * @throws {IrisEntityNotFound} If the entity is not alive in the world
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
- * addComponent(world, entity, tag);
- * hasComponent(world, entity, tag);  // true
+ * if (hasComponent(world, entity, Position)) {
+ *   const x = getComponentValue(world, entity, Position, "x"); // number, not number | undefined
+ * }
  * ```
  */
 export function hasComponent<C extends EntityId>(
@@ -339,18 +333,17 @@ export function hasComponent<C extends EntityId>(
 }
 
 /**
- * Get component field value.
+ * Gets a scalar field value from a data component or pair.
  *
- * @param world - World instance
- * @param entityId - Entity to query
- * @param componentId - Data component
- * @param fieldName - Field name
- * @returns Field value, or undefined if component/field not present (unnarrowed path)
+ * Returns undefined when the component is absent; narrow with
+ * {@link hasComponent} first for a non-optional type. Vector fields use
+ * {@link getComponentVectorValue}.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
- * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
- * const x = getComponentValue(world, entity, Position, 'x');
+ * const x = getComponentValue(world, entity, Position, "x");
  * ```
  */
 export function getComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
@@ -392,18 +385,16 @@ export function getComponentValue<S extends SchemaRecord, K extends ScalarFields
 }
 
 /**
- * Set component field value.
+ * Sets a scalar field value on a data component or pair.
  *
- * @param world - World instance
- * @param entityId - Entity to modify
- * @param componentId - Data component
- * @param fieldName - Field name
- * @param value - New value
+ * No-op when the component is absent. Marks the component changed for
+ * `changed()` query filters.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
- * addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
- * setComponentValue(world, entity, Position, 'x', 10.0);
+ * setComponentValue(world, entity, Position, "x", 10.0);
  * ```
  */
 export function setComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
@@ -451,18 +442,22 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
 }
 
 /**
- * Mark a component as changed without setting a value.
+ * Marks a component as changed without writing a value.
  *
- * No-op if the entity does not have the component.
+ * Feeds `changed()` query filters after out-of-band writes -- e.g. mutations
+ * through {@link getComponentVectorView}, which bypass change tracking.
+ * No-op when the component is absent.
  *
- * @param world - World instance
- * @param entityId - Entity with the component
- * @param componentId - Component that was changed
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
- * emitComponentChanged(world, entity, Position);  // Notify change tracking
+ * ```typescript
+ * const view = getComponentVectorView(world, entity, Position, "value");
+ * view[0] += 1.0;
+ * markComponentChanged(world, entity, Position);
+ * ```
  */
-export function emitComponentChanged(world: World, entityId: EntityId, componentId: EntityId): void {
+export function markComponentChanged(world: World, entityId: EntityId, componentId: EntityId): void {
   const { archetype, row } = ensureEntity(world, entityId);
 
   if (!archetype.typesSet.has(componentId)) {
@@ -477,31 +472,20 @@ export function emitComponentChanged(world: World, entityId: EntityId, component
 // ============================================================================
 
 /**
- * Look up the column backing one field of a component on an archetype.
+ * Looks up the column backing one field of a component on an archetype.
  *
- * Returns undefined when the archetype lacks the component, or when the component
- * has no such field -- both are the "not present" case for the value accessors.
- *
- * @param archetype - Archetype holding the entity
- * @param componentId - Component or pair owning the columns
- * @param fieldName - Field to resolve
- * @returns The column, or undefined if component or field is absent
+ * Undefined covers both missing component and missing field -- the value
+ * accessors treat them identically as "not present".
  */
 function resolveColumn(archetype: Archetype, componentId: EntityId, fieldName: string): Column | undefined {
   return archetype.columns.get(componentId)?.[fieldName];
 }
 
 /**
- * Stamp the change tick and notify observers that a component was written.
+ * Stamps the change tick and fires `componentChanged`.
  *
- * Callers establish that the entity has the component first, so its tick columns
- * exist alongside the data columns.
- *
- * @param world - World instance
- * @param archetype - Archetype holding the entity
- * @param row - Entity's row within the archetype
- * @param componentId - Component or pair that changed
- * @param entityId - Entity that owns the component
+ * Callers establish that the entity has the component first, so its tick
+ * columns exist alongside the data columns.
  */
 function markChanged(world: World, archetype: Archetype, row: number, componentId: EntityId, entityId: EntityId): void {
   const ticks = archetype.ticks.get(componentId);
@@ -518,15 +502,11 @@ function markChanged(world: World, archetype: Archetype, row: number, componentI
 // ============================================================================
 
 /**
- * Write initial field values into an entity's columns.
+ * Writes initial field values into an entity's columns.
  *
- * Written inline rather than through the value setters: the archetype and row are
- * already resolved here, and vector fields need stride-aware writes.
+ * Bypasses the value setters: the archetype and row are already resolved here,
+ * and vector fields need stride-aware writes.
  *
- * @param world - World instance
- * @param meta - Entity metadata, already moved to its new archetype
- * @param componentId - Component or pair owning the columns
- * @param data - Field values to write
  * @returns True if columns were written, false when the component stores nothing
  */
 function writeComponentData(
@@ -573,20 +553,12 @@ function writeComponentData(
 }
 
 /**
- * Check whether another pair on the entity still points at this pair's target.
+ * Checks whether another pair on the entity still points at this pair's target,
+ * i.e. whether the shared `pair(Wildcard, target)` aggregate must stay.
  *
- * `pair(Wildcard, target)` is shared by every pair with that target, so it may only be
- * dropped once the last one goes. The aggregate itself is skipped since it shares the
- * target; `pair(relation, Wildcard)` cannot match because its target is the wildcard.
- *
- * Targets are compared while still encoded, which avoids resolving entity targets
- * through the generation map. Encoding drops generation, so the comparison agrees
- * with `getPairTarget`.
- *
- * @param archetype - Archetype holding the entity before the transition
- * @param pairId - Concrete pair being added or removed
- * @param targetWildcard - `pair(Wildcard, target)` aggregate to skip
- * @returns True if the target aggregate must stay
+ * Targets are compared while still encoded: encoding drops generation, so the
+ * comparison agrees with `getPairTarget` without resolving through the
+ * generation map.
  */
 function hasSiblingWithTarget(archetype: Archetype, pairId: Pair, targetWildcard: Pair): boolean {
   const { types } = archetype;
@@ -596,6 +568,7 @@ function hasSiblingWithTarget(archetype: Archetype, pairId: Pair, targetWildcard
   for (let i = 0; i < types.length; i++) {
     const typeId = types[i]!;
 
+    // The aggregate itself shares the target; only concrete siblings count
     if (typeId === pairId || typeId === targetWildcard || !isPair(typeId)) {
       continue;
     }
@@ -609,15 +582,10 @@ function hasSiblingWithTarget(archetype: Archetype, pairId: Pair, targetWildcard
 }
 
 /**
- * Check whether another pair on the entity still uses this pair's relation.
+ * Checks whether another pair on the entity still uses this pair's relation,
+ * i.e. whether the shared `pair(relation, Wildcard)` aggregate must stay.
  *
- * The mirror of {@link hasSiblingWithTarget}: `pair(Wildcard, target)` cannot match
- * because it carries the wildcard relation.
- *
- * @param archetype - Archetype holding the entity before the transition
- * @param pairId - Concrete pair being removed
- * @param relationWildcard - `pair(relation, Wildcard)` aggregate to skip
- * @returns True if the relation aggregate must stay
+ * Mirror of {@link hasSiblingWithTarget}.
  */
 function hasSiblingWithRelation(archetype: Archetype, pairId: Pair, relationWildcard: Pair): boolean {
   const { types } = archetype;
@@ -639,13 +607,8 @@ function hasSiblingWithRelation(archetype: Archetype, pairId: Pair, relationWild
 }
 
 /**
- * Find the concrete pair behind a relation aggregate.
- *
- * An exclusive relation has at most one, which is the target it currently holds.
- *
- * @param archetype - Archetype holding the entity
- * @param relationWildcard - `pair(relation, Wildcard)` aggregate to search behind
- * @returns The concrete pair, or undefined if the relation is unused
+ * Finds the concrete pair behind a `pair(relation, Wildcard)` aggregate.
+ * An exclusive relation has at most one: its current target.
  */
 function findPairBehindAggregate(archetype: Archetype, relationWildcard: Pair): Pair | undefined {
   const { types } = archetype;
@@ -663,11 +626,8 @@ function findPairBehindAggregate(archetype: Archetype, relationWildcard: Pair): 
 }
 
 /**
- * Mark surviving wildcard pair aggregates as changed after a relationship topology update.
- *
- * @param world - World instance
- * @param meta - Entity metadata after the archetype transition
- * @param pairId - Concrete pair added or removed by the topology update
+ * Marks surviving wildcard aggregates as changed after a pair is added or
+ * removed, so `changed()` filters on wildcard queries observe topology updates.
  */
 function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): void {
   const relation = getPairRelation(pairId);
@@ -695,16 +655,14 @@ function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): 
 // ============================================================================
 
 /**
- * Get vector component field value as a tuple copy.
+ * Gets a vector field value as a tuple copy.
  *
- * Returns a new array containing the vector elements. Mutations to the
- * returned array do not affect the stored data.
+ * Mutating the returned array does not affect stored data; use
+ * {@link getComponentVectorView} for zero-copy access. Returns undefined when
+ * the component is absent; narrow with {@link hasComponent} first for a
+ * non-optional type.
  *
- * @param world - World instance
- * @param entityId - Entity to query
- * @param componentId - Data component or relation pair with vector field
- * @param fieldName - Vector field name
- * @returns Tuple copy of vector value, or undefined if component/field not present
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
@@ -759,16 +717,12 @@ export function getComponentVectorValue<S extends SchemaRecord, K extends Vector
 }
 
 /**
- * Set vector component field value from a tuple.
+ * Sets a vector field value from a tuple.
  *
- * Copies the tuple elements into the interleaved column. Updates change
- * detection tick and fires componentChanged observer.
+ * No-op when the component is absent. Marks the component changed for
+ * `changed()` query filters.
  *
- * @param world - World instance
- * @param entityId - Entity to modify
- * @param componentId - Data component or relation pair with vector field
- * @param fieldName - Vector field name
- * @param value - Tuple of values to set
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
@@ -826,18 +780,14 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
 }
 
 /**
- * Get a zero-copy typed array view into a vector component field.
+ * Gets a zero-copy typed array view into a vector field.
  *
- * Returns a `subarray` view that shares the underlying buffer. Mutations
- * to the view directly modify the stored data. Any structural change to the
- * entity's archetype invalidates the view -- capacity growth, add/remove
- * component, or destroying any entity in the same archetype.
+ * Mutations through the view write directly to stored data, bypassing change
+ * detection -- call {@link markComponentChanged} after writing. Any structural
+ * change to the entity's archetype invalidates the view: capacity growth,
+ * add/remove component, or destroying any entity in the same archetype.
  *
- * @param world - World instance
- * @param entityId - Entity to query
- * @param componentId - Data component or relation pair with vector field
- * @param fieldName - Vector field name
- * @returns Typed array view into the vector, or undefined if component/field not present
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
@@ -892,10 +842,9 @@ export function getComponentVectorView<S extends SchemaRecord, K extends VectorF
 // ============================================================================
 
 /**
- * Remove component from all entities that have it.
- *
- * @param world - World instance
- * @param componentId - Component to remove from all entities
+ * Removes a destroyed component type from every entity that has it, then
+ * destroys the emptied archetypes.
+ * @internal
  */
 export function cascadeRemoveComponent(world: World, componentId: EntityId): void {
   const meta = getEntityMeta(world, componentId)!;

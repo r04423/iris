@@ -6,7 +6,7 @@ import { type ConditionFactory, defineCondition } from "./scheduler.js";
 // ============================================================================
 
 /**
- * Create a condition that passes only on its first tick.
+ * Create a condition that passes only on its first evaluation.
  *
  * @returns Condition factory that passes once
  *

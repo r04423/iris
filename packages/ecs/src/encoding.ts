@@ -5,22 +5,50 @@ import type { Schema, SchemaRecord } from "./schema.js";
 // ============================================================================
 
 /**
- * Entity type constant (0x1).
+ * ID type constant for entities created with `createEntity`.
+ *
+ * Compare with the result of {@link extractType} to discriminate ID kinds.
+ *
+ * @example
+ * ```typescript
+ * extractType(entity) === ENTITY_TYPE; // true
+ * ```
  */
 export const ENTITY_TYPE = 0x1;
 
 /**
- * Tag type constant (0x2).
+ * ID type constant for tags defined with `defineTag`.
+ *
+ * Compare with the result of {@link extractType} to discriminate ID kinds.
+ *
+ * @example
+ * ```typescript
+ * extractType(Player) === TAG_TYPE; // true
+ * ```
  */
 export const TAG_TYPE = 0x2;
 
 /**
- * Component type constant (0x3).
+ * ID type constant for data components defined with `defineComponent`.
+ *
+ * Compare with the result of {@link extractType} to discriminate ID kinds.
+ *
+ * @example
+ * ```typescript
+ * extractType(Position) === COMPONENT_TYPE; // true
+ * ```
  */
 export const COMPONENT_TYPE = 0x3;
 
 /**
- * Relationship type constant (0x4).
+ * ID type constant for relations defined with `defineRelation`.
+ *
+ * Compare with the result of {@link extractType} to discriminate ID kinds.
+ *
+ * @example
+ * ```typescript
+ * extractType(ChildOf) === RELATIONSHIP_TYPE; // true
+ * ```
  */
 export const RELATIONSHIP_TYPE = 0x4;
 
@@ -29,12 +57,16 @@ export const RELATIONSHIP_TYPE = 0x4;
 // ============================================================================
 
 /**
- * Maximum raw ID for entities, components, and tags (20-bit).
+ * Bit mask for the 20-bit raw ID field; doubles as the highest raw ID an
+ * entity, tag, or component can hold.
+ * @internal
  */
 export const ID_MASK_20 = 0xfffff;
 
 /**
- * Maximum raw ID for relationships (8-bit).
+ * Bit mask for the 8-bit raw ID field of relations; doubles as the highest
+ * raw relation ID and the entity generation wrap mask.
+ * @internal
  */
 export const ID_MASK_8 = 0xff;
 
@@ -160,16 +192,19 @@ export type EntityWith<C extends EntityId> = EntityId & {
 
 /**
  * Pair flag bit position (bit 31).
+ * @internal
  */
 export const PAIR_FLAG_SHIFT = 31;
 
 /**
  * Type bits position (bits 30-28).
+ * @internal
  */
 export const TYPE_SHIFT = 28;
 
 /**
  * Type mask (3 bits).
+ * @internal
  */
 export const TYPE_MASK = 0x7;
 
@@ -207,21 +242,28 @@ function encode(type: number, rawId: number, meta: number): number {
 }
 
 /**
- * Encode entity ID from raw ID and generation.
+ * Encodes a raw ID and generation into an entity ID.
+ *
+ * The inverse of {@link extractId} and {@link extractMeta} -- together they
+ * round-trip entity IDs through serialized form. Does not allocate or
+ * register anything; `createEntity` is the way to obtain new IDs.
  *
  * @param rawId - Raw entity ID (0 to 1,048,575)
  * @param generation - Generation number (0 to 255)
- * @returns Encoded 32-bit entity ID
+ *
+ * @example
+ * ```typescript
+ * const restored = encodeEntity(savedRawId, savedGeneration);
+ * isEntityAlive(world, restored);
+ * ```
  */
 export function encodeEntity(rawId: number, generation: number): Entity {
   return encode(ENTITY_TYPE, rawId, generation) as Entity;
 }
 
 /**
- * Encode component ID from raw ID.
- *
- * @param rawId - Raw component ID (0 to 1,048,575)
- * @returns Encoded 32-bit component ID
+ * Encodes a raw ID into a component ID. `defineComponent` owns allocation.
+ * @internal
  */
 export function encodeComponent<S extends Record<string, Schema> = Record<string, Schema>>(
   rawId: number
@@ -230,31 +272,25 @@ export function encodeComponent<S extends Record<string, Schema> = Record<string
 }
 
 /**
- * Encode tag ID from raw ID.
- *
- * @param rawId - Raw tag ID (0 to 1,048,575)
- * @returns Encoded 32-bit tag ID
+ * Encodes a raw ID into a tag ID. `defineTag` owns allocation.
+ * @internal
  */
 export function encodeTag(rawId: number): Tag {
   return encode(TAG_TYPE, rawId, 0) as Tag;
 }
 
 /**
- * Encode relation ID from raw ID.
- *
- * @param rawId - Raw relation ID (0 to 255)
- * @returns Encoded 32-bit relation ID
+ * Encodes a raw ID into a relation ID. `defineRelation` owns allocation.
+ * @internal
  */
 export function encodeRelation<S extends Record<string, Schema> = Record<string, Schema>>(rawId: number): Relation<S> {
   return encode(RELATIONSHIP_TYPE, rawId, 0) as Relation<S>;
 }
 
 /**
- * Encode a pair from relation and target.
- *
- * @param relation - Relation ID
- * @param target - Target ID (entity, tag, component, or relation)
- * @returns Encoded pair ID
+ * Encodes a relation and target into a pair ID. The public entry point is
+ * `pair()`, which also validates the target.
+ * @internal
  */
 export function encodePair<R extends Relation, T extends EntityId>(relation: R, target: T): Pair<R, T> {
   const relationRawId = extractId(relation);
@@ -272,20 +308,32 @@ export function encodePair<R extends Relation, T extends EntityId>(relation: R, 
 // ============================================================================
 
 /**
- * Extract type bits from encoded ID.
+ * Extracts the type tag from an encoded ID.
  *
- * @param id - Encoded ID
- * @returns Type bits (0x0 - 0x7)
+ * Returns one of {@link ENTITY_TYPE}, {@link TAG_TYPE}, {@link COMPONENT_TYPE},
+ * or {@link RELATIONSHIP_TYPE}. Check {@link isPair} first: for a pair the
+ * result describes the pair's target, not the pair itself.
+ *
+ * @example
+ * ```typescript
+ * const isDefinition = !isPair(id) && extractType(id) !== ENTITY_TYPE;
+ * ```
  */
 export function extractType(id: number): number {
   return (id >>> TYPE_SHIFT) & TYPE_MASK;
 }
 
 /**
- * Extract raw ID from encoded ID (type-aware).
+ * Extracts the raw numeric ID from an encoded ID.
  *
- * @param id - Encoded ID (any non-pair type)
- * @returns Raw ID (20-bit for entities/components/tags, 8-bit for relationships)
+ * Useful for compact serialization and debug logging; combine with
+ * {@link extractMeta} to round-trip entity IDs through {@link encodeEntity}.
+ * Meaningful for non-pair IDs only.
+ *
+ * @example
+ * ```typescript
+ * console.log(`entity #${extractId(entity)} gen ${extractMeta(entity)}`);
+ * ```
  */
 export function extractId(id: number): number {
   const type = extractType(id);
@@ -305,10 +353,16 @@ export function extractId(id: number): number {
 }
 
 /**
- * Extract meta field from encoded ID (type-aware).
+ * Extracts the meta field from an encoded ID: the generation for entities,
+ * always zero for tags, components, and relations.
  *
- * @param id - Encoded ID (any non-pair type)
- * @returns Meta value (generation for entities, 0 for components/tags/relationships)
+ * With {@link extractId} it captures everything needed to rebuild an entity
+ * ID via {@link encodeEntity}.
+ *
+ * @example
+ * ```typescript
+ * const generation = extractMeta(entity);
+ * ```
  */
 export function extractMeta(id: number): number {
   const type = extractType(id);
@@ -328,42 +382,46 @@ export function extractMeta(id: number): number {
 }
 
 /**
- * Check if ID is a pair.
+ * Checks whether an ID is a relation pair.
  *
- * @param id - Encoded ID
- * @returns True if bit 31 is set, false otherwise
+ * Discriminates pairs from plain IDs when walking mixed ID collections, such
+ * as observer payloads. Narrows the type so {@link getPairTarget} accepts the
+ * result.
+ *
+ * @example
+ * ```typescript
+ * registerObserverCallback(world, "componentAdded", (componentId, entityId) => {
+ *   if (isPair(componentId)) {
+ *     console.log("pair added:", getPairTarget(world, componentId));
+ *   }
+ * });
+ * ```
  */
 export function isPair(id: number): id is Pair {
   return id >>> PAIR_FLAG_SHIFT === 1;
 }
 
 /**
- * Check if ID is a plain entity.
- *
- * @param id - Encoded ID
- * @returns True if ID is a non-pair entity ID, false otherwise
+ * Checks whether an ID is a plain entity (not a definition or pair).
  * @internal
  */
 export function isEntity(id: number): id is Entity {
+  // The unmasked shift keeps the pair flag in the comparison, so pairs never match
   return id >>> TYPE_SHIFT === ENTITY_TYPE;
 }
 
 /**
- * Check if ID is a relation.
- *
- * @param id - Encoded ID
- * @returns True if ID is a non-pair relation ID, false otherwise
+ * Checks whether an ID is a relation definition (not a pair).
  * @internal
  */
 export function isRelation(id: number): id is Relation {
+  // The unmasked shift keeps the pair flag in the comparison, so pairs never match
   return id >>> TYPE_SHIFT === RELATIONSHIP_TYPE;
 }
 
 /**
- * Extract raw ID from an entity ID.
- *
- * @param id - Encoded entity ID
- * @returns Raw ID (20-bit)
+ * Extracts the raw ID from an entity ID, skipping the type dispatch of
+ * `extractId` on the registry hot path.
  * @internal
  */
 export function extractEntityId(id: Entity): number {
@@ -371,30 +429,24 @@ export function extractEntityId(id: Entity): number {
 }
 
 /**
- * Extract relation raw ID from pair.
- *
- * @param pairId - Encoded pair ID
- * @returns Relation raw ID (8-bit)
+ * Extracts the relation's raw ID from a pair.
+ * @internal
  */
 export function extractPairRelationId(pairId: number): number {
   return pairId & ID_MASK_8;
 }
 
 /**
- * Extract target raw ID from pair.
- *
- * @param pairId - Encoded pair ID
- * @returns Target raw ID (20-bit)
+ * Extracts the target's raw ID from a pair.
+ * @internal
  */
 export function extractPairTargetId(pairId: number): number {
   return (pairId >>> META_SHIFT_20) & ID_MASK_20;
 }
 
 /**
- * Extract target type from pair.
- *
- * @param pairId - Encoded pair ID
- * @returns Target type bits (3-bit)
+ * Extracts the target's type tag from a pair.
+ * @internal
  */
 export function extractPairTargetType(pairId: number): number {
   return (pairId >>> TYPE_SHIFT) & TYPE_MASK;

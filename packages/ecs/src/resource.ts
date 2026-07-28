@@ -24,14 +24,11 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Adds a global resource (singleton) to the world using the component-on-self pattern.
+ * Adds a world-level singleton resource with initial field values.
  *
- * Resources are stored by adding the component to itself as an entity. Idempotent if already present.
- *
- * @param world - World instance
- * @param component - Component definition to use as resource
- * @param data - Initial values for the resource
- * @returns void
+ * Idempotent: adding a resource that already exists does nothing, and the
+ * existing values are not overwritten. Read fields back with
+ * {@link getResourceValue}.
  *
  * @example
  * ```typescript
@@ -48,11 +45,10 @@ export function addResource<S extends SchemaRecord>(
 }
 
 /**
- * Removes a global resource from the world.
+ * Removes a resource from the world.
  *
- * @param world - World instance
- * @param component - Component definition (acting as resource handle)
- * @returns void
+ * Idempotent: removing a resource that is not present does nothing. Removal is
+ * observable through `removed()` events.
  *
  * @example
  * ```typescript
@@ -64,17 +60,15 @@ export function removeResource(world: World, component: EntityId): void {
 }
 
 /**
- * Checks if a global resource exists in the world.
+ * Checks whether a resource exists in the world.
  *
- * @param world - World instance
- * @param component - Component definition (acting as resource handle)
- * @returns True if the resource exists, narrowing the component for non-null access
+ * Acts as a type guard: a true result narrows the component, making the typed
+ * accessors like {@link getResourceValue} return non-optional values.
  *
  * @example
  * ```typescript
  * if (hasResource(world, Time)) {
- *   // Time narrowed to Component<S> & EntityWith<Component<S>>
- *   const dt = getResourceValue(world, Time, "delta"); // non-null
+ *   const dt = getResourceValue(world, Time, "delta"); // number, not number | undefined
  * }
  * ```
  */
@@ -90,19 +84,15 @@ export function hasResource(world: World, component: EntityId): boolean {
 }
 
 /**
- * Gets the value of a specific field on a global resource.
+ * Gets a scalar field value from a resource.
  *
- * @param world - World instance
- * @param component - Component definition (narrowed via hasResource for non-null access)
- * @param key - Field name to retrieve
- * @returns The field value (non-null if narrowed), or undefined if not present
+ * Returns undefined when the resource is absent; narrow with
+ * {@link hasResource} first for a non-optional type. Vector fields use
+ * {@link getResourceVectorValue}.
  *
  * @example
  * ```typescript
- * if (hasResource(world, Time)) {
- *   const dt = getResourceValue(world, Time, "delta"); // number
- * }
- * const current = getResourceValue(world, Time, "current"); // number | undefined
+ * const dt = getResourceValue(world, Time, "delta");
  * ```
  */
 export function getResourceValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
@@ -126,13 +116,10 @@ export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<
 }
 
 /**
- * Sets the value of a specific field on a global resource.
+ * Sets a scalar field value on a resource.
  *
- * @param world - World instance
- * @param component - Component definition
- * @param key - Field name to set
- * @param value - New value for the field
- * @returns void
+ * No-op when the resource is absent. Marks the resource changed for
+ * `changed()` query filters.
  *
  * @example
  * ```typescript
@@ -153,15 +140,12 @@ export function setResourceValue<S extends SchemaRecord, K extends ScalarFields<
 // ============================================================================
 
 /**
- * Gets the value of a vector field on a global resource as a tuple copy.
+ * Gets a vector field value from a resource as a tuple copy.
  *
- * Returns a new array containing the vector elements. Mutations to the
- * returned array do not affect the stored data.
- *
- * @param world - World instance
- * @param component - Component definition (narrowed via hasResource for non-null access)
- * @param key - Vector field name
- * @returns Tuple copy of vector value, or undefined if not present
+ * Mutating the returned array does not affect stored data; use
+ * {@link getResourceVectorView} for zero-copy access. Returns undefined when
+ * the resource is absent; narrow with `hasResource` first for a non-optional
+ * type.
  *
  * @example
  * ```typescript
@@ -191,15 +175,10 @@ export function getResourceVectorValue<S extends SchemaRecord, K extends VectorF
 }
 
 /**
- * Sets the value of a vector field on a global resource from a tuple.
+ * Sets a vector field value on a resource from a tuple.
  *
- * Copies the tuple elements into the interleaved column. Updates change
- * detection tick and fires componentChanged observer.
- *
- * @param world - World instance
- * @param component - Component definition
- * @param key - Vector field name
- * @param value - Tuple of values to set
+ * No-op when the resource is absent. Marks the resource changed for
+ * `changed()` query filters.
  *
  * @example
  * ```typescript
@@ -230,15 +209,13 @@ export function setResourceVectorValue<S extends SchemaRecord, K extends VectorF
 }
 
 /**
- * Gets a zero-copy typed array view into a vector field on a global resource.
+ * Gets a zero-copy typed array view into a vector field on a resource.
  *
- * Returns a `subarray` view that shares the underlying buffer. Mutations
- * to the view directly modify the stored data.
- *
- * @param world - World instance
- * @param component - Component definition (narrowed via hasResource for non-null access)
- * @param key - Vector field name
- * @returns Typed array view into the vector, or undefined if not present
+ * Mutations through the view write directly to stored data, bypassing change
+ * detection -- call `markComponentChanged(world, component, component)` after
+ * writing. Any structural change to the resource's storage invalidates the
+ * view. Returns undefined when the resource is absent; narrow with
+ * {@link hasResource} first for a non-optional type.
  *
  * @example
  * ```typescript

@@ -18,6 +18,30 @@ Libraries for building realtime applications in TypeScript.
 
 **Tests are production code** -- Same quality standards as implementation. One behavior per test, minimal setup. Test only the module's public contract. Strive to cover all scenarios including edge cases. If a behavior is tested elsewhere, don't retest it. Test names describe behavior, not implementation.
 
+## Documentation Style
+
+Persona: public docs address a developer who knows ECS concepts but not Iris internals. Internal docs and inline comments address a senior engineer skimming the module.
+ 
+**Public API (exported from `index.ts`)**
+- Third-person one-line summary, then only facts a caller acts on: idempotence, no-op paths, type narrowing, view invalidation, lifetimes.
+- One `{@link}` pointer to the API that completes the workflow (accessor -> its guard, zero-copy view -> `markComponentChanged`).
+- `@example` fenced with ```` ```typescript ````, required. For overloaded functions the doc goes on the first overload.
+- No `@param`/`@returns` that restate the signature; keep those that add facts. `@throws` always, with the condition.
+- Never describe implementation: storage layout, encodings, caching, internal module names.
+
+**Type fields**
+- Single-line form when it fits the 120-char width: `/** Dense entity list; the index is the entity's row in every column. */`. Block form only when the doc genuinely needs multiple lines or carries tags.
+
+**Internal (exported but not in `index.ts`, or module-private)**
+- `@internal` tag on every export not re-exported from `index.ts`. Not on module-private functions -- the tag marks cross-module exports only.
+- 1-3 lines: role, plus the one "why" a reader can't see in the code. No `@param` lists, no `@example`.
+
+**Inline comments**
+- One-line flow markers for multi-step function bodies; "why" comments for non-obvious constraints. Never narrate what the next line does.
+
+**Factual accuracy**
+- Every behavioral claim must be traceable to a specific line of code, verified at write time -- read the callers and tests when unsure. Wrong documentation is worse than missing documentation.
+
 ## Commands
 
 | Command | Description |

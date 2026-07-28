@@ -9,34 +9,33 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Filter terms for archetype matching.
+ * Inclusion and exclusion constraints for matching entities by component set.
  *
- * Specifies inclusion and exclusion constraints for archetype selection.
+ * An entity matches when it has every `include` component and none of the
+ * `exclude` components. Queries built with `cacheQuery` expand their terms
+ * into filters of this shape.
+ *
+ * @example
+ * ```typescript
+ * const terms: FilterTerms = { include: [Position, Velocity], exclude: [Player] };
+ * ```
  */
 export type FilterTerms = {
-  /**
-   * Required component IDs (all must be present).
-   */
+  /** Required component IDs (all must be present). */
   include: EntityId[];
-  /**
-   * Excluded component IDs (none must be present).
-   */
+  /** Excluded component IDs (none must be present). */
   exclude: EntityId[];
 };
 
 /**
- * Filter metadata for registry caching.
- *
- * Stores filter terms and matched archetypes.
+ * A cached filter: its terms plus the live list of matching archetypes,
+ * kept current by the observers registered in {@link initFilterDispatch}.
+ * @internal
  */
 export type FilterMeta = {
-  /**
-   * Filter terms (include/exclude constraints).
-   */
+  /** Filter terms (include/exclude constraints). */
   terms: FilterTerms;
-  /**
-   * Matched archetypes (cached result of findMatchingArchetypes).
-   */
+  /** Live list of matching archetypes. */
   archetypes: Archetype[];
 };
 
@@ -46,16 +45,12 @@ export type FilterMeta = {
 
 /**
  * Filter registry for query caching.
+ * @internal
  */
 export type FilterState = {
-  /**
-   * Filter metadata lookup (filter hash -> metadata).
-   */
+  /** Filter metadata lookup (filter hash -> metadata). */
   byId: Map<string, FilterMeta>;
-
-  /**
-   * Reverse index: type ID -> filters that include it.
-   */
+  /** Reverse index: type ID -> filters that include it. */
   byType: Map<EntityId, FilterMeta[]>;
 };
 
@@ -88,14 +83,8 @@ export function resetFilterState(world: World): void {
 // ============================================================================
 
 /**
- * Generates a unique hash string for filter terms.
- *
- * @param terms - Filter terms containing include/exclude type arrays
- * @returns Deterministic hash string (e.g., "+1:5:12|-3:7")
- *
- * @example
- * const hash = hashFilterTerms({ include: [5, 1, 12], exclude: [7, 3] });
- * // Returns "+1:5:12|-3:7" (sorted for consistency)
+ * Hashes filter terms into a deterministic cache key (e.g. "+1:5:12|-3:7").
+ * @internal
  */
 export function hashFilterTerms(terms: FilterTerms): string {
   // Sort to ensure same terms always produce same hash regardless of input order
@@ -109,20 +98,10 @@ export function hashFilterTerms(terms: FilterTerms): string {
 // ============================================================================
 
 /**
- * Tests whether an archetype satisfies the given filter terms.
- *
- * @param archetype - Archetype to test against filter
- * @param terms - Filter terms with include/exclude type constraints
- * @returns True if archetype contains ALL included types and NONE of excluded types
- *
- * @example
- * const matches = matchesFilterTerms(archetype, {
- *   include: [PositionType, VelocityType],
- *   exclude: [DisabledType]
- * });
+ * Tests whether an archetype has every included type and no excluded type.
+ * @internal
  */
 export function matchesFilterTerms(archetype: Archetype, terms: FilterTerms): boolean {
-  // Verify ALL required types are present
   for (let i = 0; i < terms.include.length; i++) {
     const typeId = terms.include[i]!;
     if (!archetype.typesSet.has(typeId)) {
@@ -130,7 +109,6 @@ export function matchesFilterTerms(archetype: Archetype, terms: FilterTerms): bo
     }
   }
 
-  // Verify NONE of excluded types are present
   for (let i = 0; i < terms.exclude.length; i++) {
     const typeId = terms.exclude[i]!;
     if (archetype.typesSet.has(typeId)) {
@@ -142,21 +120,10 @@ export function matchesFilterTerms(archetype: Archetype, terms: FilterTerms): bo
 }
 
 /**
- * Finds all archetypes matching filter terms using rarest-type optimization.
- *
- * Uses the "rarest type first" strategy: starts with the type that appears in
- * the fewest archetypes, then filters that smaller set. This minimizes the
- * number of archetypes we need to check.
- *
- * @param world - World instance containing archetype registry
- * @param terms - Filter terms with include/exclude type constraints
- * @returns Array of archetypes that match all filter criteria
- *
- * @example
- * const archetypes = findMatchingArchetypes(world, {
- *   include: [PositionType, VelocityType],
- *   exclude: []
- * });
+ * Scans for all archetypes matching the terms, iterating only the archetypes
+ * of the rarest included type -- the smallest candidate set that still
+ * contains every possible match.
+ * @internal
  */
 export function findMatchingArchetypes(world: World, terms: FilterTerms): Archetype[] {
   // Empty include list is a degenerate case - return no matches
@@ -164,7 +131,7 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
     return [];
   }
 
-  // Find the rarest type (appears in fewest archetypes) for optimal iteration
+  // Pick the included type appearing in the fewest archetypes
   let rarestMeta = ensureEntity(world, terms.include[0]!);
   let minCount = rarestMeta.records.length;
 
@@ -206,11 +173,9 @@ export function findMatchingArchetypes(world: World, terms: FilterTerms): Archet
 // ============================================================================
 
 /**
- * Registers a filter in the reverse index (byType) under exactly one type.
- *
- * Picks the included type with the fewest registered filters to keep per-type
- * lists short.
- * @internal
+ * Registers a filter in the reverse index (byType) under exactly one included
+ * type -- the one with the fewest registered filters, keeping per-type lists
+ * short.
  */
 function registerFilterInIndex(world: World, filter: FilterMeta): void {
   const types = filter.terms.include;
@@ -244,13 +209,11 @@ function registerFilterInIndex(world: World, filter: FilterMeta): void {
 }
 
 /**
- * Initializes centralized filter dispatch by registering one archetypeCreated
- * and one archetypeDestroyed observer callback. Called once from createWorld.
- *
- * Each filter is stored in byType under exactly one of its included types
- * (see registerFilterInIndex). The dispatch iterates ALL types in the new
- * archetype, so it is guaranteed to find every filter whose included types
- * are a subset of the archetype's types, each filter is visited exactly once.
+ * Registers the archetypeCreated/archetypeDestroyed callbacks that keep every
+ * filter's archetype cache current. Called once from createWorld, before the
+ * root archetype registers. Each filter lives under exactly one of its
+ * included types, so scanning an archetype's types visits every affected
+ * filter exactly once.
  * @internal
  */
 export function initFilterDispatch(world: World): void {
@@ -297,22 +260,10 @@ export function initFilterDispatch(world: World): void {
 // ============================================================================
 
 /**
- * Gets or creates a filter with reverse-index-based cache invalidation.
- *
- * Filters are cached by their terms hash. When created, the filter is registered
- * in the reverse type index so that centralized archetype dispatch can keep the
- * cached archetype list in sync.
- *
- * @param world - World instance containing filter registry
- * @param terms - Filter terms defining which archetypes to match
- * @returns FilterMeta with cached matching archetypes
- *
- * @example
- * const filter = ensureFilter(world, {
- *   include: [PositionType, VelocityType],
- *   exclude: [DisabledType]
- * });
- * // filter.archetypes contains all matching archetypes
+ * Gets or creates the cached filter for the given terms (keyed by hash).
+ * New filters snapshot the currently matching archetypes, join the reverse
+ * index so dispatch keeps them in sync, and fire `filterCreated`.
+ * @internal
  */
 export function ensureFilter(world: World, terms: FilterTerms): FilterMeta {
   const filterId = hashFilterTerms(terms);

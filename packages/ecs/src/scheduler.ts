@@ -36,8 +36,8 @@ declare const SCHEDULE_LABEL_BRAND: unique symbol;
 /**
  * Schedule label (branded string).
  *
- * Identifies a schedule within the pipeline. Built-in labels are provided
- * for common lifecycle stages, custom labels created via defineSchedule().
+ * Identifies a schedule within the pipeline. Built-in labels cover the common
+ * lifecycle stages; custom labels come from {@link defineSchedule}.
  */
 export type ScheduleLabel = string & { [SCHEDULE_LABEL_BRAND]: true };
 
@@ -47,98 +47,59 @@ export type ScheduleLabel = string & { [SCHEDULE_LABEL_BRAND]: true };
 
 /**
  * System registry.
+ * @internal
  */
 export type SystemState = {
-  /**
-   * System metadata by name.
-   */
+  /** System metadata by name. */
   byId: Map<string, SystemMeta>;
-
-  /**
-   * Next registration index for stable ordering.
-   */
+  /** Next registration index for stable ordering. */
   nextIndex: number;
 };
 
 /**
  * System set registry.
+ * @internal
  */
 export type SystemSetState = {
-  /**
-   * System set metadata by label.
-   */
+  /** System set metadata by label. */
   byId: Map<SystemSetLabel, SystemSetMeta>;
 };
 
 /**
  * Schedule registry and pipeline configuration.
+ * @internal
  */
 export type ScheduleState = {
-  /**
-   * Built schedules (schedule label -> sorted system IDs).
-   */
+  /** Built schedules (schedule label -> sorted system IDs). */
   byId: Map<ScheduleLabel, string[]>;
-
-  /**
-   * Pipeline: ordered list of schedule labels for the main loop.
-   */
+  /** Pipeline: ordered list of schedule labels for the main loop. */
   pipeline: ScheduleLabel[];
-
-  /**
-   * Whether pipeline needs rebuilding.
-   */
+  /** Whether pipeline needs rebuilding. */
   dirty: boolean;
 };
 
 /**
- * Current execution state.
+ * Frame loop and lifecycle bookkeeping for one world.
+ * @internal
  */
 export type ExecutionState = {
-  /**
-   * Active schedule label (null if not executing).
-   */
+  /** Active schedule label (null if not executing). */
   scheduleLabel: ScheduleLabel | null;
-
-  /**
-   * Currently executing system ID (null if not executing).
-   */
+  /** Currently executing system ID (null if not executing). */
   systemId: string | null;
-
-  /**
-   * Frame counter. Starts and resets at 0, then increments once per accepted
-   * manual or animation frame attempt, including empty and failed attempts.
-   */
+  /** Frame counter starting at 0; increments once per accepted frame attempt, including empty and failed ones. */
   tick: number;
-
-  /**
-   * Whether the main loop is currently active.
-   */
+  /** Whether the main loop is currently active. */
   running: boolean;
-
-  /**
-   * Frame driver used by the active loop.
-   */
+  /** Frame driver used by the active loop. */
   frameDriver: FrameDriver | null;
-
-  /**
-   * Pending frame handle for cancellation via the frame driver.
-   */
+  /** Pending frame handle for cancellation via the frame driver. */
   frameHandle: unknown;
-
-  /**
-   * Current frame promise.
-   */
+  /** Current frame promise. */
   framePromise: Promise<void> | null;
-
-  /**
-   * Current shutdown promise.
-   */
+  /** Current shutdown promise. */
   shutdownPromise: Promise<void> | null;
-
-  /**
-   * Lifecycle position: "initial" before Startup runs, "active" after,
-   * "stopped" after Shutdown runs.
-   */
+  /** Lifecycle position: "initial" before Startup runs, "active" after, "stopped" after Shutdown runs. */
   lifecycle: "initial" | "active" | "stopped";
 };
 
@@ -252,10 +213,14 @@ export function resetExecutionState(world: World): void {
 // ============================================================================
 
 /**
- * Define a custom schedule label.
+ * Defines a custom schedule label.
  *
- * @param name - Schedule name (must be unique when inserted into pipeline)
- * @returns Schedule label
+ * The label only executes once inserted into the pipeline with
+ * {@link insertScheduleBefore} or `insertScheduleAfter()` -- a system
+ * registered to an uninserted schedule fails the next frame with
+ * `IrisScheduleNotFound`.
+ *
+ * @param name - Schedule name (must be unique when inserted into the pipeline)
  *
  * @example
  * ```typescript
@@ -273,12 +238,22 @@ export function defineSchedule(name: string): ScheduleLabel {
 // ============================================================================
 
 /**
- * Startup schedule. Runs once before the first frame.
+ * Startup schedule. Runs once before the first frame's pipeline.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, loadAssets, { schedule: Startup });
+ * ```
  */
 export const Startup = defineSchedule("Startup");
 
 /**
- * Shutdown schedule. Runs once when stop() is called.
+ * Shutdown schedule. Runs once when `stop()` is called.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, saveGame, { schedule: Shutdown });
+ * ```
  */
 export const Shutdown = defineSchedule("Shutdown");
 
@@ -294,6 +269,11 @@ export const First = defineSchedule("First");
 
 /**
  * Pre-update schedule. Runs every frame before Update.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, applyInput, { schedule: PreUpdate });
+ * ```
  */
 export const PreUpdate = defineSchedule("PreUpdate");
 
@@ -309,11 +289,21 @@ export const Update = defineSchedule("Update");
 
 /**
  * Post-update schedule. Runs every frame after Update.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, renderSystem, { schedule: PostUpdate });
+ * ```
  */
 export const PostUpdate = defineSchedule("PostUpdate");
 
 /**
  * Last schedule in the main loop. Runs every frame after PostUpdate.
+ *
+ * @example
+ * ```typescript
+ * addSystem(world, collectMetrics, { schedule: Last });
+ * ```
  */
 export const Last = defineSchedule("Last");
 
@@ -329,12 +319,16 @@ declare const SYSTEM_SET_LABEL_BRAND: unique symbol;
 /**
  * System set label (branded string).
  *
- * Identifies a system set for group-level ordering.
+ * Identifies a system set for group-level ordering. Created by
+ * {@link defineSystemSet}.
  */
 export type SystemSetLabel = string & { [SYSTEM_SET_LABEL_BRAND]: true };
 
 /**
- * Reference to a system or system set in ordering constraints.
+ * Reference to a system or system set in `before`/`after` constraints.
+ *
+ * Accepts the system function or factory itself, a set label, or a plain
+ * name string (needed for systems registered under a custom `name`).
  */
 export type SystemReference = SystemRunner | SystemFactory | SystemSetLabel | string;
 
@@ -342,59 +336,31 @@ export type SystemReference = SystemRunner | SystemFactory | SystemSetLabel | st
  * Options for system set registration.
  */
 export type SystemSetOptions = {
-  /**
-   * Schedule this set belongs to. Defaults to Update.
-   */
+  /** Schedule this set belongs to. Defaults to Update. */
   schedule?: ScheduleLabel;
-
-  /**
-   * All systems in this set run before these systems or sets.
-   */
+  /** All systems in this set run before these systems or sets. */
   before?: SystemReference | SystemReference[];
-
-  /**
-   * All systems in this set run after these systems or sets.
-   */
+  /** All systems in this set run after these systems or sets. */
   after?: SystemReference | SystemReference[];
-
-  /**
-   * Condition evaluated lazily once for this set per schedule invocation.
-   */
+  /** Condition evaluated at most once per schedule invocation; false skips every member and their own conditions. */
   condition?: ConditionFactory;
 };
 
 /**
- * System set metadata stored in registry.
+ * System set metadata registered by `addSystemSet()`.
  */
 export type SystemSetMeta = {
-  /**
-   * Schedule this set belongs to.
-   */
+  /** Schedule this set belongs to. */
   schedule: ScheduleLabel;
-
-  /**
-   * Systems or sets this set must execute before.
-   */
+  /** Systems or sets this set must execute before. */
   before: string[];
-
-  /**
-   * Systems or sets this set must execute after.
-   */
+  /** Systems or sets this set must execute after. */
   after: string[];
-
-  /**
-   * System names that belong to this set (populated by addSystem calls).
-   */
+  /** System names that belong to this set (populated by `addSystem()` calls). */
   systems: string[];
-
-  /**
-   * Condition factory attached to this set, if any.
-   */
+  /** Condition factory attached to this set, if any. */
   conditionFactory: ConditionFactory | null;
-
-  /**
-   * Initialized condition tick, or null before preparation and after reset.
-   */
+  /** Initialized condition tick; null until the next frame or shutdown initializes it, and again after `resetWorld()`. */
   conditionRunner: ConditionTick | null;
 };
 
@@ -408,7 +374,8 @@ const SYSTEM_FACTORY_BRAND: unique symbol = Symbol("SystemFactory");
 /**
  * System function signature.
  *
- * Takes world, returns void or Promise for async systems.
+ * Takes the world, returns void, or a Promise the scheduler awaits before
+ * running the next system.
  */
 export type SystemRunner = (world: World) => void | Promise<void>;
 
@@ -423,8 +390,9 @@ export type SystemTick = () => void | Promise<void>;
 /**
  * Synchronous condition tick. Returning false skips the attached system or set.
  *
- * Conditions execute outside system observation context. Conditions may observe
- * world state, but must not mutate gameplay data or scheduler registrations.
+ * Conditions execute outside system context, so event reads and change
+ * detection see nothing. Conditions may observe world state, but must not
+ * mutate gameplay data or scheduler registrations.
  *
  * @example
  * ```typescript
@@ -457,10 +425,10 @@ export type ConditionFactory = {
 };
 
 /**
- * System factory with init/tick separation.
+ * System factory with init/tick separation, created by {@link defineSystem}.
  *
- * Created via `defineSystem()`. The init function runs before first execution
- * and after a world reset. The returned tick function runs every frame.
+ * The init function runs before first execution and after a world reset.
+ * The returned tick function runs every frame.
  */
 export type SystemFactory = {
   /** @internal Runtime brand for discriminating SystemFactory from SystemRunner. */
@@ -478,23 +446,15 @@ export type SystemFactory = {
  * Shared options for system registration.
  */
 type SystemOptionsBase = {
-  /**
-   * Custom name (overrides function.name). Required for anonymous functions.
-   */
+  /** Custom name (overrides function.name). Required for anonymous functions. */
   name?: string;
-
-  /**
-   * Run before these systems or sets (within same schedule).
-   */
+  /** Run before these systems or sets (within same schedule). */
   before?: SystemReference | SystemReference[];
-
-  /**
-   * Run after these systems or sets (within same schedule).
-   */
+  /** Run after these systems or sets (within same schedule). */
   after?: SystemReference | SystemReference[];
-
   /**
-   * Condition evaluated before system instrumentation.
+   * Condition checked each schedule run; false skips the system without
+   * firing its `systemStarted`/`systemFinished` events.
    */
   condition?: ConditionFactory;
 };
@@ -535,52 +495,29 @@ export type SystemOptions = SystemOptionsBase & SystemTarget;
 export type SystemsOptions = Omit<SystemOptionsBase, "name"> & SystemTarget;
 
 /**
- * System metadata stored in registry.
+ * System metadata registered by `addSystem()`.
  */
 export type SystemMeta = {
   /**
-   * Function to execute, or null while a factory awaits initialization.
+   * Function the scheduler executes. Null for a factory system until the next
+   * frame or shutdown initializes it, and again after `resetWorld()`.
    */
   runner: SystemRunner | null;
-
-  /**
-   * Factory used to create the runner before execution and after a world reset.
-   */
+  /** Factory the runner is created from; null for plain function systems. */
   factory: SystemFactory | null;
-
-  /**
-   * Condition factory attached to this system, if any.
-   */
+  /** Condition factory attached to this system, if any. */
   conditionFactory: ConditionFactory | null;
-
-  /**
-   * Initialized condition tick, or null before preparation and after reset.
-   */
+  /** Initialized condition tick; null until the next frame or shutdown initializes it, and again after `resetWorld()`. */
   conditionRunner: ConditionTick | null;
-
-  /**
-   * Schedule this system belongs to.
-   */
+  /** Schedule this system belongs to (the set's schedule when registered through a set). */
   schedule: ScheduleLabel;
-
-  /**
-   * Registration order (for stable sort).
-   */
+  /** Registration order; breaks ties between systems no constraint separates, keeping execution deterministic. */
   index: number;
-
-  /**
-   * Systems this one must execute before (these run after this system).
-   */
+  /** Systems this one must execute before (these run after this system). */
   before: string[];
-
-  /**
-   * Systems this one must execute after (these run before this system).
-   */
+  /** Systems this one must execute after (these run before this system). */
   after: string[];
-
-  /**
-   * System set this system belongs to, if any.
-   */
+  /** System set this system belongs to, if any. */
   set?: SystemSetLabel;
 };
 
@@ -589,13 +526,12 @@ export type SystemMeta = {
 // ============================================================================
 
 /**
- * Define a system set label.
+ * Defines a system set label.
  *
  * System sets are named groups for group-level ordering. Define the label
- * first, then register it in a world via `addSystemSet()`.
+ * first, then register it in a world via {@link addSystemSet}.
  *
  * @param name - Set name (must be unique when registered)
- * @returns System set label
  *
  * @example
  * ```typescript
@@ -612,15 +548,14 @@ export function defineSystemSet(name: string): SystemSetLabel {
 // ============================================================================
 
 /**
- * Register a system set in the world with optional ordering constraints.
+ * Registers a system set in the world with optional ordering constraints.
  *
- * Must be called before any `addSystem()` call that references this set
- * via the `set` option. Its label must be unique among all systems and system
- * sets registered in the world.
+ * Must be called before any {@link addSystem} call that references this set
+ * via the `set` option. Systems join the set through that option; the set's
+ * schedule (Update by default) applies to all of them.
  *
- * @param world - World instance
- * @param set - System set label from `defineSystemSet()`
- * @param options - Registration options (schedule, before, after, condition)
+ * @throws {IrisDuplicateSystemSet} If the set label is already registered
+ * @throws {IrisDuplicateSystem} If the label collides with a system name
  *
  * @example
  * ```typescript
@@ -661,7 +596,6 @@ export function addSystemSet(world: World, set: SystemSetLabel, options?: System
 
 /**
  * Resolves a SystemReference to a string name.
- * @internal
  */
 function resolveReference(ref: SystemReference): string {
   return typeof ref === "string" ? ref : ref.name;
@@ -669,7 +603,6 @@ function resolveReference(ref: SystemReference): string {
 
 /**
  * Normalizes an optional single reference or reference array to a name array.
- * @internal
  */
 function normalizeReferences(refs: SystemReference | SystemReference[] | undefined): string[] {
   if (!refs) {
@@ -687,14 +620,16 @@ function normalizeReferences(refs: SystemReference | SystemReference[] | undefin
  * Registers a system in the world for later scheduling.
  *
  * Accepts either a `SystemRunner` function or a `SystemFactory` created by
- * `defineSystem()`. Factory initialization is deferred until the next
- * `runOnce()` or `stop()` call, immediately before schedules execute.
- * Its effective name must be unique among all systems and system sets
- * registered in the world.
+ * {@link defineSystem}. Factory initialization is deferred until the next
+ * frame or `stop()` call, immediately before schedules execute. Constraint
+ * and schedule validation is deferred the same way, so registration order
+ * does not matter -- a system may reference one registered later.
  *
- * @param world - World instance
- * @param system - System function or factory (must be named unless name option provided)
- * @param options - Registration options (name, schedule, set, before, after, condition)
+ * @param system - System function or factory (must be named unless the name option is provided)
+ * @throws {IrisInvalidSystemName} If no name is available (anonymous function without a name option)
+ * @throws {IrisDuplicateSystem} If the effective name is already registered
+ * @throws {IrisDuplicateSystemSet} If the effective name collides with a system set label
+ * @throws {IrisSystemSetNotFound} If the `set` option names an unregistered set
  *
  * @example
  * ```typescript
@@ -752,8 +687,9 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
 /**
  * Registers several systems that share the same options.
  *
- * @param world - World instance
- * @param systems - System functions or factories
+ * Equivalent to calling {@link addSystem} for each entry in order, with the
+ * same errors; entries registered before a failing one stay registered.
+ *
  * @param options - Options applied to every entry (schedule, set, before, after, condition)
  *
  * @example
@@ -772,21 +708,19 @@ export function addSystems(world: World, systems: (SystemRunner | SystemFactory)
 // ============================================================================
 
 /**
- * Define a system with separate init and tick phases.
+ * Defines a system with separate init and tick phases.
  *
  * The init function runs before the system's first execution and again after
  * `resetWorld()`. Initialization is deferred from `addSystem()` until the next
- * `runOnce()` or `stop()` and must be safe to repeat. Use it to cache query
+ * frame or `stop()` and must be safe to repeat. Use it to cache query
  * references, action getters, and other setup tied to the current world state.
  * The returned tick function runs every frame during schedule execution.
  *
- * Local state can be declared as variables in the init closure — use it for
+ * Local state can be declared as variables in the init closure -- use it for
  * system-internal bookkeeping (frame counters, cooldowns, cached computations).
  * Use resources for state other systems need to read, components for per-entity state.
  *
- * @param name - System name
- * @param init - Init function that receives the world and returns a tick function
- * @returns SystemFactory to pass to `addSystem()`
+ * @returns SystemFactory to pass to {@link addSystem}
  *
  * @example
  * ```typescript
@@ -815,15 +749,14 @@ export function defineSystem(name: string, init: (world: World) => SystemTick): 
 }
 
 /**
- * Define a reusable synchronous scheduler condition.
+ * Defines a reusable synchronous scheduler condition.
  *
  * The initializer runs independently for every system or set attachment before
  * scheduling begins and again after `resetWorld()`. It may observe world state,
  * but must not mutate it.
  *
- * @param name - Descriptive condition name
  * @param init - Initializer returning the boolean condition tick
- * @returns Condition factory for a system or system set
+ * @returns Condition factory for the `condition` option of {@link addSystem} or `addSystemSet()`
  *
  * @example
  * ```typescript
@@ -837,6 +770,9 @@ export function defineCondition(name: string, init: (world: World) => ConditionT
   return { [CONDITION_FACTORY_BRAND]: true, name, init };
 }
 
+/**
+ * Discriminates a branded SystemFactory from a plain SystemRunner function.
+ */
 function isSystemFactory(system: SystemRunner | SystemFactory): system is SystemFactory {
   return typeof system === "object" && system !== null && SYSTEM_FACTORY_BRAND in system;
 }
@@ -846,11 +782,14 @@ function isSystemFactory(system: SystemRunner | SystemFactory): system is System
 // ============================================================================
 
 /**
- * Insert a schedule before an existing schedule in the pipeline.
+ * Inserts a schedule before an existing schedule in the pipeline.
  *
- * @param world - World instance
+ * Takes effect on the next frame, even when called mid-frame.
+ *
  * @param schedule - New schedule label to insert
- * @param anchor - Existing schedule label to insert before
+ * @param anchor - Existing pipeline schedule label to insert before
+ * @throws {IrisScheduleNotFound} If the anchor is not in the pipeline
+ * @throws {IrisDuplicateSchedule} If the schedule is already in the pipeline, or is Startup or Shutdown
  *
  * @example
  * ```typescript
@@ -863,11 +802,14 @@ export function insertScheduleBefore(world: World, schedule: ScheduleLabel, anch
 }
 
 /**
- * Insert a schedule after an existing schedule in the pipeline.
+ * Inserts a schedule after an existing schedule in the pipeline.
  *
- * @param world - World instance
+ * Takes effect on the next frame, even when called mid-frame.
+ *
  * @param schedule - New schedule label to insert
- * @param anchor - Existing schedule label to insert after
+ * @param anchor - Existing pipeline schedule label to insert after
+ * @throws {IrisScheduleNotFound} If the anchor is not in the pipeline
+ * @throws {IrisDuplicateSchedule} If the schedule is already in the pipeline, or is Startup or Shutdown
  *
  * @example
  * ```typescript
@@ -881,7 +823,6 @@ export function insertScheduleAfter(world: World, schedule: ScheduleLabel, ancho
 
 /**
  * Splices a schedule into the pipeline at the anchor's index plus an offset.
- * @internal
  */
 function insertScheduleAt(world: World, schedule: ScheduleLabel, anchor: ScheduleLabel, offset: 0 | 1): void {
   const idx = world.schedules.pipeline.indexOf(anchor);
@@ -929,6 +870,10 @@ function addConstraintEdges(
   }
 }
 
+/**
+ * Rejects a before/after target that names no system or set in this schedule --
+ * constraints never reach across schedules.
+ */
 function assertConstraintTarget(
   target: string,
   scheduleSystems: Map<string, SystemMeta>,
@@ -1066,7 +1011,6 @@ function rebuildPipeline(world: World): void {
 
 /**
  * Initializes pending factory systems, then rebuilds dirty schedules.
- * @internal
  */
 function prepareSystems(world: World): void {
   // Every path that leaves a runner or condition uninitialized also marks the
@@ -1214,13 +1158,13 @@ export const animationFrameDriver: FrameDriver = {
 };
 
 /**
- * Create a frame driver backed by setTimeout.
+ * Creates a frame driver backed by setTimeout.
  *
  * Works in any environment, including servers where requestAnimationFrame
  * does not exist.
  *
  * @param intervalMs - Delay between frames in milliseconds (default 16)
- * @returns Frame driver for `run()`
+ * @returns Frame driver for {@link run}
  *
  * @example
  * ```typescript
@@ -1305,12 +1249,16 @@ function startFrame(world: World): Promise<void> {
 }
 
 /**
- * Execute one frame. Runs startup on first call, then all pipeline schedules,
- * then flushes events. Rejects if another frame, the main loop, or Shutdown
- * is active.
+ * Executes one frame: Startup on the first call (and again after `stop()`),
+ * then all pipeline schedules in order, then the end-of-frame event flush.
  *
- * @param world - World instance
+ * Deferred registration errors surface here, and a throwing system rejects
+ * the frame with its error.
+ *
  * @returns Promise that resolves when the frame completes
+ * @throws {IrisSchedulerBusy} If another frame, the main loop, or a shutdown is active
+ * @throws {IrisCircularDependency} If ordering constraints form a cycle
+ * @throws {IrisScheduleNotFound} If a system references a schedule outside the pipeline
  *
  * @example
  * ```typescript
@@ -1326,14 +1274,15 @@ export async function runOnce(world: World): Promise<void> {
 }
 
 /**
- * Start or resume the main loop using the given frame driver.
+ * Starts or resumes the main loop using the given frame driver.
  *
- * Startup schedule runs automatically on first frame. Each frame executes
- * all pipeline schedules in order. Call `suspend()` to halt the loop without
- * running Shutdown, or `stop()` to end the lifecycle. Ignored while a
- * shutdown is in progress.
+ * The Startup schedule runs automatically on the first frame; each frame then
+ * executes all pipeline schedules in order. Call `suspend()` to halt the loop
+ * without running Shutdown, or {@link stop} to end the lifecycle. Ignored
+ * while the loop is already running or a shutdown is in progress. A frame
+ * error halts the loop and is rethrown unless a `frameFailed` observer is
+ * registered -- the observer may call `run()` again to resume.
  *
- * @param world - World instance
  * @param driver - Frame source (defaults to `animationFrameDriver`)
  *
  * @example
@@ -1360,11 +1309,12 @@ export function run(world: World, driver: FrameDriver = animationFrameDriver): v
 }
 
 /**
- * Suspend the main loop without running Shutdown.
- * An active frame finishes before the returned promise resolves. Call `run()`
- * to resume without running Startup again.
+ * Suspends the main loop without running Shutdown.
  *
- * @param world - World instance
+ * An active frame finishes before the returned promise settles; the promise
+ * rejects if that frame fails. Call {@link run} to resume without running
+ * Startup again.
+ *
  * @returns Active frame promise, or a resolved promise if no frame is active
  *
  * @example
@@ -1432,10 +1382,15 @@ async function runShutdown(world: World): Promise<void> {
 }
 
 /**
- * Stop the main loop, wait for the active frame, and run the shutdown schedule.
- * Concurrent calls wait for the same shutdown.
+ * Stops the main loop, waits for the active frame, and runs the Shutdown
+ * schedule.
  *
- * @param world - World instance
+ * Concurrent calls wait for the same shutdown, and calling after a completed
+ * shutdown resolves immediately -- Shutdown does not run twice. A later frame
+ * re-arms the lifecycle so Startup and Shutdown run again. The returned
+ * promise rejects if the interrupted frame or a shutdown system throws
+ * (an `AggregateError` when both do), and a failed shutdown is not retried.
+ *
  * @returns Promise that resolves when shutdown completes
  *
  * @example

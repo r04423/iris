@@ -35,39 +35,25 @@ declare const QUERY_TERMS_BRAND: unique symbol;
  * ```
  */
 export type QueryMeta = {
-  /**
-   * Required component IDs.
-   */
+  /** Required component IDs. */
   include: EntityId[];
-
-  /**
-   * Excluded components.
-   */
+  /** Excluded components. */
   exclude: EntityId[];
-
-  /**
-   * Underlying filter branches. Queries without or() terms have at most one.
-   */
+  /** Underlying filter branches. Queries without or() terms have at most one. */
   filters: FilterMeta[];
-
-  /**
-   * Components with added() modifier.
-   */
+  /** Components with added() modifier. */
   added: EntityId[];
-
-  /**
-   * Components with changed() modifier.
-   */
+  /** Components with changed() modifier. */
   changed: EntityId[];
-
-  /**
-   * Per-system observation revisions for change detection.
-   */
+  /** Per-system observation revisions for change detection. */
   lastRevision: Map<string, number>;
 };
 
 /**
- * Query that preserves the caller's component order.
+ * Cached query handle preserving the caller's component order.
+ *
+ * Created by {@link cacheQuery} and accepted anywhere terms are: matching
+ * entities carry type narrowing for the components the query guarantees.
  *
  * @example
  * ```typescript
@@ -76,24 +62,13 @@ export type QueryMeta = {
  * ```
  */
 export type Query<C extends EntityId = never, T extends unknown[] = (EntityId | QueryModifier)[]> = {
-  /**
-   * Shared query matching state.
-   */
+  /** Shared query matching state. */
   meta: QueryMeta;
-
-  /**
-   * Included component IDs in the order supplied by the caller.
-   */
+  /** Included component IDs in the order supplied by the caller. */
   requested: EntityId[];
-
-  /**
-   * Phantom field carrying guaranteed-present component types via contravariance.
-   */
+  /** Phantom field carrying guaranteed-present component types via contravariance. */
   readonly [QUERY_COMPONENTS_BRAND]: (c: C) => void;
-
-  /**
-   * Phantom field carrying original query terms tuple (covariant).
-   */
+  /** Phantom field carrying original query terms tuple (covariant). */
   readonly [QUERY_TERMS_BRAND]?: T;
 };
 
@@ -112,17 +87,13 @@ export type QueryTrieNode = {
 // ============================================================================
 
 /**
- * Query registry for metadata caching.
+ * Query registry: metadata by hash plus parametric getter caches.
+ * @internal
  */
 export type QueryState = {
-  /**
-   * Query metadata lookup (query hash -> metadata).
-   */
+  /** Query metadata lookup (query hash -> metadata). */
   byId: Map<string, QueryMeta>;
-
-  /**
-   * Parametric query caches keyed by builder function identity.
-   */
+  /** Parametric query caches keyed by builder function identity. */
   byBuilder: Map<(...args: EntityId[]) => (EntityId | QueryModifier)[], QueryTrieNode>;
 };
 
@@ -150,18 +121,38 @@ export function resetQueryState(world: World): void {
 // Query Modifiers
 // ============================================================================
 
+/**
+ * Discriminant tag distinguishing the query modifier kinds.
+ */
 export type ModifierType = "not" | "added" | "changed" | "or";
+
+/**
+ * Query term excluding entities that have the component. Created by {@link not}.
+ */
 export type NotModifier<C extends EntityId = EntityId> = { type: "not"; componentId: C };
+
+/**
+ * Change-detection term matching recently added components. Created by {@link added}.
+ */
 export type AddedModifier<C extends EntityId = EntityId> = { type: "added"; componentId: C };
+
+/**
+ * Change-detection term matching recently written components. Created by {@link changed}.
+ */
 export type ChangedModifier<C extends EntityId = EntityId> = { type: "changed"; componentId: C };
+
+/**
+ * Query term matching entities with at least one of the alternatives. Created by {@link or}.
+ */
 export type OrModifier<C extends EntityId = EntityId> = { type: "or"; componentIds: C[] };
+
+/**
+ * Union of all modifier terms accepted alongside component IDs in query terms.
+ */
 export type QueryModifier = NotModifier | AddedModifier | ChangedModifier | OrModifier;
 
 /**
- * Create exclusion modifier for query.
- *
- * @param componentId - Component to exclude from query results
- * @returns Not modifier
+ * Creates a query term that excludes entities having the component.
  *
  * @example
  * ```typescript
@@ -173,18 +164,17 @@ export function not<C extends EntityId>(componentId: C): NotModifier<C> {
 }
 
 /**
- * Create added modifier for change detection.
+ * Creates a change-detection term matching entities whose component was added
+ * since the querying system last read this query.
  *
- * Matches additions in the consuming query's per-system revision window. See
- * `queryEntities` for window-consumption semantics.
- *
- * @param componentId - Component to check for addition
- * @returns Added modifier
+ * The component must still be present to match. Only produces results inside
+ * system execution -- outside a system the query matches nothing. Each read
+ * consumes the window whole; see {@link collectEntities}.
  *
  * @example
  * ```typescript
  * addSystem(world, function spawnAlert() {
- *   const enemies = collectEntities(world, [added(Enemy)]);
+ *   const spawned = collectEntities(world, [added(Player)]);
  * });
  * ```
  */
@@ -193,13 +183,12 @@ export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
 }
 
 /**
- * Create changed modifier for change detection.
+ * Creates a change-detection term matching entities whose component was
+ * written or added since the querying system last read this query.
  *
- * Matches modifications or additions in the consuming query's per-system
- * revision window. See `queryEntities` for window-consumption semantics.
- *
- * @param componentId - Component to check for changes
- * @returns Changed modifier
+ * The component must still be present to match. Only produces results inside
+ * system execution -- outside a system the query matches nothing. Each read
+ * consumes the window whole; see {@link collectEntities}.
  *
  * @example
  * ```typescript
@@ -213,18 +202,19 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
 }
 
 /**
- * Create disjunction modifier for query.
+ * Creates a query term matching entities that have at least one of the given
+ * components.
  *
- * Matches entities that have at least one of the given components.
+ * A match proves no specific alternative present, so `or()` terms do not
+ * narrow the entity type. Alternatives multiply across groups: a query's
+ * `or()` groups are capped at 32 combinations.
  *
- * Alternatives multiply across groups: a query's `or()` groups are
- * capped at 32 combinations.
- *
- * @param componentIds - Alternative components (at least one must be present)
- * @returns Or modifier
+ * @throws {IrisInvalidQuery} If called with no components
  *
  * @example
- * const moving = collectEntities(world, [Position, or(Velocity, Acceleration)]);
+ * ```typescript
+ * const active = collectEntities(world, [Position, or(Velocity, Health)]);
+ * ```
  */
 export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[number]> {
   if (componentIds.length === 0) {
@@ -255,7 +245,7 @@ export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...inf
   : never;
 
 /**
- * Check if argument is a query modifier (not, added, changed, or) vs plain component ID.
+ * Distinguishes a query modifier from a plain component ID.
  */
 function isModifier(arg: unknown): arg is QueryModifier {
   return typeof arg === "object" && arg !== null && "type" in arg;
@@ -266,13 +256,15 @@ function isModifier(arg: unknown): arg is QueryModifier {
 // ============================================================================
 
 /**
- * Map a query terms tuple to a tuple of field column types.
+ * Maps a query terms tuple to the tuple of column objects a `queryColumns`
+ * callback receives.
  *
- * Mirrors the term-skipping `queryColumns` performs at runtime: only terms with an
- * entry in `archetype.columns` produce a parameter. Every skip below must stay in
- * step with that lookup, or callback parameters silently shift left.
+ * Only data-bearing terms produce an entry: tags, `not()`/`or()` terms,
+ * schema-less pairs, and wildcard pairs are skipped. The skips below must stay
+ * in step with the runtime term-skipping in `queryColumns`, or callback
+ * parameters silently shift left.
  *
- * @experimental Associated with the experimental live-column traversal API.
+ * @experimental Exported as `EXPERIMENTAL_ColumnsTuple`; may change or be removed.
  */
 export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
   ? // Excluded from matching archetypes, so never stored
@@ -302,20 +294,10 @@ export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer 
 // ============================================================================
 
 /**
- * Hash query terms to unique string ID for cache lookup.
- *
- * @param include - Component IDs that must be present
- * @param exclude - Component IDs that must not be present
- * @param added - Component IDs to check for recent addition
- * @param changed - Component IDs to check for recent modification
- * @param orGroups - Groups of alternative component IDs (one per or() term)
- * @returns Query ID in format "+include|-exclude|~+added|~>changed" with an
- *   "|vA:B,C:D" segment appended when or() groups are present
- *
- * @example
- * ```typescript
- * const id = hashQuery([Position, Velocity], [Dead], [], []);
- * ```
+ * Hashes categorized query terms into the registry key
+ * ("+include|-exclude|~+added|~>changed", plus "|v..." for or() groups).
+ * Sorting makes the key order-independent.
+ * @internal
  */
 export function hashQuery(
   include: EntityId[],
@@ -348,15 +330,10 @@ export function hashQuery(
 // ============================================================================
 
 /**
- * Cache a query in the registry, creating if necessary.
- *
- * @param world - World instance
- * @param terms - Components and modifiers
- * @returns Query with the requested component order
- * @throws {IrisInvalidQuery} If no included components (query must match something)
- *
- * @example
- * const query = cacheQuery(world, [Position, Velocity, not(Dead)]);
+ * Gets or creates cached query metadata for the given terms, returning a
+ * fresh Query handle that preserves the caller's term order (queryColumns
+ * relies on that order for column alignment).
+ * @internal
  */
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
@@ -419,15 +396,10 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
 }
 
 /**
- * Expand query terms into disjoint conjunctive filter branches.
- *
- * Each or() group contributes one branch per alternative; multiple groups
- * multiply (cartesian product).
- *
- * Each branch is an ordinary filter that flows through the existing
- * ensureFilter cache and archetype dispatch.
- *
- * @internal
+ * Expands query terms into disjoint conjunctive filter branches: each or()
+ * group multiplies branches, one per alternative, with earlier alternatives
+ * excluded so no archetype matches two branches (no double visits). Each
+ * branch flows through the ordinary ensureFilter cache and dispatch.
  */
 function buildQueryFilters(
   world: World,
@@ -485,8 +457,8 @@ function buildQueryFilters(
 }
 
 /**
- * Create a cached parametric query getter.
- *
+ * Creates a parametric query getter caching one Query per argument tuple in a
+ * trie keyed by builder identity.
  * @internal
  */
 export function ensureQueryGetter(
@@ -496,6 +468,7 @@ export function ensureQueryGetter(
   return (...args: EntityId[]): Query => {
     let node: QueryTrieNode;
 
+    // Root node per builder function
     const root = world.queries.byBuilder.get(builder);
 
     if (!root) {
@@ -505,6 +478,7 @@ export function ensureQueryGetter(
       node = root;
     }
 
+    // Walk one trie level per argument, creating nodes on first visit
     for (let i = 0; i < args.length; i++) {
       let children: Map<EntityId, QueryTrieNode> | undefined = node.children;
 
@@ -523,6 +497,7 @@ export function ensureQueryGetter(
       node = next;
     }
 
+    // Leaf holds the query; the builder runs only on the first lookup
     let query = node.query;
 
     if (!query) {
@@ -535,21 +510,26 @@ export function ensureQueryGetter(
 }
 
 /**
- * Cache a static query or create a cached parametric query getter.
+ * Caches a query from terms, or creates a cached parametric query getter from
+ * a builder function.
  *
- * Parametric builders must be pure and return the same term structure for the
- * same arguments. Create getters once: builder identity owns the cache. Pair
- * targets use generation-stripped weak-reference semantics. Change detection
- * windows are tracked independently for each system and argument tuple.
+ * Builders must be pure -- same arguments, same terms -- and their terms are
+ * validated on the getter's first call per argument tuple. Create getters
+ * once and reuse them: the cache is keyed by builder identity. A query holds
+ * its pair targets weakly: destroying a target does not evict the query, it
+ * simply matches nothing until the pair is re-established. Change detection
+ * windows are tracked independently per system and per argument tuple.
+ * Consume the result with {@link collectEntities}.
  *
- * @param world - World instance
- * @param builder - Entity arguments to query terms builder
- * @returns Cached query getter
+ * @throws {IrisInvalidQuery} If no term guarantees a component's presence
+ * @throws {IrisQueryLimitExceeded} If or() groups expand past 32 combinations
  *
  * @example
  * ```typescript
+ * const movers = cacheQuery(world, [Position, Velocity, not(Dead)]);
+ *
  * const childrenOf = cacheQuery(world, (parent: EntityId) => [pair(ChildOf, parent)]);
- * const children = collectEntities(world, childrenOf(root));
+ * const children = collectEntities(world, childrenOf(parent));
  * ```
  */
 export function cacheQuery<A extends EntityId[], const T extends (EntityId | QueryModifier)[]>(
@@ -557,18 +537,6 @@ export function cacheQuery<A extends EntityId[], const T extends (EntityId | Que
   builder: (...args: [...A]) => T
 ): (...args: [...A]) => Query<ExtractIncluded<T>, T>;
 
-/**
- * Cache a query in the registry, creating it if necessary.
- *
- * @param world - World instance
- * @param terms - Components and modifiers
- * @returns Cached query
- *
- * @example
- * ```typescript
- * const movers = cacheQuery(world, [Position, Velocity, not(Dead)]);
- * ```
- */
 export function cacheQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
   terms: [...T]
@@ -590,7 +558,7 @@ export function cacheQuery(
 // ============================================================================
 
 /**
- * Iterate entities using pre-registered query metadata via callback.
+ * Iterates entities matching cached query metadata via callback.
  */
 function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (entity: EntityId) => unknown): void {
   const hasChangeModifiers = queryMeta.added.length > 0 || queryMeta.changed.length > 0;
@@ -629,6 +597,8 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
     throw new IrisRevisionOverflow();
   }
 
+  // Consume the window up front: stopping early still discards the remainder.
+  // Bumping the revision puts writes made after this read outside the window
   queryMeta.lastRevision.set(systemId, boundary);
   world.revision = boundary + 1;
 
@@ -695,7 +665,7 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
 }
 
 /**
- * Resolve terms-or-query argument to Query.
+ * Resolves a terms-or-query argument to a Query.
  */
 function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] | Query): Query {
   if (!Array.isArray(termsOrQuery)) {
@@ -710,21 +680,25 @@ function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] |
 // ============================================================================
 
 /**
- * Iterate entities matching components and modifiers via callback.
+ * Iterates entities matching components and modifiers via callback.
  *
  * Traverses live archetype storage. Structural world mutation during the
  * callback is unsupported: it can duplicate or skip visits, or prevent
- * traversal from terminating. Use `collectEntities()` before structural
- * mutation.
+ * traversal from terminating. Use {@link collectEntities} before structural
+ * mutation. `added()`/`changed()` terms read a per-system revision window,
+ * and the read consumes it whole -- a second read returns nothing, and
+ * stopping early discards the rest. Experimental: exported as
+ * `EXPERIMENTAL_queryEntities`.
  *
- * `added()`/`changed()` terms read a per-system revision window, and the read
- * consumes it whole -- a second read returns nothing, and stopping early
- * discards the rest.
+ * @param callback - Called for each matching entity; return `false` to stop early
+ * @throws {IrisInvalidQuery} If no term guarantees a component's presence
  *
- * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
- * @param callback - Called for each matching entity. Return `false` to stop iteration early
- * @experimental This API may change or be removed without notice.
+ * @example
+ * ```typescript
+ * EXPERIMENTAL_queryEntities(world, [Position, Velocity], (entity) => {
+ *   const x = getComponentValue(world, entity, Position, "x");
+ * });
+ * ```
  */
 export function queryEntities<T extends (EntityId | QueryModifier)[]>(
   world: World,
@@ -748,13 +722,13 @@ export function queryEntities(
 }
 
 /**
- * Get first entity matching components and modifiers.
+ * Returns the first entity matching components and modifiers, or undefined.
  *
- * Useful for singleton patterns or when only one match is expected.
+ * Match order is unspecified -- intended for singleton patterns where at most
+ * one entity matches. A defined result is narrowed for the typed accessors
+ * like {@link getComponentValue}.
  *
- * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
- * @returns First matching entity ID, or undefined if no matches
+ * @throws {IrisInvalidQuery} If no term guarantees a component's presence
  *
  * @example
  * ```typescript
@@ -786,11 +760,14 @@ export function queryFirstEntity(
 }
 
 /**
- * Collect all matching entities into an array.
+ * Collects all matching entities into a new array.
  *
- * @param world - World instance
- * @param termsOrQuery - Array of component IDs and query modifiers, or pre-built Query
- * @returns Array of matching entity IDs
+ * The snapshot is safe to sort, retain, and iterate while structurally
+ * mutating the world. `added()`/`changed()` terms only produce results inside
+ * system execution, and each read consumes the per-system change window
+ * whole -- a second read in the same run returns nothing.
+ *
+ * @throws {IrisInvalidQuery} If no term guarantees a component's presence
  *
  * @example
  * ```typescript
@@ -823,24 +800,29 @@ export function collectEntities(world: World, termsOrQuery: (EntityId | QueryMod
 // ============================================================================
 
 /**
- * Iterate matching archetypes with direct column access.
+ * Iterates matching archetypes with direct column access.
  *
- * Low-level query API that exposes raw storage arrays for high-performance iteration.
- * The callback fires once per matching archetype with the archetype's live entities
- * array and column parameters for each data-bearing term.
+ * The callback fires once per non-empty matching archetype with the
+ * archetype's live entities array and one column object per data-bearing
+ * term -- tags, schema-less pairs, wildcard pairs, and `or()` alternatives
+ * produce no parameter. Entities and columns are borrowed live backing
+ * stores: do not retain or mutate the entities array, or structurally mutate
+ * the world during the callback. Only `not()` and `or()` modifiers are
+ * supported; use {@link collectEntities} for change detection. Experimental:
+ * exported as `EXPERIMENTAL_queryColumns`.
  *
- * Only `not()` and `or()` modifiers are supported. `added()` and `changed()` are
- * rejected; use `collectEntities` for change detection. Or'd components produce
- * no columns since they are not guaranteed present in every matching archetype.
+ * @param callback - Called for each matching archetype; return `false` to stop early
+ * @throws {IrisInvalidQuery} If terms contain added() or changed(), or no term
+ *   guarantees a component's presence
  *
- * The entities and columns are borrowed live backing stores. Do not retain or
- * mutate the entities array, or structurally mutate the world during the
- * callback.
- *
- * @param world - World instance
- * @param termsOrQuery - Array of component IDs and not() modifiers, or pre-built Query
- * @param callback - Called for each matching archetype. Return `false` to stop iteration
- * @experimental This API may change or be removed without notice.
+ * @example
+ * ```typescript
+ * EXPERIMENTAL_queryColumns(world, [Position, Velocity], (entities, [position, velocity]) => {
+ *   for (let i = 0; i < entities.length; i++) {
+ *     position.x[i] += velocity.vx[i];
+ *   }
+ * });
+ * ```
  */
 export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
   world: World,

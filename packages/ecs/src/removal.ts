@@ -31,13 +31,18 @@ const removalEvents = new Map<EntityId, Event<typeof RemovalEventSchema>>();
 // ============================================================================
 
 /**
- * Gets the removal event for a component, creating it lazily if needed.
+ * Gets the removal event for a component.
+ *
+ * Returns the same event for a given component across calls, so any number of
+ * systems can subscribe to it independently.
  * @param componentId - Component to track removals for
  * @returns Event that fires when the component is removed from any entity
  * @example
+ * ```typescript
  * readEvents(world, removed(Health), ({ entity }) => {
  *   playDeathEffect(entity);
  * });
+ * ```
  */
 export function removed(componentId: EntityId): Event<typeof RemovalEventSchema> {
   let event = removalEvents.get(componentId);

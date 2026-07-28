@@ -5,9 +5,8 @@ import { IrisInvalidVectorSize } from "./error.js";
 // ============================================================================
 
 /**
- * Typed array constructor type.
- *
- * Union of all typed array constructors that can be used for numeric storage.
+ * Union of typed array constructors usable for numeric column storage.
+ * @internal
  */
 export type TypedArrayConstructor =
   | Int8ArrayConstructor
@@ -22,9 +21,7 @@ export type TypedArrayConstructor =
 // ============================================================================
 
 /**
- * Maps a numeric size to a fixed-length tuple type.
- *
- * @internal
+ * Maps a vector size to its fixed-length tuple type.
  */
 type VectorTupleMap<T> = {
   2: [T, T];
@@ -46,15 +43,15 @@ type VectorTupleMap<T> = {
 
 /**
  * Valid vector sizes (2-16).
- *
- * @internal
  */
 type VectorSize = keyof VectorTupleMap<unknown>;
 
 /**
- * Fixed-length tuple type for vector schemas.
+ * Fixed-length tuple type of a vector field: `VectorTuple<number, 3>` is
+ * `[number, number, number]`.
  *
- * Maps a base type and numeric size to a tuple: `VectorTuple<number, 3>` becomes `[number, number, number]`.
+ * The value type produced by the sized {@link Type} factories like
+ * `Type.f32(3)` and exchanged by the vector accessors.
  */
 export type VectorTuple<T, N extends VectorSize> = VectorTupleMap<T>[N];
 
@@ -62,21 +59,19 @@ export type VectorTuple<T, N extends VectorSize> = VectorTupleMap<T>[N];
 // Schema Type
 // ============================================================================
 
-/** @internal */
+/** Type-level brand for vector schemas; never exists at runtime. */
 declare const VECTOR_SCHEMA_BRAND: unique symbol;
 
 /**
- * Type descriptor for columnar storage.
+ * Storage descriptor for a single component field.
  *
- * Describes how component data should be stored (typed arrays for numbers,
- * regular arrays for primitives/reference values). Created via Type namespace factories.
- *
- * @template T - TypeScript type of stored values (inferred via phantom __type field)
+ * Created by the {@link Type} factories. The value type `T` is inferred
+ * automatically, so explicit annotations are rarely needed.
  *
  * @example
  * ```typescript
- * const posX: Schema<number> = Type.f32();
- * const name: Schema<string> = Type.string();
+ * const hp: Schema<number> = Type.i32();
+ * const label: Schema<string> = Type.string();
  * ```
  */
 export type Schema<T = unknown> = {
@@ -84,15 +79,14 @@ export type Schema<T = unknown> = {
   arrayConstructor: TypedArrayConstructor | ArrayConstructor;
   typeName: string;
   stride?: number;
+  // Phantom field: carries T for inference at zero runtime cost, never assigned
   __type?: T;
 };
 
 /**
- * Schema for interleaved vector storage (e.g. `Type.f32(3)`).
- *
- * Carries a phantom brand so `ScalarFields`/`VectorFields` can discriminate
- * vector schemas from plain schemas at the type level without inspecting the
- * inferred value type.
+ * Schema for vector fields (e.g. `Type.f32(3)`). The phantom brand lets
+ * `ScalarFields`/`VectorFields` discriminate vector schemas at the type level
+ * without inspecting the inferred value type.
  *
  * @internal
  */
@@ -105,19 +99,18 @@ export type VectorSchema<T = unknown> = Schema<T> & {
 // ============================================================================
 
 /**
- * Overloaded numeric type factory.
- *
- * Returns a scalar `Schema<T>`, or a broad numeric vector schema when given a
- * size (2-16).
- *
- * @internal
+ * Overloaded numeric factory: a scalar `Schema` with no argument, a vector
+ * schema when given a size (2-16).
  */
 type NumericFactory = {
   <T extends number = number>(): Schema<T>;
   <N extends VectorSize>(size: N): VectorSchema<VectorTuple<number, N>>;
 };
 
-/** @internal */
+/**
+ * Builds the scalar/vector factory for one typed-array constructor, validating
+ * vector sizes at definition time so invalid strides never reach storage.
+ */
 function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
   return ((size?: number) => {
     if (size === undefined) {
@@ -133,52 +126,76 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
 }
 
 /**
- * Schema factory namespace for defining component storage types.
+ * Factory namespace for the field schemas passed to `defineComponent` and
+ * `defineRelation`.
+ *
+ * Numeric factories take an optional size (2-16) to declare a fixed-length
+ * vector field, read and written through the vector accessors like
+ * `getComponentVectorValue`. Value types flow into the accessors
+ * automatically -- no annotations needed.
  *
  * @example
  * ```typescript
- * const Position = { value: Type.f32(2) };      // vec2
- * const Color = { value: Type.u32(4) };          // vec4
- * const Health = { hp: Type.i32() };             // scalar
- * const Name = { value: Type.string() };
- * const Cache = { value: Type.ref<Map<string, number>>() };
+ * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+ * const Velocity = defineComponent("Velocity", { value: Type.f32(2) }); // vec2
+ * const Player = defineComponent("Player", {
+ *   name: Type.string(),
+ *   alive: Type.bool(),
+ *   inventory: Type.ref<Map<string, number>>(),
+ * });
  * ```
  */
 export const Type = {
-  /** 8-bit signed integer schema (Int8Array). Accepts optional vector size (2-16). */
+  /**
+   * 8-bit signed integer schema (Int8Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   i8: numericFactory(Int8Array),
 
-  /** 16-bit signed integer schema (Int16Array). Accepts optional vector size (2-16). */
+  /**
+   * 16-bit signed integer schema (Int16Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   i16: numericFactory(Int16Array),
 
-  /** 32-bit signed integer schema (Int32Array). Accepts optional vector size (2-16). */
+  /**
+   * 32-bit signed integer schema (Int32Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   i32: numericFactory(Int32Array),
 
-  /** 32-bit unsigned integer schema (Uint32Array). Accepts optional vector size (2-16). */
+  /**
+   * 32-bit unsigned integer schema (Uint32Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   u32: numericFactory(Uint32Array),
 
-  /** 32-bit floating point schema (Float32Array). Accepts optional vector size (2-16). */
+  /**
+   * 32-bit floating point schema (Float32Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   f32: numericFactory(Float32Array),
 
-  /** 64-bit floating point schema (Float64Array). Accepts optional vector size (2-16). */
+  /**
+   * 64-bit floating point schema (Float64Array). Pass a size for a vector field.
+   *
+   * @throws {IrisInvalidVectorSize} If the size is outside 2-16
+   */
   f64: numericFactory(Float64Array),
 
-  /**
-   * Boolean schema (Array<boolean>).
-   *
-   * @returns Schema for Array<boolean> storage
-   */
+  /** Boolean field schema. */
   bool: <T extends boolean = boolean>(): Schema<T> => ({
     kind: "primitive",
     arrayConstructor: Array,
     typeName: "boolean",
   }),
 
-  /**
-   * String schema (Array<string>).
-   *
-   * @returns Schema for Array<string> storage
-   */
+  /** String field schema. Narrows to a literal union via `Type.string<"a" | "b">()`. */
   string: <T extends string = string>(): Schema<T> => ({
     kind: "primitive",
     arrayConstructor: Array,
@@ -186,13 +203,9 @@ export const Type = {
   }),
 
   /**
-   * Reference schema (Array<T>).
-   *
-   * Stores JavaScript reference values such as objects, arrays, Maps, Sets,
-   * and class instances.
-   *
-   * @template T - TypeScript type of reference values stored
-   * @returns Schema for Array<T> storage
+   * Reference field schema for arbitrary JavaScript values -- objects, arrays,
+   * Maps, Sets, class instances. Pass the value type explicitly:
+   * `Type.ref<Map<string, number>>()`.
    */
   ref: <T = unknown>(): Schema<T> & { kind: "generic"; arrayConstructor: ArrayConstructor } => ({
     kind: "generic",
@@ -206,27 +219,38 @@ export const Type = {
 // ============================================================================
 
 /**
- * Infer TypeScript type from a schema using the phantom __type field.
+ * Infers the value type carried by a schema: `InferSchema<Schema<number>>` is
+ * `number`.
  *
- * @template S - Schema type to infer from
+ * The value type the field accessors like `getComponentValue` return and
+ * accept.
  */
 export type InferSchema<S extends Schema> = S extends Schema<infer T> ? T : never;
 
 /**
- * Union of all typed array instance types.
+ * Union of all typed array instances.
+ *
+ * The type of the zero-copy views returned by `getComponentVectorView` and
+ * `getResourceVectorView`.
  */
 export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
 
 /**
- * Extracts field names from a schema record where the field is stored with stride 1
- * (scalars and reference values -- anything that isn't an interleaved vector tuple).
+ * Field names of a schema record holding a single value per entity -- numbers,
+ * strings, booleans, references.
+ *
+ * The field-name constraint of the scalar accessors: `getComponentValue`,
+ * `setComponentValue`, and their resource equivalents accept only these keys.
  */
 export type ScalarFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? never : K;
 }[keyof S];
 
 /**
- * Extracts field names from a schema record where the field is a vector type (tuple).
+ * Field names of a schema record declared as fixed-length vectors.
+ *
+ * The field-name constraint of the vector accessors: `getComponentVectorValue`,
+ * `setComponentVectorValue`, and the view getters accept only these keys.
  */
 export type VectorFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? K : never;
@@ -237,16 +261,16 @@ export type VectorFields<S extends SchemaRecord> = {
 // ============================================================================
 
 /**
- * Schema record for component fields.
- *
- * Maps field names to their schema definitions.
+ * Maps field names to their schemas -- the shape `defineComponent` and
+ * `defineRelation` accept.
  */
 export type SchemaRecord = Record<string, Schema>;
 
 /**
- * Infer TypeScript types from component schema record.
+ * Infers the plain-object value shape of a schema record: the initial data
+ * accepted by `addComponent` and `addResource`.
  *
- * Maps each schema field to its inferred type via phantom __type field.
+ * `{ x: Type.f32(), y: Type.f32() }` infers as `{ x: number; y: number }`.
  */
 export type InferSchemaRecord<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends Schema<infer T> ? T : never;

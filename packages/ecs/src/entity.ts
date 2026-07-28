@@ -30,39 +30,21 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Entity metadata.
- *
- * Stores entity's current location (archetype + row) and component records.
+ * Entity metadata: current location (archetype + row) and component records.
+ * @internal
  */
 export type EntityMeta = {
-  /**
-   * Encoded ID this metadata belongs to.
-   */
+  /** Encoded ID this metadata belongs to. */
   id: EntityId;
-
-  /**
-   * Current archetype (direct reference).
-   */
+  /** Current archetype (direct reference). */
   archetype: Archetype;
-
-  /**
-   * Row index in archetype.entities.
-   */
+  /** Row index in archetype.entities. */
   row: number;
-
-  /**
-   * Component records: which archetypes contain this entity as a component.
-   */
+  /** Component records: which archetypes contain this entity as a component. */
   records: Archetype[];
-
-  /**
-   * Schema when this entity is used as a component (undefined for regular entities).
-   */
+  /** Schema when this entity is used as a component (undefined for regular entities). */
   schema?: SchemaRecord;
-
-  /**
-   * Cycle protection flag during cascade delete.
-   */
+  /** Cycle protection flag during cascade delete. */
   destroying?: boolean;
 };
 
@@ -72,31 +54,18 @@ export type EntityMeta = {
 
 /**
  * Entity registry.
+ * @internal
  */
 export type EntityState = {
-  /**
-   * Entity metadata lookup (raw entity ID -> metadata).
-   */
+  /** Entity metadata lookup (raw entity ID -> metadata). */
   byRawId: (EntityMeta | undefined)[];
-
-  /**
-   * Metadata lookup for tags, components, relations, and pairs.
-   */
+  /** Metadata lookup for tags, components, relations, and pairs. */
   byId: Map<EntityId, EntityMeta>;
-
-  /**
-   * Freelist of dead entity raw IDs for recycling.
-   */
+  /** Freelist of dead entity raw IDs for recycling. */
   freeIds: number[];
-
-  /**
-   * Next raw ID to allocate.
-   */
+  /** Next raw ID to allocate. */
   nextId: number;
-
-  /**
-   * Generation lookup (raw entity ID -> generation).
-   */
+  /** Generation lookup (raw entity ID -> generation). */
   generations: number[];
 };
 
@@ -192,19 +161,10 @@ function registerEntity(world: World, entityId: EntityId, schema?: SchemaRecord)
 }
 
 /**
- * Ensures entity exists in world, auto-registering components/tags/relations if needed.
- *
- * @param world - World instance
- * @param entityId - Entity or component ID
- * @returns Entity metadata
- * @throws {IrisEntityNotFound} If entity not registered (ENTITY_TYPE), or if a pair's entity target is not alive
- * @throws {IrisInvalidState} If unknown entity type
- *
- * @example
- * ```typescript
- * const meta = ensureEntity(world, Position);
- * console.log(meta.archetype);
- * ```
+ * Resolves entity metadata, auto-registering tags, components, relations, and
+ * pairs on first use. Throws IrisEntityNotFound for dead entity references and
+ * for pairs whose entity target is not alive.
+ * @internal
  */
 export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
   const meta = getEntityMeta(world, entityId);
@@ -262,36 +222,24 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
 }
 
 /**
- * Creates a new entity in the world.
+ * Creates a new entity, optionally with initial components.
  *
- * @param world - World instance
- * @returns Encoded entity ID
- * @throws {IrisEntityLimitExceeded} If entity limit (1,048,576) exceeded
+ * Component entries are applied in order, exactly as {@link addComponents}
+ * would. IDs of destroyed entities are recycled, so treat the returned value
+ * as opaque.
  *
- * @example
- * ```typescript
- * const entity = createEntity(world);
- * addComponent(world, entity, Position, { x: 0, y: 0 });
- * ```
- */
-export function createEntity(world: World): Entity;
-
-/**
- * Creates a new entity with initial components.
- *
- * @param world - World instance
- * @param entries - Array of component entries
- * @returns Encoded entity ID
- * @throws {IrisEntityLimitExceeded} If entity limit (1,048,576) exceeded
+ * @throws {IrisEntityLimitExceeded} If the limit of 1,048,575 concurrently allocated IDs is exceeded
  *
  * @example
  * ```typescript
- * const entity = createEntity(world, [
+ * const player = createEntity(world, [
  *   [Position, { x: 0, y: 0 }],
  *   Player,
  * ]);
  * ```
  */
+export function createEntity(world: World): Entity;
+
 export function createEntity<const T extends readonly ComponentEntry[]>(
   world: World,
   entries: T & ValidateEntries<T>
@@ -313,8 +261,15 @@ export function createEntity(world: World, entries?: readonly ComponentEntry[]):
 /**
  * Destroys an entity and recycles its ID for reuse.
  *
- * @param world - World instance
- * @param entityId - Entity to destroy
+ * Idempotent: destroying a dead entity does nothing. Pairs targeting the
+ * entity are removed from their subjects, and subjects related through an
+ * `onDeleteTarget: "delete"` relation are destroyed as well -- cascades
+ * recurse and are cycle-safe. Stale references to the destroyed entity read
+ * as dead via {@link isEntityAlive}, even after its ID is recycled.
+ *
+ * Also accepts tag, component, and relation IDs: destroying a definition
+ * removes it from every entity that has it (relations lose all their pairs).
+ * Definition IDs are not recycled.
  *
  * @example
  * ```typescript
@@ -383,9 +338,9 @@ export function destroyEntity(world: World, entityId: EntityId): void {
 /**
  * Checks if an entity is currently alive in the world.
  *
- * @param world - World instance
- * @param entity - Entity ID to check
- * @returns True if entity exists and is alive
+ * Stale references -- IDs whose entity was destroyed, even if the slot was
+ * recycled -- read as dead. Also accepts tag, component, relation, and pair
+ * IDs, reporting whether the definition has been registered in this world.
  *
  * @example
  * ```typescript
@@ -399,17 +354,9 @@ export function isEntityAlive(world: World, entity: EntityId): boolean {
 }
 
 /**
- * Moves entity to a different archetype, transferring component data.
- *
- * @param world - World instance
- * @param meta - Entity metadata
- * @param toArchetype - Target archetype
- *
- * @example
- * ```typescript
- * const archetype = getOrCreateArchetype(world, [Position, Velocity]);
- * moveEntityToArchetype(world, meta, archetype);
- * ```
+ * Moves an entity to a different archetype, transferring shared component data
+ * and patching the row of the entity swapped into its old slot.
+ * @internal
  */
 export function moveEntityToArchetype(world: World, meta: EntityMeta, toArchetype: Archetype): void {
   const fromRow = meta.row;
@@ -432,16 +379,8 @@ export function moveEntityToArchetype(world: World, meta: EntityMeta, toArchetyp
 }
 
 /**
- * Registers archetype in entity records for all its component types.
- *
- * @param world - World instance
- * @param archetype - Archetype to register
- *
- * @example
- * ```typescript
- * const archetype = createArchetype([Position, Velocity]);
- * addEntityRecord(world, archetype);
- * ```
+ * Records a new archetype on the metadata of every component type it contains.
+ * @internal
  */
 export function addEntityRecord(world: World, archetype: Archetype): void {
   // Each component type tracks which archetypes contain it for query matching
@@ -453,16 +392,9 @@ export function addEntityRecord(world: World, archetype: Archetype): void {
 }
 
 /**
- * Removes archetype from entity records for all its component types.
- *
- * @param world - World instance
- * @param archetype - Archetype to unregister
- *
- * @example
- * ```typescript
- * removeEntityRecord(world, archetype);
- * destroyArchetype(archetype);
- * ```
+ * Removes a destroyed archetype from the records of every component type it
+ * contains.
+ * @internal
  */
 export function removeEntityRecord(world: World, archetype: Archetype): void {
   for (let i = 0; i < archetype.types.length; i++) {

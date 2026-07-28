@@ -31,26 +31,24 @@ declare const HAS_EVENTS_BRAND: unique symbol;
 // ============================================================================
 
 /**
- * Event schema type.
+ * Field schemas for event data.
  *
- * Maps field names to their schema definitions (same as component schema).
+ * Same shape as a component schema: field names mapped to `Type` definitions.
  */
 export type EventSchema = SchemaRecord;
 
 /**
- * Event data type inference.
- *
- * - Empty schema {} -> undefined (tag event)
- * - Non-empty schema -> resolved data object
+ * Data type carried by an event: undefined for tag events (empty schema),
+ * a resolved field record otherwise.
+ * @internal
  */
 export type EventData<T extends EventSchema> = keyof T extends never
   ? undefined
   : { [K in keyof T]: T[K] extends Schema<infer U> ? U : never };
 
 /**
- * Event ID (branded type).
- *
- * Nominal type for events defined via defineEvent().
+ * Branded event ID carrying the schema and name for inference.
+ * @internal
  */
 export type EventId<S extends EventSchema = EventSchema, N extends string = string> = number & {
   [EVENT_BRAND]: true;
@@ -59,73 +57,53 @@ export type EventId<S extends EventSchema = EventSchema, N extends string = stri
 };
 
 /**
- * Event definition.
+ * Event definition created by {@link defineEvent}.
  *
- * Global event definition with schema for type-safe event data.
- * The name literal `N` ensures events with identical schemas are distinct types.
+ * Carries the schema for type-safe event data. The name literal `N` keeps
+ * events with identical schemas distinct types.
  */
 export type Event<S extends EventSchema = EventSchema, N extends string = string> = {
-  /**
-   * Unique event ID.
-   */
+  /** Unique event ID. */
   readonly id: EventId<S, N>;
-  /**
-   * Event name (user-defined).
-   */
+  /** Event name (user-defined). */
   readonly name: N;
-  /**
-   * Field schemas for event data (empty for tag events).
-   */
+  /** Field schemas for event data (empty for tag events). */
   readonly schema: S;
 };
 
 /**
- * Event narrowed to guarantee presence of unread data for current system context.
+ * Event narrowed by {@link hasEvents} to guarantee unread data in the current
+ * system context, making `readLastEvent()` return a non-optional value.
  */
 export type PendingEvent<E extends Event> = E & {
   readonly [HAS_EVENTS_BRAND]: (e: E) => void;
 };
 
 /**
- * Internal event entry with an observation revision.
- *
- * Stores event data along with the revision at which it was emitted.
+ * Queued event data stamped with its emission revision for windowed reads.
+ * @internal
  */
 export type EventEntry<T extends EventSchema = EventSchema> = {
-  /**
-   * Event data (undefined for tag events).
-   */
+  /** Event data (undefined for tag events). */
   data: EventData<T>;
-  /**
-   * Revision when the event was emitted.
-   */
+  /** Revision when the event was emitted. */
   revision: number;
 };
 
 /**
- * Per-world event queue metadata.
+ * Per-world double-buffered queue for one event type.
+ * @internal
  */
 export type EventQueueMeta<T extends EventSchema = EventSchema> = {
-  /**
-   * Event definition reference.
-   */
+  /** Event definition reference. */
   event: Event<T>;
-  /**
-   * Current buffer, new events are written here.
-   */
+  /** Current buffer, new events are written here. */
   current: EventEntry<T>[];
-  /**
-   * Previous buffer, events from before the last flush. Readable but not writable.
-   * Cleared on the next flush.
-   */
+  /** Previous buffer, events from before the last flush; readable but not writable, cleared on the next flush. */
   previous: EventEntry<T>[];
-  /**
-   * Per-system consumed observation revisions.
-   */
+  /** Per-system consumed observation revisions. */
   lastRevision: Map<string, number>;
-  /**
-   * Whether the queue is in the world's active list (has a non-empty buffer).
-   */
+  /** Whether the queue is in the world's active list (has a non-empty buffer). */
   active: boolean;
 };
 
@@ -135,16 +113,12 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
 
 /**
  * Event queue registry.
+ * @internal
  */
 export type EventState = {
-  /**
-   * Event queue metadata lookup (event ID -> queue metadata).
-   */
+  /** Event queue metadata lookup (event ID -> queue metadata). */
   byId: Map<EventId, EventQueueMeta>;
-
-  /**
-   * Queues with non-empty buffers, the only ones flushEvents visits.
-   */
+  /** Queues with non-empty buffers, the only ones flushEvents visits. */
   active: EventQueueMeta[];
 };
 
@@ -178,19 +152,11 @@ export function resetEventState(world: World): void {
  * Global singleton storing all event definitions.
  */
 type EventRegistry = {
-  /**
-   * Event definitions by ID.
-   */
+  /** Event definitions by ID. */
   byId: Map<EventId, Event>;
-
-  /**
-   * Globally allocated event names.
-   */
+  /** Globally allocated event names. */
   names: Set<string>;
-
-  /**
-   * Next raw ID to allocate.
-   */
+  /** Next raw ID to allocate. */
   nextId: number;
 };
 
@@ -208,28 +174,29 @@ const EVENT_REGISTRY: EventRegistry = {
 // ============================================================================
 
 /**
- * Define event type.
+ * Defines an event type with an optional schema for type-safe event data.
  *
- * Allocates a unique event name and ID with optional schema for type-safe event data.
- * Tag events (no schema) use void for data type - emit() requires no data argument.
+ * The name must be unique across the whole process: definitions are global and
+ * shared by all worlds, so define events once at module scope. Tag events
+ * (no schema) take no data argument in {@link emitEvent}; data events require
+ * data matching the schema.
  *
  * @param name - Globally unique event name used for type identity and debugging
  * @param schema - Optional field schema record (omit for tag events)
- * @returns Event definition
  * @throws {IrisDuplicateEvent} If the event name is already defined
  *
  * @example
  * ```typescript
  * // Tag event (no data)
  * const GameStarted = defineEvent("GameStarted");
- * emit(world, GameStarted); // No data argument
+ * emitEvent(world, GameStarted); // No data argument
  *
  * // Data event
  * const DamageDealt = defineEvent("DamageDealt", {
  *   target: Type.u32(),
  *   amount: Type.f32(),
  * });
- * emit(world, DamageDealt, { target: enemy, amount: 25 });
+ * emitEvent(world, DamageDealt, { target: enemy, amount: 25 });
  * ```
  */
 export function defineEvent<N extends string, S extends EventSchema = Record<never, never>>(
@@ -260,13 +227,9 @@ export function defineEvent<N extends string, S extends EventSchema = Record<nev
 // ============================================================================
 
 /**
- * Ensure event queue exists for given event in world.
- *
- * Creates queue lazily on first access (emit or fetch).
- *
- * @param world - World instance
- * @param event - Event definition
- * @returns Event queue metadata
+ * Resolves the world's queue for an event, creating it lazily on first
+ * emit or read.
+ * @internal
  */
 export function ensureEventQueue<S extends EventSchema>(world: World, event: Event<S>): EventQueueMeta<S> {
   let queue = world.events.byId.get(event.id);
@@ -291,14 +254,21 @@ export function ensureEventQueue<S extends EventSchema>(world: World, event: Eve
 // ============================================================================
 
 /**
- * Emit event to world.
+ * Emits an event for systems to read via {@link readEvents}.
  *
- * Tag events (empty schema) require no data argument.
- * Data events require data matching the schema.
+ * Callable both inside and outside system execution -- events emitted between
+ * frames are delivered on the next frame.
  *
- * @param world - World instance
- * @param event - Event definition
- * @param args - Event data (only for data events)
+ * Each system consumes events independently, and a system that already ran this
+ * frame picks the event up next frame. An unread event stays readable for the
+ * remainder of the frame it was emitted in plus one full frame; the second
+ * end-of-frame flush discards it. Tag events (empty schema) take no data argument.
+ *
+ * @example
+ * ```typescript
+ * emitEvent(world, GameStarted);
+ * emitEvent(world, DamageDealt, { target: enemy, amount: 25 });
+ * ```
  */
 export function emitEvent<S extends EventSchema>(
   world: World,
@@ -356,8 +326,6 @@ function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: strin
  *
  * Iterates both buffers (previous then current) with revision filtering.
  * Snapshots buffer lengths so events emitted during iteration are not visible.
- *
- * @internal
  */
 function iterateEventQueue<S extends EventSchema>(
   queue: EventQueueMeta<S>,
@@ -388,9 +356,7 @@ function iterateEventQueue<S extends EventSchema>(
 }
 
 /**
- * Iterate the unread window without consuming it or advancing revisions.
- *
- * @internal
+ * Iterates the unread window without consuming it or advancing revisions.
  */
 function peekEvents<S extends EventSchema>(
   world: World,
@@ -411,8 +377,6 @@ function peekEvents<S extends EventSchema>(
 
 /**
  * Last entry of a buffer inside the consumption window, scanning backwards.
- *
- * @internal
  */
 function findLastInWindow<S extends EventSchema>(
   buffer: EventEntry<S>[],
@@ -431,16 +395,18 @@ function findLastInWindow<S extends EventSchema>(
 }
 
 /**
- * Read events emitted since last call via callback.
+ * Reads each event unread by the current system, in emission order.
  *
- * Per-system isolated: each system has independent tracking of which events
- * it has consumed. Multiple systems can consume the same events independently.
+ * Per-system isolated: every system consumes the same events independently.
+ * The whole unread window is consumed up front, so events skipped by an early
+ * exit or a throwing callback are still marked read. Events emitted during
+ * iteration are not visible in the same call; a later read in the same
+ * system, or any other system, sees them.
  *
- * Consumes the whole unread window up front; outside systems does nothing.
+ * Readable only during system execution: outside a system, this does nothing.
  *
- * @param world - World instance
- * @param event - Event definition
  * @param callback - Called for each unread event. Return `false` to stop iteration early
+ * @throws {IrisRevisionOverflow} If the world's revision counter is exhausted
  *
  * @example
  * ```typescript
@@ -469,13 +435,12 @@ export function readEvents<S extends EventSchema>(
 }
 
 /**
- * Collect all unread events into an array.
+ * Collects all events unread by the current system into an array.
  *
- * Consumes the unread window; outside systems returns an empty array.
+ * Consumes the unread window like {@link readEvents}. Readable only during
+ * system execution: outside a system, this returns an empty array.
  *
- * @param world - World instance
- * @param event - Event definition
- * @returns Array of unread event data
+ * @throws {IrisRevisionOverflow} If the world's revision counter is exhausted
  *
  * @example
  * ```typescript
@@ -500,13 +465,11 @@ export function collectEvents<S extends EventSchema>(world: World, event: Event<
 // ============================================================================
 
 /**
- * Check if there are unread events for current context.
+ * Checks whether the current system has unread events, without consuming them.
  *
- * Peeks without consuming or advancing revisions; outside systems returns false.
- *
- * @param world - World instance
- * @param event - Event definition
- * @returns True if unread events exist
+ * Acts as a type guard: a true result narrows the event to `PendingEvent`,
+ * making {@link readLastEvent} return a non-optional value. Readable only
+ * during system execution: outside a system, this returns false.
  *
  * @example
  * ```typescript
@@ -531,13 +494,9 @@ export function hasEvents<S extends EventSchema>(
 }
 
 /**
- * Count unread events for current context.
+ * Counts the current system's unread events, without consuming them.
  *
- * Peeks without consuming or advancing revisions; outside systems returns zero.
- *
- * @param world - World instance
- * @param event - Event definition
- * @returns Number of unread events
+ * Readable only during system execution: outside a system, this returns zero.
  *
  * @example
  * ```typescript
@@ -556,14 +515,15 @@ export function countEvents<S extends EventSchema>(world: World, event: Event<S>
 }
 
 /**
- * Read only the most recent event, marking all as read.
+ * Reads only the most recent unread event, marking all as read.
  *
  * Useful when only the latest state matters (e.g., input, config changes).
- * Outside systems returns undefined.
+ * Narrow with {@link hasEvents} first for a non-optional return type.
+ * Readable only during system execution: outside a system, this returns
+ * undefined.
  *
- * @param world - World instance
- * @param event - Event definition
- * @returns Most recent event data (non-null if narrowed), or undefined if no unread events
+ * @returns Most recent event data, or undefined if no unread events
+ * @throws {IrisRevisionOverflow} If the world's revision counter is exhausted
  *
  * @example
  * ```typescript
@@ -598,13 +558,12 @@ export function readLastEvent<S extends EventSchema>(world: World, event: Event<
 }
 
 /**
- * Clear events (mark as read without processing).
+ * Marks the current system's unread events as read without processing them.
  *
  * Useful when a system needs to skip events under certain conditions.
- * Outside systems does nothing.
+ * Readable only during system execution: outside a system, this does nothing.
  *
- * @param world - World instance
- * @param event - Event definition
+ * @throws {IrisRevisionOverflow} If the world's revision counter is exhausted
  *
  * @example
  * ```typescript
@@ -630,24 +589,26 @@ export function clearEvents<S extends EventSchema>(world: World, event: Event<S>
 }
 
 /**
- * Flush all active event queues in the world.
- *
- * Swaps the buffers for each active queue and clears the new current buffer.
- * Called internally at the end of each frame by runOnce().
- *
- * @param world - World instance
+ * Ages every active event queue at the end of a frame: an event's second
+ * flush discards it.
  * @internal
  */
 export function flushEvents(world: World): void {
   const active = world.events.active;
 
+  // Iterate backward so swap-pop removal only moves already-visited entries
   for (let i = active.length - 1; i >= 0; i--) {
     const queue = active[i]!;
+
+    // Swap buffers: last frame's events become the expiring previous batch
     const temp = queue.current;
     queue.current = queue.previous;
     queue.previous = temp;
+
+    // Clear the recycled current buffer for this frame's emissions
     queue.current.length = 0;
 
+    // Deactivate drained queues via swap-pop; re-emitting re-activates them
     if (queue.previous.length === 0) {
       queue.active = false;
       active[i] = active[active.length - 1]!;

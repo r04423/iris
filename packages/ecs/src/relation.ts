@@ -26,16 +26,18 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Create a pair from a relation and target.
+ * Creates a pair ID from a relation and a target.
  *
- * @param relation - Relation ID
- * @param target - Target entity, tag, component, or relation
- * @returns Encoded pair ID that can be used as a component
- * @throws {IrisInvalidPair} If target is a pair
+ * The result is usable anywhere a component ID is: {@link addComponent},
+ * queries, value accessors. Deterministic -- the same relation and target
+ * always produce the same value, so pairs compare with `===`.
+ *
+ * @throws {IrisInvalidPair} If the target is itself a pair
  *
  * @example
- * const childOf = pair(ChildOf, parent);
- * addComponent(world, child, childOf);
+ * ```typescript
+ * addComponent(world, child, pair(ChildOf, parent));
+ * ```
  */
 export function pair<R extends Relation, T extends EntityId>(
   relation: R,
@@ -49,13 +51,12 @@ export function pair<R extends Relation, T extends EntityId>(
 }
 
 /**
- * Extract the relation component from a pair.
- *
- * @param pairId - Encoded pair ID
- * @returns The relation ID
+ * Extracts the relation from a pair.
  *
  * @example
- * const rel = getPairRelation(pair(ChildOf, parent)); // ChildOf
+ * ```typescript
+ * getPairRelation(pair(ChildOf, parent)); // ChildOf
+ * ```
  */
 export function getPairRelation<R extends Relation>(pairId: Pair<R>): R {
   const relationRawId = extractPairRelationId(pairId);
@@ -64,16 +65,19 @@ export function getPairRelation<R extends Relation>(pairId: Pair<R>): R {
 }
 
 /**
- * Extract the target from a pair.
+ * Extracts the target from a pair.
  *
- * For entity targets, looks up current generation for weak reference semantics.
+ * Entity targets resolve as weak references through the world: while the
+ * target lives, the original entity comes back; after it is destroyed, the
+ * result is a dead ID ({@link isEntityAlive} returns false); and once the ID
+ * is recycled, the result is the new entity occupying it.
  *
- * @param world - World instance
- * @param pairId - Encoded pair ID
- * @returns Target entity, tag, component, or relation
+ * @throws {IrisInvalidState} If the ID is not a well-formed pair
  *
  * @example
- * const target = getPairTarget(world, pair(ChildOf, parent)); // parent
+ * ```typescript
+ * getPairTarget(world, pair(ChildOf, parent)); // parent
+ * ```
  */
 export function getPairTarget(world: World, pairId: Pair): EntityId {
   const targetRawId = extractPairTargetId(pairId);
@@ -107,15 +111,17 @@ export function getPairTarget(world: World, pairId: Pair): EntityId {
 // ============================================================================
 
 /**
- * Get all targets for a relation on an entity.
+ * Gets all targets the entity holds for a relation.
  *
- * @param world - World instance
- * @param entityId - Entity to query
- * @param relation - Relation to find targets for
- * @returns Array of target IDs
+ * Only concrete targets are returned -- the wildcard aggregate is excluded.
+ * For an exclusive relation the result has at most one element.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
+ * ```typescript
  * const parents = getRelationTargets(world, child, ChildOf);
+ * ```
  */
 export function getRelationTargets(world: World, entityId: EntityId, relation: Relation): EntityId[] {
   const meta = ensureEntity(world, entityId);
@@ -152,13 +158,10 @@ export function getRelationTargets(world: World, entityId: EntityId, relation: R
 // ============================================================================
 
 /**
- * Clean up all pairs targeting a specific entity when it is destroyed.
- *
- * Handles OnDeleteTarget cascade policy by collecting and destroying subjects
- * that have pairs with the target entity.
- *
- * @param world - World instance
- * @param targetEntity - Entity being destroyed that may be a target
+ * Removes every pair targeting a destroyed entity from its subjects and, for
+ * relations with the `onDeleteTarget: "delete"` policy, destroys the subjects
+ * themselves.
+ * @internal
  */
 export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId): void {
   // Pairs themselves cannot be targets of other pairs
@@ -233,14 +236,10 @@ export function cleanupPairsTargetingEntity(world: World, targetEntity: EntityId
 }
 
 /**
- * Clean up all pairs using a specific relation when it is destroyed.
+ * Removes every pair of a destroyed relation from its subjects.
  *
- * Mirrors {@link cleanupPairsTargetingEntity} for the relation side. `onDeleteTarget`
- * describes target deletion only, so subjects are always kept.
- *
- * @param world - World instance
- * @param relation - Relation being destroyed that may be used by pairs
- *
+ * Mirror of {@link cleanupPairsTargetingEntity} for the relation side.
+ * `onDeleteTarget` describes target deletion only, so subjects are always kept.
  * @internal
  */
 export function cleanupPairsUsingRelation(world: World, relation: Relation): void {

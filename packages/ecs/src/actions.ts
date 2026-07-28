@@ -5,23 +5,24 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Actions record type.
+ * Record of world-bound functions produced by an action initializer.
  *
- * A record of functions that can be bound to a world via closure.
+ * The shape {@link defineActions} infers and preserves through its getter.
  */
 export type Actions = Record<string, (...args: never[]) => unknown>;
 
 /**
- * Action initializer function.
+ * Factory that builds an actions record with the world captured in closure.
  *
- * Takes a world and returns an actions record with world captured in closure.
+ * Passed to {@link defineActions}; runs once per world, on first access.
  */
 export type ActionInitializer<T extends Actions> = (world: World) => T;
 
 /**
- * Action getter function.
+ * Getter returned by {@link defineActions}.
  *
- * Takes a world and returns cached actions (creating on first access).
+ * Returns the world's cached actions record, running the initializer on first
+ * access.
  */
 export type ActionGetter<T extends Actions> = (world: World) => T;
 
@@ -30,12 +31,11 @@ export type ActionGetter<T extends Actions> = (world: World) => T;
 // ============================================================================
 
 /**
- * Actions registry for cached world-bound action getters.
+ * Per-world cache of initialized action records, keyed by initializer identity.
+ * @internal
  */
 export type ActionState = {
-  /**
-   * Actions lookup by initializer function.
-   */
+  /** Actions lookup by initializer function. */
   byInitializer: Map<ActionInitializer<Actions>, Actions>;
 };
 
@@ -58,25 +58,25 @@ export function resetActionState(world: World): void {
 }
 
 /**
- * Define reusable actions bound to a world via closure. Actions are initialized
- * once per world and cached for subsequent access.
+ * Defines a reusable set of world-bound actions.
  *
- * @param initializer - Function that creates actions with world captured in closure
- * @returns Getter function that returns cached actions for a world
+ * The returned getter runs the initializer once per world and caches the
+ * result: every later call with the same world returns the identical actions
+ * object.
+ *
+ * `resetWorld` clears the cache, so initializers run again on next access.
  *
  * @example
  * ```typescript
- * const transformActions = defineActions((world) => ({
- *   spawn(x: number, y: number): Entity {
+ * const playerActions = defineActions((world) => ({
+ *   spawn(x: number, y: number) {
  *     const entity = createEntity(world);
  *     addComponent(world, entity, Position, { x, y });
  *     return entity;
  *   },
  * }));
  *
- * // In systems - getter returns cached actions for the world
- * const transform = transformActions(world);
- * const player = transform.spawn(100, 200);
+ * const player = playerActions(world).spawn(100, 200);
  * ```
  */
 export function defineActions<T extends Actions>(initializer: ActionInitializer<T>): ActionGetter<T> {
@@ -85,7 +85,6 @@ export function defineActions<T extends Actions>(initializer: ActionInitializer<
     let actions = world.actions.byInitializer.get(initializer) as T | undefined;
 
     if (actions === undefined) {
-      // First access for this world - initialize and cache
       actions = initializer(world);
       world.actions.byInitializer.set(initializer, actions);
     }

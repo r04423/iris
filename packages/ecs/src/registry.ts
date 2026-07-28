@@ -8,29 +8,18 @@ import type { SchemaRecord } from "./schema.js";
 // ============================================================================
 
 /**
- * Component metadata.
- *
- * Stores component name, optional schema, and relation traits.
+ * Definition metadata for a tag, component, or relation: name, optional
+ * schema, and relation traits.
+ * @internal
  */
 export type ComponentMeta = {
-  /**
-   * Component name (user-defined).
-   */
+  /** Component name (user-defined). */
   name: string;
-
-  /**
-   * Field schemas for data components (undefined for tags).
-   */
+  /** Field schemas for data components (undefined for tags). */
   schema?: SchemaRecord;
-
-  /**
-   * If true, entity can only have one target at a time for this relation.
-   */
+  /** If true, a subject holds at most one target for this relation at a time. */
   exclusive?: boolean;
-
-  /**
-   * What happens when a pair target is destroyed. Default is "remove".
-   */
+  /** What happens to subjects when a pair target is destroyed. Default is "remove". */
   onDeleteTarget?: "remove" | "delete";
 };
 
@@ -39,24 +28,15 @@ export type ComponentMeta = {
 // ============================================================================
 
 /**
- * Options for defining relations.
- *
- * Controls relation behavior including exclusivity and delete policies.
+ * Options accepted by {@link defineRelation}.
+ * @internal
  */
 export type RelationOptions<S extends SchemaRecord = Record<string, never>> = {
-  /**
-   * Field schemas for pair data (optional).
-   */
+  /** Field schemas for pair data (optional). */
   schema?: S;
-
-  /**
-   * If true, entity can only have one target for this relation.
-   */
+  /** If true, a subject holds at most one target for this relation at a time. */
   exclusive?: boolean;
-
-  /**
-   * What happens when a pair target is destroyed. Default is "remove".
-   */
+  /** What happens to subjects when a pair target is destroyed. Default is "remove". */
   onDeleteTarget?: "remove" | "delete";
 };
 
@@ -65,33 +45,26 @@ export type RelationOptions<S extends SchemaRecord = Record<string, never>> = {
 // ============================================================================
 
 /**
- * Global singleton storing all component metadata across all worlds.
+ * Registry of all definitions, shared across worlds.
+ * @internal
  */
 export type ComponentRegistry = {
-  /**
-   * Component metadata lookup (component ID -> metadata).
-   */
+  /** Component metadata lookup (component ID -> metadata). */
   byId: Map<Tag | Component | Relation, ComponentMeta>;
-  /**
-   * Definition lookup shared by tags, components, and relations.
-   */
+  /** Definition lookup shared by tags, components, and relations. */
   byName: Map<string, Tag | Component | Relation>;
-  /**
-   * Next raw ID to allocate for tags.
-   */
+  /** Next raw ID to allocate for tags. */
   nextTagId: number;
-  /**
-   * Next raw ID to allocate for data components.
-   */
+  /** Next raw ID to allocate for data components. */
   nextComponentId: number;
-  /**
-   * Next raw ID to allocate for relations.
-   */
+  /** Next raw ID to allocate for relations. */
   nextRelationId: number;
 };
 
 /**
- * Global component registry singleton.
+ * Global definition registry singleton. Definitions are world-independent, so
+ * IDs stay stable across worlds and resets.
+ * @internal
  */
 export const COMPONENT_REGISTRY: ComponentRegistry = {
   byId: new Map(),
@@ -109,9 +82,7 @@ export const COMPONENT_REGISTRY: ComponentRegistry = {
  * Component registry view exposed on a world.
  */
 export type ComponentState = {
-  /**
-   * Component metadata lookup (component ID -> metadata).
-   */
+  /** Component metadata lookup (component ID -> metadata). */
   byId: Map<Tag | Component | Relation, ComponentMeta>;
 };
 
@@ -131,7 +102,9 @@ export function createComponentState(): ComponentState {
 // Definition Name Validation
 // ============================================================================
 
-/** @internal */
+/**
+ * Rejects names already taken by any tag, component, or relation.
+ */
 function assertDefinitionNameAvailable(name: string): void {
   if (COMPONENT_REGISTRY.byName.has(name)) {
     throw new IrisDuplicateDefinition(name);
@@ -143,14 +116,20 @@ function assertDefinitionNameAvailable(name: string): void {
 // ============================================================================
 
 /**
- * Defines a tag component. Tags are lightweight markers without data.
- * @param name - Human-readable tag name for debugging
- * @returns Encoded tag ID
+ * Defines a tag: a zero-data marker component.
+ *
+ * Definitions are global -- shared by every world and stable across
+ * `resetWorld`. Attach the tag to entities with {@link addComponent}.
+ *
+ * @param name - Name, unique across all tags, components, and relations
  * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
- * @throws {IrisDefinitionLimitExceeded} If tag limit (1,048,576) exceeded
+ * @throws {IrisDefinitionLimitExceeded} If the tag limit (1,048,576) is exceeded
+ *
  * @example
+ * ```typescript
  * const Player = defineTag("Player");
  * addComponent(world, entity, Player);
+ * ```
  */
 export function defineTag<N extends string>(name: N): Tag<N> {
   assertDefinitionNameAvailable(name);
@@ -179,15 +158,21 @@ export function defineTag<N extends string>(name: N): Tag<N> {
 // ============================================================================
 
 /**
- * Defines a data component with a typed schema for storage.
- * @param name - Human-readable component name for debugging
- * @param schema - Field schema record defining data layout
- * @returns Encoded component ID with schema type
+ * Defines a data component with a typed field schema.
+ *
+ * Definitions are global -- shared by every world and stable across
+ * `resetWorld`. The schema drives typed storage and full type inference in
+ * {@link addComponent} and the value accessors.
+ *
+ * @param name - Name, unique across all tags, components, and relations
  * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
- * @throws {IrisDefinitionLimitExceeded} If component limit (1,048,576) exceeded
+ * @throws {IrisDefinitionLimitExceeded} If the component limit (1,048,576) is exceeded
+ *
  * @example
+ * ```typescript
  * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
  * addComponent(world, entity, Position, { x: 10, y: 20 });
+ * ```
  */
 export function defineComponent<N extends string, S extends SchemaRecord>(name: N, schema: S): Component<S, N> {
   assertDefinitionNameAvailable(name);
@@ -216,15 +201,23 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
 // ============================================================================
 
 /**
- * Defines a relation for entity-to-entity relationships.
- * @param name - Human-readable relation name for debugging
- * @param options - Configuration: schema for data, exclusive trait, delete behavior
- * @returns Encoded relation ID with schema type
+ * Defines a relation for linking entities into pairs.
+ *
+ * Definitions are global -- shared by every world and stable across
+ * `resetWorld`. Options add a schema for per-pair data, the exclusive trait
+ * (one target per subject), and the `onDeleteTarget` policy for what happens
+ * to subjects when their target is destroyed. Combine with {@link pair} to
+ * build the IDs passed to `addComponent`.
+ *
+ * @param name - Name, unique across all tags, components, and relations
  * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
- * @throws {IrisDefinitionLimitExceeded} If relation limit (256) exceeded
+ * @throws {IrisDefinitionLimitExceeded} If the relation limit (256, including the built-in Wildcard) is exceeded
+ *
  * @example
+ * ```typescript
  * const ChildOf = defineRelation("ChildOf", { exclusive: true, onDeleteTarget: "delete" });
  * addComponent(world, child, pair(ChildOf, parent));
+ * ```
  */
 export function defineRelation<N extends string, S extends SchemaRecord = Record<string, never>>(
   name: N,
@@ -258,9 +251,17 @@ export function defineRelation<N extends string, S extends SchemaRecord = Record
 // ============================================================================
 
 /**
- * Wildcard relation for query patterns. Reserved as relation ID 0.
- * - `pair(Wildcard, target)` matches all entities targeting target
- * - `pair(relation, Wildcard)` matches entities with any target for relation
+ * Wildcard relation for query patterns.
+ *
+ * `pair(ChildOf, Wildcard)` matches entities with any target for the
+ * relation; `pair(Wildcard, parent)` matches entities with any relation to
+ * that target. Wildcard pairs are query-only: passing one to `addComponent`
+ * or `removeComponent` throws IrisInvalidPair.
+ *
+ * @example
+ * ```typescript
+ * const children = collectEntities(world, [pair(ChildOf, Wildcard)]);
+ * ```
  */
 export const Wildcard = defineRelation("Wildcard");
 
@@ -269,13 +270,33 @@ export const Wildcard = defineRelation("Wildcard");
 // ============================================================================
 
 /**
- * Marks a relation as exclusive (one target per subject).
- * Adding a pair with an exclusive relation auto-removes any existing pair with that relation.
+ * Trait tag marking a relation as exclusive: one target per subject.
+ *
+ * Set through `defineRelation(name, { exclusive: true })`; adding a pair for
+ * an exclusive relation replaces the subject's previous target. The trait is
+ * attached to the relation itself, so it is queryable like any tag.
+ *
+ * @example
+ * ```typescript
+ * const ChildOf = defineRelation("ChildOf", { exclusive: true });
+ * hasComponent(world, ChildOf, Exclusive); // true
+ * ```
  */
 export const Exclusive = defineTag("Exclusive");
 
 /**
- * Cascade delete subjects when target is destroyed.
- * When an entity is destroyed, all entities with a pair targeting it are also destroyed.
+ * Trait tag marking a relation whose subjects are destroyed with their target.
+ *
+ * Set through `defineRelation(name, { onDeleteTarget: "delete" })`: destroying
+ * a target also destroys every subject holding a pair of this relation to it.
+ * The trait is attached to the relation itself, so it is queryable like any
+ * tag.
+ *
+ * @example
+ * ```typescript
+ * const ChildOf = defineRelation("ChildOf", { onDeleteTarget: "delete" });
+ * addComponent(world, child, pair(ChildOf, parent));
+ * destroyEntity(world, parent); // child is destroyed too
+ * ```
  */
 export const OnDeleteTarget = defineTag("OnDeleteTarget");

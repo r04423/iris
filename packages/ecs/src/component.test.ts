@@ -3,11 +3,11 @@ import { describe, it } from "node:test";
 import {
   addComponent,
   addComponents,
-  emitComponentChanged,
   getComponentValue,
   getComponentVectorValue,
   getComponentVectorView,
   hasComponent,
+  markComponentChanged,
   removeComponent,
   setComponentValue,
   setComponentVectorValue,
@@ -1130,10 +1130,10 @@ describe("Component", () => {
   });
 
   // ============================================================================
-  // emitComponentChanged
+  // markComponentChanged
   // ============================================================================
 
-  describe("emitComponentChanged", () => {
+  describe("markComponentChanged", () => {
     it("triggers change detection without modifying value", async () => {
       const world = createWorld();
       const Position = defineComponent("PositionEmit", { x: Type.f32(), y: Type.f32() });
@@ -1155,7 +1155,7 @@ describe("Component", () => {
       await runOnce(world);
 
       // Emit change without using setComponentValue
-      emitComponentChanged(world, entity, Position);
+      markComponentChanged(world, entity, Position);
 
       // Second frame: should see the change
       await runOnce(world);
@@ -1174,7 +1174,7 @@ describe("Component", () => {
         fired++;
       });
 
-      emitComponentChanged(world, entity, Position);
+      markComponentChanged(world, entity, Position);
 
       assert.strictEqual(fired, 0);
     });
@@ -1193,7 +1193,7 @@ describe("Component", () => {
       assert.strictEqual(ticks.changed[meta.row], 10);
 
       world.revision = 30;
-      emitComponentChanged(world, entity, Position);
+      markComponentChanged(world, entity, Position);
 
       assert.strictEqual(ticks.added[meta.row], 10);
       assert.strictEqual(ticks.changed[meta.row], 30);

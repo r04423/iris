@@ -9,9 +9,10 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Event payload type mapping.
+ * Maps each observer event type to its callback argument tuple.
  *
- * Maps event names to argument tuples for type-safe observer callbacks.
+ * The tuple is spread into the callback, so a `componentAdded` observer
+ * receives `(componentId, entityId)` -- component first, entity second.
  */
 export type EventPayloads = {
   archetypeCreated: [archetype: Archetype];
@@ -32,22 +33,23 @@ export type EventPayloads = {
 };
 
 /**
- * Event type keys.
+ * Name of an observer event type, e.g. `"componentAdded"`.
  */
 export type EventType = keyof EventPayloads;
 
 /**
- * Observer callback function.
+ * Callback invoked synchronously when its event type fires.
+ *
+ * Registered with {@link registerObserverCallback}; the arguments follow
+ * {@link EventPayloads} for the event type.
  */
 export type Observer<T extends EventType> = (...args: EventPayloads[T]) => void;
 
 /**
- * Observer metadata for single event type.
+ * Registered callbacks for one observer event type.
  */
 export type ObserverMeta<T extends EventType> = {
-  /**
-   * Callbacks fired on event.
-   */
+  /** Callbacks fired on event. */
   callbacks: Observer<T>[];
 };
 
@@ -56,7 +58,8 @@ export type ObserverMeta<T extends EventType> = {
 // ============================================================================
 
 /**
- * Observer system for lifecycle events.
+ * Callback lists per observer event type.
+ * @internal
  */
 export type ObserverState = {
   [K in EventType]: ObserverMeta<K>;
@@ -91,22 +94,26 @@ export function createObserverState(): ObserverState {
 // ============================================================================
 
 /**
- * Registers a callback to be invoked when an event of the specified type is fired.
+ * Registers a callback for a lifecycle event type.
  *
- * Dispatch order is unspecified: a callback must not rely on observing the effects of
- * another callback for the same event.
+ * Observers are low-level hooks that power internals like query filter caches
+ * and removal detection -- for gameplay communication between systems, use
+ * events via `emitEvent()` and `readEvents()` instead. Callbacks fire
+ * synchronously inside the triggering operation (e.g. `componentAdded` fires
+ * during `addComponent()`, after the data is written) and survive
+ * `resetWorld()`. Remove with {@link unregisterObserverCallback}.
  *
- * During observer dispatch, a callback may unregister itself but must not
- * register or unregister other callbacks for the event being dispatched.
- *
- * @param world - The world instance containing observer state
- * @param eventType - The event type to listen for
- * @param callback - Function to invoke when the event fires
+ * Dispatch order is unspecified: a callback must not rely on observing the
+ * effects of another callback for the same event. During dispatch, a callback
+ * may unregister itself but must not register or unregister other callbacks
+ * for the event being dispatched.
  *
  * @example
- * ```ts
- * registerObserverCallback(world, "onAdd", (entity, componentId, value) => {
- *   console.log(`Component ${componentId} added to entity ${entity}`);
+ * ```typescript
+ * registerObserverCallback(world, "componentAdded", (componentId, entityId) => {
+ *   if (componentId === Health) {
+ *     console.log(`Health added to entity ${entityId}`);
+ *   }
  * });
  * ```
  */
@@ -115,22 +122,20 @@ export function registerObserverCallback<T extends EventType>(world: World, even
 }
 
 /**
- * Removes a previously registered callback for the specified event type.
+ * Removes a previously registered observer callback.
  *
- * A callback may unregister itself during dispatch. Registering or
- * unregistering any other callback for the event currently being dispatched can
- * lead to an undefined behavior.
+ * Matches by reference; unknown callbacks are ignored. A callback may
+ * unregister itself during dispatch, but unregistering any other callback for
+ * the event currently being dispatched leads to undefined behavior.
  *
- * @param world - The world instance containing observer state
- * @param eventType - The event type to stop listening for
- * @param callback - The exact callback reference to remove
+ * @param callback - The exact callback reference passed to {@link registerObserverCallback}
  *
  * @example
- * ```ts
- * const handler = (entity, componentId, value) => { ... };
- * registerObserverCallback(world, "onAdd", handler);
+ * ```typescript
+ * const onAdded = (componentId: EntityId, entityId: EntityId) => {};
+ * registerObserverCallback(world, "componentAdded", onAdded);
  * // Later:
- * unregisterObserverCallback(world, "onAdd", handler);
+ * unregisterObserverCallback(world, "componentAdded", onAdded);
  * ```
  */
 export function unregisterObserverCallback<T extends EventType>(
@@ -147,16 +152,8 @@ export function unregisterObserverCallback<T extends EventType>(
 }
 
 /**
- * Dispatches an event to all registered callbacks for the specified event type.
- *
- * @param world - The world instance containing observer state
- * @param eventType - The event type to dispatch
- * @param args - Arguments to pass to each callback (varies by event type)
- *
- * @example
- * ```ts
- * fireObserverEvent(world, "onAdd", entity, componentId, componentValue);
- * ```
+ * Dispatches an event synchronously to every registered callback.
+ * @internal
  */
 export function fireObserverEvent<T extends EventType>(world: World, eventType: T, ...args: EventPayloads[T]): void {
   const meta = world.observers[eventType];

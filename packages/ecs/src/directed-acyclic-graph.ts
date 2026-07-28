@@ -3,20 +3,10 @@
 // ============================================================================
 
 /**
- * Generic directed acyclic graph.
- *
- * Stores nodes and directed edges with adjacency lists in both directions.
- * Provides topological sort with caller-supplied comparator for deterministic
- * tiebreaking. Cycle detection occurs during sort.
- *
- * @example
- * ```typescript
- * const dag = createDag<string>();
- * addNode(dag, "a");
- * addNode(dag, "b");
- * addEdge(dag, "a", "b");
- * const sorted = topologicalSort(dag); // ["a", "b"]
- * ```
+ * Generic directed graph with adjacency sets in both directions.
+ * Acyclicity is not enforced on mutation -- cycles surface only when
+ * {@link topologicalSort} runs.
+ * @internal
  */
 export type DirectedAcyclicGraph<N> = {
   /** @internal */
@@ -34,12 +24,8 @@ export type DirectedAcyclicGraph<N> = {
 // ============================================================================
 
 /**
- * Create an empty directed acyclic graph.
- *
- * @example
- * ```typescript
- * const dag = createDag<string>();
- * ```
+ * Creates an empty directed acyclic graph.
+ * @internal
  */
 export function createDag<N>(): DirectedAcyclicGraph<N> {
   return {
@@ -51,15 +37,8 @@ export function createDag<N>(): DirectedAcyclicGraph<N> {
 }
 
 /**
- * Add a node to the graph. Idempotent.
- *
- * @param dag - Graph instance
- * @param node - Node to add
- *
- * @example
- * ```typescript
- * addNode(dag, "physics");
- * ```
+ * Adds a node to the graph. Idempotent.
+ * @internal
  */
 export function addNode<N>(dag: DirectedAcyclicGraph<N>, node: N): void {
   if (dag.nodes.has(node)) {
@@ -74,17 +53,9 @@ export function addNode<N>(dag: DirectedAcyclicGraph<N>, node: N): void {
 }
 
 /**
- * Add a directed edge from one node to another. Idempotent.
+ * Adds a directed edge. Idempotent.
  * Both nodes must already exist in the graph.
- *
- * @param dag - Graph instance
- * @param from - Source node
- * @param to - Target node
- *
- * @example
- * ```typescript
- * addEdge(dag, "a", "b"); // a must run before b
- * ```
+ * @internal
  */
 export function addEdge<N>(dag: DirectedAcyclicGraph<N>, from: N, to: N): void {
   const fwd = dag.forward.get(from)!;
@@ -104,16 +75,8 @@ export function addEdge<N>(dag: DirectedAcyclicGraph<N>, from: N, to: N): void {
 // ============================================================================
 
 /**
- * Remove a directed edge. Idempotent.
- *
- * @param dag - Graph instance
- * @param from - Source node
- * @param to - Target node
- *
- * @example
- * ```typescript
- * removeEdge(dag, "a", "b");
- * ```
+ * Removes a directed edge. Idempotent.
+ * @internal
  */
 export function removeEdge<N>(dag: DirectedAcyclicGraph<N>, from: N, to: N): void {
   dag.forward.get(from)?.delete(to);
@@ -123,15 +86,8 @@ export function removeEdge<N>(dag: DirectedAcyclicGraph<N>, from: N, to: N): voi
 }
 
 /**
- * Remove a node and all its connected edges. Idempotent.
- *
- * @param dag - Graph instance
- * @param node - Node to remove
- *
- * @example
- * ```typescript
- * removeNode(dag, "obsolete");
- * ```
+ * Removes a node and all its connected edges. Idempotent.
+ * @internal
  */
 export function removeNode<N>(dag: DirectedAcyclicGraph<N>, node: N): void {
   if (!dag.nodes.has(node)) {
@@ -167,7 +123,7 @@ export function removeNode<N>(dag: DirectedAcyclicGraph<N>, node: N): void {
 // Graph Queries
 // ============================================================================
 
-/** @internal */
+/** Shared empty result for nodes absent from the graph. */
 const EMPTY_SET: ReadonlySet<never> = new Set();
 
 /**
@@ -202,8 +158,7 @@ export function getPredecessors<N>(dag: DirectedAcyclicGraph<N>, node: N): Reado
 // ============================================================================
 
 /**
- * Binary insert into a sorted region of an array.
- * @internal
+ * Binary insert into the sorted region of an array starting at `start`.
  */
 function binaryInsert<N>(arr: N[], value: N, start: number, comparator: (a: N, b: N) => number): void {
   let low = start;
@@ -223,21 +178,13 @@ function binaryInsert<N>(arr: N[], value: N, start: number, comparator: (a: N, b
 }
 
 /**
- * Topological sort via Kahn's algorithm.
+ * Topological sort via Kahn's algorithm, sources first. The optional
+ * comparator breaks ties among unconstrained nodes for deterministic order.
+ * Results are cached until the graph is mutated.
  *
- * Returns nodes in dependency order (sources first). Uses the optional
- * comparator for deterministic tiebreaking among nodes with no ordering
- * constraint. Results are cached until the graph is mutated.
- *
- * @param dag - Graph instance
- * @param comparator - Optional comparison function for tiebreaking
- * @returns Sorted array of nodes
- * @throws Error if the graph contains a cycle
- *
- * @example
- * ```typescript
- * const sorted = topologicalSort(dag, (a, b) => a.localeCompare(b));
- * ```
+ * @throws {Error} If the graph contains a cycle -- a bare Error whose message
+ *   is the list of nodes stuck in the cycle; callers wrap it with domain context
+ * @internal
  */
 export function topologicalSort<N>(dag: DirectedAcyclicGraph<N>, comparator?: (a: N, b: N) => number): N[] {
   if (dag.cachedSort !== null) {
@@ -287,6 +234,8 @@ export function topologicalSort<N>(dag: DirectedAcyclicGraph<N>, comparator?: (a
     }
   }
 
+  // Cycle detection: Kahn's algorithm strands cycle members -- their in-degree
+  // never reaches zero, so they never enter the queue. Report the stragglers
   if (result.length !== dag.nodes.size) {
     const remaining: N[] = [];
 

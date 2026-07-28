@@ -37,8 +37,13 @@ export class IrisError extends Error {
  *
  * @example
  * ```typescript
- * // Thrown when entity limit (1,048,576) is exceeded
- * const entity = createEntity(world);
+ * try {
+ *   const entity = createEntity(world);
+ * } catch (error) {
+ *   if (error instanceof IrisLimitExceeded) {
+ *     console.log(error.resource, error.max);
+ *   }
+ * }
  * ```
  */
 export class IrisLimitExceeded extends IrisError {
@@ -60,8 +65,13 @@ export class IrisLimitExceeded extends IrisError {
  *
  * @example
  * ```typescript
- * // Thrown when accessing a destroyed entity
- * ensureEntity(world, destroyedEntity);
+ * try {
+ *   addComponent(world, staleEntity, Player);
+ * } catch (error) {
+ *   if (error instanceof IrisNotFound) {
+ *     console.log(error.resource, error.id); // "Entity", 42
+ *   }
+ * }
  * ```
  */
 export class IrisNotFound extends IrisError {
@@ -167,7 +177,7 @@ export class IrisEntityLimitExceeded extends IrisLimitExceeded {
  * @example
  * ```typescript
  * try {
- *   getComponent(world, destroyedEntity, Position);
+ *   getComponentValue(world, destroyedEntity, Position, "x");
  * } catch (error) {
  *   if (error instanceof IrisEntityNotFound) {
  *     console.log(error.id);
@@ -369,11 +379,13 @@ export class IrisTickOverflow extends IrisLimitExceeded {
 }
 
 /**
- * Thrown when the world revision counter is exhausted.
+ * Thrown when the world revision counter is exhausted. Change-detection
+ * queries and event reads inside systems advance the counter.
  *
  * @example
  * ```typescript
- * readEvents(world, MyEvent); // throws IrisRevisionOverflow after 2^53-1 revisions
+ * // Inside a system, after 2^53-1 revisions
+ * readEvents(world, DamageDealt, () => {}); // throws IrisRevisionOverflow
  * ```
  */
 export class IrisRevisionOverflow extends IrisLimitExceeded {
@@ -443,7 +455,7 @@ export class IrisDuplicateEvent extends IrisDuplicate {
  *
  * @example
  * ```typescript
- * query(world, [], () => {}); // throws IrisInvalidQuery
+ * collectEntities(world, []); // throws IrisInvalidQuery
  * ```
  */
 export class IrisInvalidQuery extends IrisInvalidArgument {
@@ -457,8 +469,8 @@ export class IrisInvalidQuery extends IrisInvalidArgument {
  *
  * @example
  * ```typescript
- * // Too many or() combinations in one query
- * query(world, manyOrGroups, () => {}); // throws IrisQueryLimitExceeded
+ * // or() groups multiply into filter branches
+ * cacheQuery(world, tooManyOrGroups); // throws IrisQueryLimitExceeded
  * ```
  */
 export class IrisQueryLimitExceeded extends IrisLimitExceeded {
