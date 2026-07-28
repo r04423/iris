@@ -229,6 +229,11 @@ export type World = {
      * Event queue metadata lookup (event ID -> queue metadata).
      */
     byId: Map<EventId, EventQueueMeta>;
+
+    /**
+     * Queues with non-empty buffers, the only ones flushEvents visits.
+     */
+    active: EventQueueMeta[];
   };
 
   /**
@@ -310,6 +315,7 @@ export function createWorld(): World {
     },
     events: {
       byId: new Map(),
+      active: [],
     },
     actions: {
       byInitializer: new Map(),
@@ -428,6 +434,7 @@ export function resetWorld(world: World): void {
 
   // 7. Clear caches
   world.events.byId.clear();
+  world.events.active.length = 0;
   world.actions.byInitializer.clear();
 
   // 8. Recreate root archetype and internal resources

@@ -722,6 +722,70 @@ describe("Event", () => {
   });
 
   // ============================================================================
+  // Flush Bookkeeping Tests
+  // ============================================================================
+
+  describe("Flush Bookkeeping", () => {
+    it("drops a queue from the active list once both buffers are empty", async () => {
+      const world = createWorld();
+      const Event = defineEvent("FlushDrain");
+      addSystem(world, function noop() {});
+
+      emitEvent(world, Event);
+      const queue = world.events.byId.get(Event.id)!;
+      assert.strictEqual(queue.active, true);
+      assert.deepStrictEqual(world.events.active, [queue]);
+
+      // First flush moves the event into the readable previous buffer
+      await runOnce(world);
+      assert.strictEqual(queue.active, true);
+
+      // Second flush expires it and drains the queue
+      await runOnce(world);
+      assert.strictEqual(queue.active, false);
+      assert.strictEqual(world.events.active.length, 0);
+    });
+
+    it("keeps read-only queues out of the active list", async () => {
+      const world = createWorld();
+      const Event = defineEvent("FlushReadOnly");
+
+      addSystem(world, function reader() {
+        hasEvents(world, Event);
+      });
+
+      await runOnce(world);
+
+      assert.strictEqual(world.events.byId.get(Event.id)!.active, false);
+      assert.strictEqual(world.events.active.length, 0);
+    });
+
+    it("re-emitting re-activates a drained queue and delivers its events", async () => {
+      const world = createWorld();
+      const Event = defineEvent("FlushReactivate", { value: Type.i32() });
+      const seen: number[] = [];
+
+      addSystem(world, function reader() {
+        readEvents(world, Event, (e) => {
+          seen.push(e.value);
+        });
+      });
+
+      emitEvent(world, Event, { value: 1 });
+      await runOnce(world);
+      await runOnce(world);
+
+      emitEvent(world, Event, { value: 2 });
+      const queue = world.events.byId.get(Event.id)!;
+      assert.strictEqual(queue.active, true);
+
+      await runOnce(world);
+
+      assert.deepStrictEqual(seen, [1, 2]);
+    });
+  });
+
+  // ============================================================================
   // Vector Schema Events
   // ============================================================================
 

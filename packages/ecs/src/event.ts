@@ -123,6 +123,10 @@ export type EventQueueMeta<T extends EventSchema = EventSchema> = {
    * Per-system consumed observation revisions.
    */
   lastRevision: Map<string, number>;
+  /**
+   * Whether the queue is in the world's active list (has a non-empty buffer).
+   */
+  active: boolean;
 };
 
 // ============================================================================
@@ -232,6 +236,7 @@ export function ensureEventQueue<S extends EventSchema>(world: World, event: Eve
       current: [],
       previous: [],
       lastRevision: new Map(),
+      active: false,
     };
 
     world.events.byId.set(event.id, queue);
@@ -264,6 +269,11 @@ export function emitEvent<S extends EventSchema>(
   const revision = world.revision;
 
   queue.current.push({ data, revision });
+
+  if (!queue.active) {
+    queue.active = true;
+    world.events.active.push(queue);
+  }
 }
 
 // ============================================================================
@@ -580,19 +590,28 @@ export function clearEvents<S extends EventSchema>(world: World, event: Event<S>
 }
 
 /**
- * Flush all event queues in the world.
+ * Flush all active event queues in the world.
  *
- * Swaps the active buffer for each queue and clears the new active buffer.
+ * Swaps the buffers for each active queue and clears the new current buffer.
  * Called internally at the end of each frame by runOnce().
  *
  * @param world - World instance
  * @internal
  */
 export function flushEvents(world: World): void {
-  for (const queue of world.events.byId.values()) {
+  const active = world.events.active;
+
+  for (let i = active.length - 1; i >= 0; i--) {
+    const queue = active[i]!;
     const temp = queue.current;
     queue.current = queue.previous;
     queue.previous = temp;
     queue.current.length = 0;
+
+    if (queue.previous.length === 0) {
+      queue.active = false;
+      active[i] = active[active.length - 1]!;
+      active.pop();
+    }
   }
 }
