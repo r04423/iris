@@ -28,6 +28,7 @@ export type EventPayloads = {
   scheduleFinished: [scheduleLabel: ScheduleLabel, duration: number];
   systemStarted: [systemId: string, scheduleLabel: ScheduleLabel];
   systemFinished: [systemId: string, scheduleLabel: ScheduleLabel, duration: number];
+  frameFailed: [error: unknown];
 };
 
 /**

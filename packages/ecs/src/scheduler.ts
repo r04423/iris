@@ -989,7 +989,10 @@ async function executeFrame(world: World): Promise<void> {
     // Flush events at end of frame
     flushEvents(world);
   } catch (error) {
+    world.execution.framePromise = null;
     world.execution.running = false;
+
+    fireObserverEvent(world, "frameFailed", error);
 
     throw error;
   } finally {
@@ -1103,7 +1106,14 @@ function scheduleFrame(world: World): void {
       return;
     }
 
-    await startFrame(world);
+    try {
+      await startFrame(world);
+    } catch (error) {
+      // Without frameFailed observers the failure stays loud
+      if (world.observers.frameFailed.callbacks.length === 0) {
+        throw error;
+      }
+    }
   });
 }
 

@@ -335,6 +335,7 @@ export function createWorld(): World {
       scheduleFinished: { callbacks: [] },
       systemStarted: { callbacks: [] },
       systemFinished: { callbacks: [] },
+      frameFailed: { callbacks: [] },
     },
     revision: 1,
   };

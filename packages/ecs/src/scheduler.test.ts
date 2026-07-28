@@ -1057,6 +1057,102 @@ describe("Scheduler", () => {
     });
   });
 
+  describe("Frame Failure", () => {
+    it("fires frameFailed when a manual frame rejects", async () => {
+      const world = createWorld();
+      const error = new Error("frame failed");
+      const seen: unknown[] = [];
+
+      registerObserverCallback(world, "frameFailed", (err) => {
+        seen.push(err);
+      });
+
+      addSystem(world, function failingSys() {
+        throw error;
+      });
+
+      await assert.rejects(runOnce(world), (actual) => actual === error);
+      assert.deepStrictEqual(seen, [error]);
+    });
+
+    it("fires frameFailed and halts the loop when a loop frame rejects", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        const error = new Error("frame failed");
+        const seen: unknown[] = [];
+
+        registerObserverCallback(world, "frameFailed", (err) => {
+          seen.push(err);
+        });
+
+        addSystem(world, function failingSys() {
+          throw error;
+        });
+
+        run(world);
+        await animationFrame.runFrame();
+
+        assert.deepStrictEqual(seen, [error]);
+        assert.strictEqual(world.execution.running, false);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("rejects the loop frame when no frameFailed observer is registered", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        const error = new Error("frame failed");
+
+        addSystem(world, function failingSys() {
+          throw error;
+        });
+
+        run(world);
+        await assert.rejects(animationFrame.runFrame(), (actual) => actual === error);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("resumes the loop when a frameFailed observer calls run", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        let ticks = 0;
+
+        registerObserverCallback(world, "frameFailed", () => {
+          run(world);
+        });
+
+        addSystem(world, function flakySys() {
+          ticks++;
+
+          if (ticks === 1) {
+            throw new Error("frame failed");
+          }
+        });
+
+        run(world);
+        await animationFrame.runFrame();
+        assert.strictEqual(animationFrame.hasFrame(), true);
+
+        await animationFrame.runFrame();
+        assert.strictEqual(ticks, 2);
+
+        await suspend(world);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+  });
+
   describe("Startup and Shutdown", () => {
     it("shares one tick across Startup and pipeline and excludes Shutdown", async () => {
       const world = createWorld();
