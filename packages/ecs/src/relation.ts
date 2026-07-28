@@ -17,7 +17,7 @@ import {
   TAG_TYPE,
 } from "./encoding.js";
 import { destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
-import { assert, IrisInvalidArgument, IrisInvalidState } from "./error.js";
+import { IrisInvalidPair, IrisInvalidState } from "./error.js";
 import { OnDeleteTarget, Wildcard } from "./registry.js";
 import type { World } from "./world.js";
 
@@ -31,7 +31,7 @@ import type { World } from "./world.js";
  * @param relation - Relation ID
  * @param target - Target entity, tag, component, or relation
  * @returns Encoded pair ID that can be used as a component
- * @throws {IrisInvalidArgument} If target is a pair
+ * @throws {IrisInvalidPair} If target is a pair
  *
  * @example
  * const childOf = pair(ChildOf, parent);
@@ -41,10 +41,9 @@ export function pair<R extends Relation, T extends EntityId>(
   relation: R,
   target: T & (T extends Pair ? never : unknown)
 ): Pair<R, T> {
-  assert(!isPair(target), IrisInvalidArgument, {
-    expected: "entity, tag, component, or relation target",
-    actual: "pair",
-  });
+  if (isPair(target)) {
+    throw new IrisInvalidPair("entity, tag, component, or relation target", "pair");
+  }
 
   return encodePair(relation, target);
 }

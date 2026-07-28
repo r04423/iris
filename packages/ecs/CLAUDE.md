@@ -23,7 +23,7 @@ Core ECS library for Iris.
 | `schema.ts` | Type definitions for component data (Type.f32(), Type.i32(), etc.) |
 | `actions.ts` | Cached world-bound action getters |
 | `world.ts` | World creation and state container (entity registry, archetypes, queries) |
-| `error.ts` | Structured error classes (LimitExceeded, NotFound, Duplicate, InvalidArgument, InvalidState) and assert() |
+| `error.ts` | Structured error hierarchy: category classes (LimitExceeded, NotFound, Duplicate, InvalidArgument, InvalidState) and specific per-domain subclasses |
 
 ## Architecture
 
@@ -67,11 +67,13 @@ for (let i = 0; i < entities.length; i++) {
 
 **Backward iteration for safe deletion** -- When removing items from arrays during iteration, MUST iterate backward to prevent index-shifting bugs. Also applies to observer dispatch (callbacks can safely unregister themselves).
 
-**Structured errors with `assert()`** -- Preconditions use `assert()` for lazy construction and type narrowing. Switch-default/unreachable paths use direct `throw`. NEVER inline `new Error()`:
+**Structured errors** -- Preconditions use direct `if`-`throw` with a specific error class from `error.ts`, so the happy path allocates nothing. Specific classes bake fixed details (resource, max, message) into their constructor and take only what varies. Unreachable switch-default paths throw a category class directly. NEVER inline `new Error()`:
 ```typescript
-assert(rawId <= ID_MASK_20, LimitExceeded, { resource: "Entity", max: ID_MASK_20, id: rawId });
+if (newRawId > ID_MASK_20) {
+  throw new IrisEntityLimitExceeded(newRawId);
+}
 ```
-Error classes: `LimitExceeded`, `NotFound`, `Duplicate`, `InvalidArgument`, `InvalidState` (all extend `IrisError`).
+Every specific class extends a category (`IrisLimitExceeded`, `IrisNotFound`, `IrisDuplicate`, `IrisInvalidArgument`, `IrisInvalidState`), all of which extend `IrisError`, so `instanceof` works at any granularity.
 
 **Section headers** -- Divide source files into logical regions:
 ```typescript

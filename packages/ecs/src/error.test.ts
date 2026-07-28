@@ -1,13 +1,18 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import {
+  IrisCircularDependency,
+  IrisDefinitionLimitExceeded,
   IrisDuplicate,
+  IrisDuplicateDefinition,
+  IrisEntityLimitExceeded,
+  IrisEntityNotFound,
   IrisError,
   IrisInvalidArgument,
   IrisInvalidState,
   IrisLimitExceeded,
   IrisNotFound,
-  assert as irisAssert,
+  IrisSchedulerBusy,
 } from "./error.js";
 
 describe("Error", () => {
@@ -106,43 +111,32 @@ describe("Error", () => {
     });
   });
 
-  describe("assert", () => {
-    it("passes on truthy condition", () => {
-      assert.doesNotThrow(() => {
-        irisAssert(true, IrisLimitExceeded, { resource: "Entity", max: 100 });
-      });
+  describe("specific errors", () => {
+    it("extends the matching category", () => {
+      assert.ok(new IrisEntityNotFound(42) instanceof IrisNotFound);
+      assert.ok(new IrisDuplicateDefinition("Position") instanceof IrisDuplicate);
+      assert.ok(new IrisSchedulerBusy("busy") instanceof IrisInvalidState);
+      assert.ok(new IrisEntityLimitExceeded(1048576) instanceof IrisLimitExceeded);
     });
 
-    it("passes on truthy non-boolean values", () => {
-      assert.doesNotThrow(() => {
-        irisAssert(1, IrisLimitExceeded, { resource: "Entity", max: 100 });
-        irisAssert("hello", IrisLimitExceeded, { resource: "Entity", max: 100 });
-        irisAssert({}, IrisLimitExceeded, { resource: "Entity", max: 100 });
-      });
+    it("bakes fixed details into category fields", () => {
+      const error = new IrisEntityLimitExceeded(1048576);
+
+      assert.strictEqual(error.resource, "Entity");
+      assert.strictEqual(error.max, 1048575);
+      assert.strictEqual(error.id, 1048576);
     });
 
-    it("throws correct error class on falsy condition", () => {
-      assert.throws(() => irisAssert(false, IrisLimitExceeded, { resource: "Entity", max: 100 }), IrisLimitExceeded);
-
-      assert.throws(() => irisAssert(0, IrisNotFound, { resource: "System", id: "foo" }), IrisNotFound);
-
-      assert.throws(() => irisAssert(null, IrisDuplicate, { resource: "Schedule", id: "Update" }), IrisDuplicate);
-
-      assert.throws(() => irisAssert(undefined, IrisInvalidArgument, { expected: "name" }), IrisInvalidArgument);
-
-      assert.throws(() => irisAssert("", IrisInvalidState, { message: "bad state" }), IrisInvalidState);
+    it("selects definition limit by kind", () => {
+      assert.strictEqual(new IrisDefinitionLimitExceeded("Tag").max, 1048575);
+      assert.strictEqual(new IrisDefinitionLimitExceeded("Component").max, 1048575);
+      assert.strictEqual(new IrisDefinitionLimitExceeded("Relation").max, 255);
     });
 
-    it("constructs error with correct params", () => {
-      try {
-        irisAssert(false, IrisLimitExceeded, { resource: "Tag", max: 256, id: 257 });
-        assert.fail("should have thrown");
-      } catch (error) {
-        assert.ok(error instanceof IrisLimitExceeded);
-        assert.strictEqual(error.resource, "Tag");
-        assert.strictEqual(error.max, 256);
-        assert.strictEqual(error.id, 257);
-      }
+    it("formats circular dependency message", () => {
+      const error = new IrisCircularDependency("Update", "a, b");
+
+      assert.strictEqual(error.message, 'Circular dependency in schedule "Update": a, b');
     });
   });
 });

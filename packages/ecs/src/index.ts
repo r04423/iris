@@ -3,13 +3,35 @@
 // ============================================================================
 
 export {
-  assert,
+  IrisCircularDependency,
+  IrisDefinitionLimitExceeded,
   IrisDuplicate,
+  IrisDuplicateDefinition,
+  IrisDuplicateEvent,
+  IrisDuplicateName,
+  IrisDuplicateSchedule,
+  IrisDuplicateSystem,
+  IrisDuplicateSystemSet,
+  IrisEntityLimitExceeded,
+  IrisEntityNotFound,
   IrisError,
   IrisInvalidArgument,
+  IrisInvalidInterval,
+  IrisInvalidName,
+  IrisInvalidPair,
+  IrisInvalidQuery,
   IrisInvalidState,
+  IrisInvalidSystemName,
+  IrisInvalidVectorSize,
   IrisLimitExceeded,
   IrisNotFound,
+  IrisQueryLimitExceeded,
+  IrisRevisionOverflow,
+  IrisScheduleNotFound,
+  IrisSchedulerBusy,
+  IrisSystemNotFound,
+  IrisSystemSetNotFound,
+  IrisTickOverflow,
 } from "./error.js";
 
 // ============================================================================

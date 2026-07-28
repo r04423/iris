@@ -1,6 +1,6 @@
 import { addComponent, getComponentValue, hasComponent, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId, EntityWith } from "./encoding.js";
-import { assert, IrisDuplicate, IrisInvalidArgument } from "./error.js";
+import { IrisDuplicateName, IrisInvalidName } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent } from "./registry.js";
 import { Type } from "./schema.js";
@@ -102,8 +102,13 @@ export function initNameSystem(world: World): void {
       return;
     }
 
-    assert(current, IrisInvalidArgument, { expected: "non-empty name" });
-    assert(!nameToEntity.has(current), IrisDuplicate, { resource: "Name", id: current });
+    if (!current) {
+      throw new IrisInvalidName();
+    }
+
+    if (nameToEntity.has(current)) {
+      throw new IrisDuplicateName(current);
+    }
 
     // Remove old mapping if renaming an entity
     if (previous !== undefined) {
@@ -151,21 +156,25 @@ export function getName(world: World, entityId: EntityId): string | undefined {
  * @param world - World instance
  * @param entityId - Entity to name
  * @param name - Name to assign (must be unique and non-empty)
- * @throws {IrisInvalidArgument} If name is empty
- * @throws {IrisDuplicate} If name already exists
+ * @throws {IrisInvalidName} If name is empty
+ * @throws {IrisDuplicateName} If name already exists
  * @example
  * ```ts
  * setName(world, player, "player-1");
  * ```
  */
 export function setName(world: World, entityId: EntityId, name: string): void {
-  assert(name, IrisInvalidArgument, { expected: "non-empty name" });
+  if (!name) {
+    throw new IrisInvalidName();
+  }
 
   if (getName(world, entityId) === name) {
     return;
   }
 
-  assert(lookupByName(world, name) === undefined, IrisDuplicate, { resource: "Name", id: name });
+  if (lookupByName(world, name) !== undefined) {
+    throw new IrisDuplicateName(name);
+  }
 
   if (!hasComponent(world, entityId, Name)) {
     addComponent(world, entityId, Name, { value: name });

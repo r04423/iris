@@ -4,7 +4,7 @@ import type { ArchetypeState } from "./archetype.js";
 import { createArchetypeState, registerArchetype, resetArchetypeState } from "./archetype.js";
 import type { EntityState } from "./entity.js";
 import { createEntityState, resetEntityState } from "./entity.js";
-import { assert, IrisInvalidState } from "./error.js";
+import { IrisSchedulerBusy } from "./error.js";
 import type { EventState } from "./event.js";
 import { createEventState, resetEventState } from "./event.js";
 import type { FilterState } from "./filters.js";
@@ -142,7 +142,7 @@ export function createWorld(): World {
  * Resets world to initial state, clearing all entities and caches.
  *
  * @param world - World instance to reset
- * @throws {IrisInvalidState} If scheduler execution is active
+ * @throws {IrisSchedulerBusy} If scheduler execution is active
  *
  * @example
  * ```typescript
@@ -152,11 +152,9 @@ export function createWorld(): World {
  * ```
  */
 export function resetWorld(world: World): void {
-  assert(
-    !world.execution.running && world.execution.framePromise === null && world.execution.shutdownPromise === null,
-    IrisInvalidState,
-    { message: "Cannot reset world while scheduler execution is active" }
-  );
+  if (world.execution.running || world.execution.framePromise !== null || world.execution.shutdownPromise !== null) {
+    throw new IrisSchedulerBusy("Cannot reset world while scheduler execution is active");
+  }
 
   world.revision = 1;
 

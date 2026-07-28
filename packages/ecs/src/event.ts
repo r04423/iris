@@ -1,4 +1,4 @@
-import { assert, IrisDuplicate, IrisLimitExceeded } from "./error.js";
+import { IrisDuplicateEvent, IrisRevisionOverflow } from "./error.js";
 import type { Schema, SchemaRecord } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -216,7 +216,7 @@ const EVENT_REGISTRY: EventRegistry = {
  * @param name - Globally unique event name used for type identity and debugging
  * @param schema - Optional field schema record (omit for tag events)
  * @returns Event definition
- * @throws {IrisDuplicate} If the event name is already defined
+ * @throws {IrisDuplicateEvent} If the event name is already defined
  *
  * @example
  * ```typescript
@@ -236,7 +236,9 @@ export function defineEvent<N extends string, S extends EventSchema = Record<nev
   name: N,
   schema?: S
 ): Event<S, N> {
-  assert(!EVENT_REGISTRY.names.has(name), IrisDuplicate, { resource: "Event", id: name });
+  if (EVENT_REGISTRY.names.has(name)) {
+    throw new IrisDuplicateEvent(name);
+  }
 
   const id = EVENT_REGISTRY.nextId as EventId<S, N>;
 
@@ -339,10 +341,9 @@ function inWindow(entry: EventEntry, lastRevision: number, boundary: number): bo
 function consumeEventWindow(world: World, queue: EventQueueMeta, systemId: string, boundary: number): number {
   const previous = lastConsumedRevision(queue, systemId);
 
-  assert(boundary < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
-    resource: "World revision",
-    max: Number.MAX_SAFE_INTEGER,
-  });
+  if (boundary >= Number.MAX_SAFE_INTEGER) {
+    throw new IrisRevisionOverflow();
+  }
 
   queue.lastRevision.set(systemId, boundary);
   world.revision = boundary + 1;

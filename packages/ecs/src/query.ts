@@ -1,6 +1,6 @@
 import type { FieldColumnsOf } from "./archetype.js";
 import type { Component, EntityId, EntityWith, Pair, Relation } from "./encoding.js";
-import { assert, IrisInvalidArgument, IrisLimitExceeded } from "./error.js";
+import { IrisInvalidQuery, IrisQueryLimitExceeded, IrisRevisionOverflow } from "./error.js";
 import type { FilterMeta, FilterTerms } from "./filters.js";
 import { ensureFilter } from "./filters.js";
 import type { SchemaRecord } from "./schema.js";
@@ -227,7 +227,9 @@ export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> 
  * const moving = collectEntities(world, [Position, or(Velocity, Acceleration)]);
  */
 export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[number]> {
-  assert(componentIds.length > 0, IrisInvalidArgument, { expected: "at least one component in or()" });
+  if (componentIds.length === 0) {
+    throw new IrisInvalidQuery("at least one component in or()");
+  }
 
   return { type: "or", componentIds };
 }
@@ -351,7 +353,7 @@ export function hashQuery(
  * @param world - World instance
  * @param terms - Components and modifiers
  * @returns Query with the requested component order
- * @throws {IrisInvalidArgument} If no included components (query must match something)
+ * @throws {IrisInvalidQuery} If no included components (query must match something)
  *
  * @example
  * const query = cacheQuery(world, [Position, Velocity, not(Dead)]);
@@ -392,9 +394,9 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
   // Filter must include added/changed components since they must be present on entity
   const filterInclude = include.concat(added, changed);
 
-  assert(filterInclude.length > 0 || orGroups.length > 0, IrisInvalidArgument, {
-    expected: "at least one component in query",
-  });
+  if (filterInclude.length === 0 && orGroups.length === 0) {
+    throw new IrisInvalidQuery("at least one component in query");
+  }
 
   const queryId = hashQuery(include, exclude, added, changed, orGroups);
 
@@ -459,10 +461,9 @@ function buildQueryFilters(
     branches = next;
   }
 
-  assert(branches.length <= MAX_QUERY_BRANCHES, IrisLimitExceeded, {
-    resource: "Query filter branches",
-    max: MAX_QUERY_BRANCHES,
-  });
+  if (branches.length > MAX_QUERY_BRANCHES) {
+    throw new IrisQueryLimitExceeded(MAX_QUERY_BRANCHES);
+  }
 
   const filters: FilterMeta[] = [];
 
@@ -624,10 +625,9 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
   const boundary = world.revision;
   const lastRevision = queryMeta.lastRevision.get(systemId) ?? 0;
 
-  assert(boundary < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
-    resource: "World revision",
-    max: Number.MAX_SAFE_INTEGER,
-  });
+  if (boundary >= Number.MAX_SAFE_INTEGER) {
+    throw new IrisRevisionOverflow();
+  }
 
   queryMeta.lastRevision.set(systemId, boundary);
   world.revision = boundary + 1;
@@ -863,9 +863,9 @@ export function queryColumns(
   const query = resolveQuery(world, termsOrQuery);
   const queryMeta = query.meta;
 
-  assert(queryMeta.added.length === 0 && queryMeta.changed.length === 0, IrisInvalidArgument, {
-    expected: "queryColumns does not support added() or changed() modifiers",
-  });
+  if (queryMeta.added.length > 0 || queryMeta.changed.length > 0) {
+    throw new IrisInvalidQuery("queryColumns does not support added() or changed() modifiers");
+  }
 
   const filters = queryMeta.filters;
   const requested = query.requested;

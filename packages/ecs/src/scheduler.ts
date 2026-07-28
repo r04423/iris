@@ -9,12 +9,16 @@ import {
   topologicalSort,
 } from "./directed-acyclic-graph.js";
 import {
-  assert,
-  IrisDuplicate,
-  IrisInvalidArgument,
-  IrisInvalidState,
-  IrisLimitExceeded,
-  IrisNotFound,
+  IrisCircularDependency,
+  IrisDuplicateSchedule,
+  IrisDuplicateSystem,
+  IrisDuplicateSystemSet,
+  IrisInvalidSystemName,
+  IrisScheduleNotFound,
+  IrisSchedulerBusy,
+  IrisSystemNotFound,
+  IrisSystemSetNotFound,
+  IrisTickOverflow,
 } from "./error.js";
 import { flushEvents } from "./event.js";
 import { fireObserverEvent } from "./observer.js";
@@ -637,8 +641,13 @@ export function defineSystemSet(name: string): SystemSetLabel {
  * ```
  */
 export function addSystemSet(world: World, set: SystemSetLabel, options?: SystemSetOptions): void {
-  assert(!world.systemSets.byId.has(set), IrisDuplicate, { resource: "SystemSet", id: set });
-  assert(!world.systems.byId.has(set), IrisDuplicate, { resource: "System", id: set });
+  if (world.systemSets.byId.has(set)) {
+    throw new IrisDuplicateSystemSet(set);
+  }
+
+  if (world.systems.byId.has(set)) {
+    throw new IrisDuplicateSystem(set);
+  }
 
   world.systemSets.byId.set(set, {
     schedule: options?.schedule ?? Update,
@@ -709,19 +718,23 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
   const runner = factory === null ? (system as SystemRunner) : null;
   const name = options?.name ?? system.name;
 
-  assert(name && name !== "anonymous", IrisInvalidArgument, { expected: "named system function or name option" });
-  assert(!world.systems.byId.has(name), IrisDuplicate, { resource: "System", id: name });
-  assert(!world.systemSets.byId.has(name as SystemSetLabel), IrisDuplicate, { resource: "SystemSet", id: name });
+  if (!name || name === "anonymous") {
+    throw new IrisInvalidSystemName();
+  }
+
+  if (world.systems.byId.has(name)) {
+    throw new IrisDuplicateSystem(name);
+  }
+
+  if (world.systemSets.byId.has(name as SystemSetLabel)) {
+    throw new IrisDuplicateSystemSet(name);
+  }
 
   const setLabel = options?.set;
   const setMeta = setLabel === undefined ? null : (world.systemSets.byId.get(setLabel) ?? null);
 
-  if (setLabel !== undefined) {
-    assert(setMeta !== null, IrisNotFound, {
-      resource: "SystemSet",
-      id: setLabel,
-      context: `"${name}" set option`,
-    });
+  if (setLabel !== undefined && setMeta === null) {
+    throw new IrisSystemSetNotFound(setLabel, `"${name}" set option`);
   }
 
   world.systems.byId.set(name, {
@@ -881,11 +894,13 @@ function insertScheduleAt(world: World, schedule: ScheduleLabel, anchor: Schedul
   // Startup and Shutdown already own a lifecycle slot outside the pipeline.
   const reserved = schedule === Startup || schedule === Shutdown;
 
-  assert(idx !== -1, IrisNotFound, { resource: "Schedule", id: anchor, context: "pipeline" });
-  assert(!reserved && !world.schedules.pipeline.includes(schedule), IrisDuplicate, {
-    resource: "Schedule",
-    id: schedule,
-  });
+  if (idx === -1) {
+    throw new IrisScheduleNotFound(anchor, "pipeline");
+  }
+
+  if (reserved || world.schedules.pipeline.includes(schedule)) {
+    throw new IrisDuplicateSchedule(schedule);
+  }
 
   world.schedules.pipeline.splice(idx + offset, 0, schedule);
   world.schedules.dirty = true;
@@ -929,11 +944,7 @@ function assertConstraintTarget(
   scheduleLabel: ScheduleLabel
 ): void {
   if (!scheduleSystems.has(target) && !scheduleSets.has(target)) {
-    throw new IrisNotFound({
-      resource: "System or SystemSet",
-      id: target,
-      context: `"${owner}" ${kind} constraint in schedule "${scheduleLabel}"`,
-    });
+    throw new IrisSystemNotFound(target, `"${owner}" ${kind} constraint in schedule "${scheduleLabel}"`);
   }
 }
 
@@ -1026,9 +1037,7 @@ function buildSchedule(world: World, scheduleLabel: ScheduleLabel): void {
       return scheduleSystems.get(a)!.index - scheduleSystems.get(b)!.index;
     });
   } catch (err) {
-    throw new IrisInvalidState({
-      message: `Circular dependency in schedule "${scheduleLabel}": ${err instanceof Error ? err.message : String(err)}`,
-    });
+    throw new IrisCircularDependency(scheduleLabel, err instanceof Error ? err.message : String(err));
   }
 
   world.schedules.byId.set(scheduleLabel, result);
@@ -1044,11 +1053,9 @@ function rebuildPipeline(world: World): void {
   executable.add(Shutdown);
 
   for (const [name, meta] of world.systems.byId) {
-    assert(executable.has(meta.schedule), IrisNotFound, {
-      resource: "Schedule",
-      id: meta.schedule,
-      context: `"${name}" schedule option`,
-    });
+    if (!executable.has(meta.schedule)) {
+      throw new IrisScheduleNotFound(meta.schedule, `"${name}" schedule option`);
+    }
   }
 
   // Build Startup and Shutdown schedules
@@ -1240,10 +1247,9 @@ export function createTimeoutDriver(intervalMs = 16): FrameDriver {
 /** Execute one frame. */
 async function executeFrame(world: World): Promise<void> {
   try {
-    assert(world.execution.tick < Number.MAX_SAFE_INTEGER, IrisLimitExceeded, {
-      resource: "World frame tick",
-      max: Number.MAX_SAFE_INTEGER,
-    });
+    if (world.execution.tick >= Number.MAX_SAFE_INTEGER) {
+      throw new IrisTickOverflow();
+    }
 
     world.execution.tick++;
 
@@ -1284,8 +1290,13 @@ async function executeFrame(world: World): Promise<void> {
  * Admit and start a frame. Rejects while another frame or Shutdown is active.
  */
 function startFrame(world: World): Promise<void> {
-  assert(world.execution.framePromise === null, IrisInvalidState, { message: "A frame is already executing" });
-  assert(world.execution.shutdownPromise === null, IrisInvalidState, { message: "Shutdown is executing" });
+  if (world.execution.framePromise !== null) {
+    throw new IrisSchedulerBusy("A frame is already executing");
+  }
+
+  if (world.execution.shutdownPromise !== null) {
+    throw new IrisSchedulerBusy("Shutdown is executing");
+  }
 
   world.execution.shutdownRan = false;
 
@@ -1310,7 +1321,9 @@ function startFrame(world: World): Promise<void> {
  * ```
  */
 export async function runOnce(world: World): Promise<void> {
-  assert(!world.execution.running, IrisInvalidState, { message: "The main loop is running" });
+  if (world.execution.running) {
+    throw new IrisSchedulerBusy("The main loop is running");
+  }
 
   await startFrame(world);
 }

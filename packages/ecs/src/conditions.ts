@@ -1,4 +1,4 @@
-import { assert, IrisInvalidArgument } from "./error.js";
+import { IrisInvalidInterval } from "./error.js";
 import { type ConditionFactory, defineCondition } from "./scheduler.js";
 
 // ============================================================================
@@ -35,7 +35,7 @@ export function once(): ConditionFactory {
  *
  * @param ticks - Positive safe integer interval, counted in condition evaluations
  * @returns Condition factory that passes on every nth evaluation
- * @throws {IrisInvalidArgument} If ticks is not a positive safe integer
+ * @throws {IrisInvalidInterval} If ticks is not a positive safe integer
  *
  * @example
  * ```typescript
@@ -43,10 +43,9 @@ export function once(): ConditionFactory {
  * ```
  */
 export function every(ticks: number): ConditionFactory {
-  assert(Number.isSafeInteger(ticks) && ticks > 0, IrisInvalidArgument, {
-    expected: "ticks to be a positive safe integer",
-    actual: String(ticks),
-  });
+  if (!Number.isSafeInteger(ticks) || ticks <= 0) {
+    throw new IrisInvalidInterval(ticks);
+  }
 
   return defineCondition(`every(${ticks})`, () => {
     let count = 0;

@@ -4,7 +4,7 @@ import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } fro
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
 import { ensureEntity, moveEntityToArchetype } from "./entity.js";
-import { assert, IrisInvalidArgument } from "./error.js";
+import { IrisInvalidPair } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget } from "./relation.js";
@@ -82,10 +82,9 @@ export function addComponent<S extends SchemaRecord>(
   const relation = getPairRelation(componentId);
   const target = getPairTarget(world, componentId);
 
-  assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
-    expected: "concrete pair",
-    actual: "wildcard pair (wildcards are query patterns)",
-  });
+  if (relation === Wildcard || target === Wildcard) {
+    throw new IrisInvalidPair("concrete pair", "wildcard pair (wildcards are query patterns)");
+  }
 
   const targetWildcard = encodePair(Wildcard, target);
   const relationWildcard = encodePair(relation, Wildcard);
@@ -247,7 +246,7 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
  * @param world - World instance
  * @param entityId - Entity to modify
  * @param componentId - Component to remove
- * @throws {IrisInvalidArgument} If the component is a wildcard pair
+ * @throws {IrisInvalidPair} If the component is a wildcard pair
  *
  * @example
  * ```typescript
@@ -277,10 +276,9 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
   const relation = getPairRelation(componentId);
   const target = getPairTarget(world, componentId);
 
-  assert(relation !== Wildcard && target !== Wildcard, IrisInvalidArgument, {
-    expected: "concrete pair",
-    actual: "wildcard pair (maintained automatically)",
-  });
+  if (relation === Wildcard || target === Wildcard) {
+    throw new IrisInvalidPair("concrete pair", "wildcard pair (maintained automatically)");
+  }
 
   const targetWildcard = encodePair(Wildcard, target);
   const relationWildcard = encodePair(relation, Wildcard);
@@ -322,7 +320,7 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
  * @param entityId - Entity to check
  * @param componentId - Component to check
  * @returns True if entity has component
- * @throws {IrisNotFound} If the entity is not alive in the world
+ * @throws {IrisEntityNotFound} If the entity is not alive in the world
  *
  * @example
  * ```typescript
