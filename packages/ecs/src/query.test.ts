@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, getComponentValue, removeComponent, setComponentValue } from "./component.js";
-import type { EntityId } from "./encoding.js";
+import type { Entity, EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded } from "./error.js";
 import type { OrModifier } from "./query.js";
@@ -2756,7 +2756,7 @@ describe("Query", () => {
       it("supports safe backward iteration with entity destruction", () => {
         const world = createWorld();
         const Health = defineComponent("qc_mut_Health", { hp: Type.i32() });
-        const entities: ReturnType<typeof createEntity>[] = [];
+        const entities: Entity[] = [];
 
         for (let i = 0; i < 5; i++) {
           const e = createEntity(world);

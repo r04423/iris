@@ -46,9 +46,24 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, entity), true);
       assert.strictEqual(hasComponent(world, entity, Player), true);
       assert.strictEqual(hasComponent(world, entity, Position), true);
-      const x: 10 | undefined = getComponentValue(world, entity, Position, "x");
+      const x: 10 = getComponentValue(world, entity, Position, "x");
       assert.strictEqual(x, 10);
       assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
+    });
+
+    it("narrows the returned entity for every entry", () => {
+      const world = createWorld();
+      const Player = defineTag("ce_narrow_Player");
+      const Position = defineComponent("ce_narrow_Position", { x: Type.f32(), y: Type.f32() });
+      const Amount = defineRelation("ce_narrow_Amount", { schema: { value: Type.f32() } });
+      const target = createEntity(world);
+
+      const entity = createEntity(world, [Player, [Position, { x: 1, y: 2 }], [pair(Amount, target), { value: 3 }]]);
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      const value: number = getComponentValue(world, entity, pair(Amount, target), "value");
+      assert.strictEqual(x, 1);
+      assert.strictEqual(value, 3);
     });
 
     it("creates entity with pair entries", () => {

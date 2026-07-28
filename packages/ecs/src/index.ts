@@ -152,7 +152,7 @@ export {
 // ============================================================================
 
 export type { ActionGetter, ActionInitializer, Actions } from "./actions.js";
-export type { ComponentEntry, ValidateEntries } from "./component.js";
+export type { ComponentEntry, EntryComponent, ValidateEntries } from "./component.js";
 export type {
   Component,
   Entity,

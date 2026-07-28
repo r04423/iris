@@ -207,7 +207,7 @@ export type ValidateEntries<T extends readonly ComponentEntry[]> = {
 };
 
 /** Component IDs carried by an entries tuple; bare entries are the ID itself. */
-type EntryComponent<E extends ComponentEntry> = E extends readonly [infer C extends EntityId, unknown] ? C : E;
+export type EntryComponent<E extends ComponentEntry> = E extends readonly [infer C extends EntityId, unknown] ? C : E;
 
 /**
  * Adds multiple components to an entity in one call.

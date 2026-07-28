@@ -1,8 +1,8 @@
 import type { Archetype } from "./archetype.js";
 import { addEntityToArchetype, removeEntityFromArchetypeByRow, transferEntityToArchetypeByRow } from "./archetype.js";
-import type { ComponentEntry, ValidateEntries } from "./component.js";
+import type { ComponentEntry, EntryComponent, ValidateEntries } from "./component.js";
 import { addComponent, addComponents, cascadeRemoveComponent } from "./component.js";
-import type { Component, Entity, EntityId, Relation } from "./encoding.js";
+import type { Component, Entity, EntityId, EntityWith, Relation } from "./encoding.js";
 import {
   COMPONENT_TYPE,
   ENTITY_TYPE,
@@ -228,6 +228,9 @@ export function ensureEntity(world: World, entityId: EntityId): EntityMeta {
  * would. IDs of destroyed entities are recycled, so treat the returned value
  * as opaque.
  *
+ * The returned entity is narrowed for every entry, making the typed accessors
+ * like {@link getComponentValue} return non-optional values.
+ *
  * @throws {IrisEntityLimitExceeded} If the limit of 1,048,575 concurrently allocated IDs is exceeded
  *
  * @example
@@ -243,7 +246,7 @@ export function createEntity(world: World): Entity;
 export function createEntity<const T extends readonly ComponentEntry[]>(
   world: World,
   entries: T & ValidateEntries<T>
-): Entity;
+): Entity & EntityWith<EntryComponent<T[number]>>;
 
 export function createEntity(world: World, entries?: readonly ComponentEntry[]): Entity {
   const entityId = allocateEntityId(world);
