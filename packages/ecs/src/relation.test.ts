@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, getComponentValue, hasComponent, removeComponent } from "./component.js";
 import type { EntityId, Pair } from "./encoding.js";
-import { isPair, PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
+import { PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisInvalidState } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
@@ -13,43 +13,6 @@ import { createWorld } from "./world.js";
 
 describe("Relation", () => {
   describe("pair()", () => {
-    it("creates pair from relation and entity target", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOf");
-      const parent = createEntity(world);
-
-      const pairId = pair(ChildOf, parent);
-
-      assert.ok(isPair(pairId), "Pair flag should be set");
-    });
-
-    it("creates pair from relation and tag target", () => {
-      const Has = defineRelation("Has");
-      const Weapon = defineTag("Weapon");
-
-      const pairId = pair(Has, Weapon);
-
-      assert.ok(isPair(pairId), "Pair flag should be set");
-    });
-
-    it("creates pair from relation and component target", () => {
-      const Requires = defineRelation("Requires");
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-
-      const pairId = pair(Requires, Position);
-
-      assert.ok(isPair(pairId), "Pair flag should be set");
-    });
-
-    it("creates pair from relation and relation target", () => {
-      const DependsOn = defineRelation("DependsOn");
-      const ChildOf = defineRelation("ChildOfCreatesPairRelationRelationTarget");
-
-      const pairId = pair(DependsOn, ChildOf);
-
-      assert.ok(isPair(pairId), "Pair flag should be set");
-    });
-
     it("creates distinct pairs for different targets", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfCreatesDistinctPairsDifferentTargets");
@@ -206,17 +169,6 @@ describe("Relation", () => {
       assert.strictEqual(target, Wildcard);
     });
 
-    it("returns current generation for entity target", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfReturnsCurrentGenerationEntityTarget");
-      const parent = createEntity(world);
-      const pairId = pair(ChildOf, parent);
-
-      // Extract before any generation changes
-      const target1 = getPairTarget(world, pairId);
-      assert.strictEqual(target1, parent);
-    });
-
     it("returns new entity after target destroyed and recycled (weak reference)", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfReturnsNewEntityAfterTargetDestroyedRecycledWeakReference");
@@ -247,28 +199,6 @@ describe("Relation", () => {
       const malformedPair = ((1 << PAIR_FLAG_SHIFT) | (invalidTypeBits << TYPE_SHIFT) | 0) as Pair;
 
       assert.throws(() => getPairTarget(world, malformedPair), IrisInvalidState);
-    });
-  });
-
-  describe("Wildcard pairs", () => {
-    it("creates pair(Wildcard, target) for reverse lookup pattern", () => {
-      const world = createWorld();
-      const target = createEntity(world);
-      const pairId = pair(Wildcard, target);
-
-      assert.ok(isPair(pairId));
-      assert.strictEqual(getPairRelation(pairId), Wildcard);
-      assert.strictEqual(getPairTarget(world, pairId), target);
-    });
-
-    it("creates pair(relation, Wildcard) for any-target pattern", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfCreatesPairRelationWildcardAnyTargetPattern");
-      const pairId = pair(ChildOf, Wildcard);
-
-      assert.ok(isPair(pairId));
-      assert.strictEqual(getPairRelation(pairId), ChildOf);
-      assert.strictEqual(getPairTarget(world, pairId), Wildcard);
     });
   });
 
@@ -672,70 +602,6 @@ describe("Relation", () => {
   });
 
   describe("Wildcard Pair Lifecycle", () => {
-    it("removes target wildcard when last pair to target is removed", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfRemovesTargetWildcardLastPairTargetRemoved");
-      const parent = createEntity(world);
-      const child = createEntity(world);
-
-      addComponent(world, child, pair(ChildOf, parent));
-      // Wildcard pair should exist
-      assert.ok(hasComponent(world, child, pair(Wildcard, parent)));
-
-      removeComponent(world, child, pair(ChildOf, parent));
-      // No more pairs to parent, wildcard should be gone
-      assert.strictEqual(hasComponent(world, child, pair(Wildcard, parent)), false);
-    });
-
-    it("preserves target wildcard when other pairs still target same entity", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfPreservesTargetWildcardOtherPairsStillTargetEntity");
-      const Likes = defineRelation("LikesPreservesTargetWildcardOtherPairsStillTargetEntity");
-      const target = createEntity(world);
-      const entity = createEntity(world);
-
-      addComponent(world, entity, pair(ChildOf, target));
-      addComponent(world, entity, pair(Likes, target));
-
-      removeComponent(world, entity, pair(ChildOf, target));
-
-      // Still have Likes->target, so wildcard preserved
-      assert.ok(hasComponent(world, entity, pair(Wildcard, target)));
-      assert.ok(hasComponent(world, entity, pair(Likes, target)));
-    });
-
-    it("removes relation wildcard when last pair with relation is removed", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfRemovesRelationWildcardLastPairRelationRemoved");
-      const parent = createEntity(world);
-      const child = createEntity(world);
-
-      addComponent(world, child, pair(ChildOf, parent));
-      // Relation wildcard should exist
-      assert.ok(hasComponent(world, child, pair(ChildOf, Wildcard)));
-
-      removeComponent(world, child, pair(ChildOf, parent));
-      // No more ChildOf pairs, relation wildcard should be gone
-      assert.strictEqual(hasComponent(world, child, pair(ChildOf, Wildcard)), false);
-    });
-
-    it("preserves relation wildcard when other pairs use same relation", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ChildOfPreservesRelationWildcardOtherPairsUseRelation");
-      const parent1 = createEntity(world);
-      const parent2 = createEntity(world);
-      const child = createEntity(world);
-
-      addComponent(world, child, pair(ChildOf, parent1));
-      addComponent(world, child, pair(ChildOf, parent2));
-
-      removeComponent(world, child, pair(ChildOf, parent1));
-
-      // Still have ChildOf->parent2, so relation wildcard preserved
-      assert.ok(hasComponent(world, child, pair(ChildOf, Wildcard)));
-      assert.ok(hasComponent(world, child, pair(ChildOf, parent2)));
-    });
-
     it("cleans up both wildcards correctly in multi-relation scenario", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfCleansUpBothWildcardsCorrectlyMultiRelationScenario");

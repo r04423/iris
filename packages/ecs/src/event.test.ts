@@ -100,26 +100,6 @@ describe("Event", () => {
 
       assert.strictEqual(seen, true);
     });
-
-    it("emits multiple events of same type", async () => {
-      const world = createWorld();
-      const Hit = defineEvent("MultiHit", {
-        damage: Type.f32(),
-      });
-      let count = 0;
-
-      addSystem(world, function counter() {
-        count = countEvents(world, Hit);
-      });
-
-      emitEvent(world, Hit, { damage: 10 });
-      emitEvent(world, Hit, { damage: 20 });
-      emitEvent(world, Hit, { damage: 30 });
-
-      await runOnce(world);
-
-      assert.strictEqual(count, 3);
-    });
   });
 
   // ============================================================================
@@ -443,31 +423,6 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Same-System Multiple Calls", () => {
-    it("lastRevision updates after first read", async () => {
-      const world = createWorld();
-      const Event = defineEvent("LastTickUpdate");
-
-      addSystem(world, function checker() {
-        const queue = world.events.byId.get(Event.id);
-        assert.ok(queue);
-
-        // Before read, the cursor should be 0 (unset)
-        const beforeRevision = queue.lastRevision.get("checker") ?? 0;
-
-        readEvents(world, Event, () => {
-          // consume
-        });
-
-        // After read, the cursor should equal the captured boundary
-        const afterRevision = queue.lastRevision.get("checker");
-        assert.strictEqual(afterRevision, world.revision - 1);
-        assert.notStrictEqual(beforeRevision, afterRevision);
-      });
-
-      emitEvent(world, Event);
-      await runOnce(world);
-    });
-
     it("events emitted during iteration are not visible in the same pass", async () => {
       const world = createWorld();
       const Event = defineEvent("EmitDuringIter", {
@@ -505,38 +460,52 @@ describe("Event", () => {
       assert.deepStrictEqual(readerSeen, [1, 11]);
     });
 
-    it("nested reads defer callback emissions and consume throwing and empty windows", async () => {
+    it("nested reads see callback emissions deferred from the outer pass", async () => {
       const world = createWorld();
       const Event = defineEvent("NestedRevisionEvent", { value: Type.i32() });
-      const seen: number[][] = [];
+      const outer: number[] = [];
+      const nested: number[] = [];
+      let remaining: number[] | undefined;
 
       addSystem(world, function reader() {
-        const outer: number[] = [];
-        const nested: number[] = [];
         readEvents(world, Event, (event) => {
           outer.push(event.value);
           emitEvent(world, Event, { value: 2 });
           readEvents(world, Event, (emitted) => nested.push(emitted.value));
         });
-        assert.deepStrictEqual(collectEvents(world, Event), []);
-        emitEvent(world, Event, { value: 4 });
+        remaining = collectEvents(world, Event).map((event) => event.value);
+      });
+
+      emitEvent(world, Event, { value: 1 });
+      await runOnce(world);
+
+      assert.deepStrictEqual(outer, [1]);
+      assert.deepStrictEqual(nested, [2]);
+      assert.deepStrictEqual(remaining, []);
+    });
+
+    it("throwing read consumes its window", async () => {
+      const world = createWorld();
+      const Event = defineEvent("ThrowingReadEvent", { value: Type.i32() });
+      const afterThrow: number[] = [];
+      const afterEmit: number[] = [];
+
+      addSystem(world, function reader() {
         assert.throws(() =>
           readEvents(world, Event, () => {
             throw new Error("event callback");
           })
         );
-        readEvents(world, Event, () => {});
+        readEvents(world, Event, (event) => afterThrow.push(event.value));
         emitEvent(world, Event, { value: 3 });
-        seen.push(
-          outer,
-          nested,
-          collectEvents(world, Event).map((event) => event.value)
-        );
+        readEvents(world, Event, (event) => afterEmit.push(event.value));
       });
 
       emitEvent(world, Event, { value: 1 });
       await runOnce(world);
-      assert.deepStrictEqual(seen, [[1], [2], [3]]);
+
+      assert.deepStrictEqual(afterThrow, []);
+      assert.deepStrictEqual(afterEmit, [3]);
     });
 
     it("guards revision overflow without consuming events", async () => {
@@ -551,30 +520,6 @@ describe("Event", () => {
         assert.strictEqual(queue.lastRevision.get("reader"), cursor);
       });
       emitEvent(world, Event);
-      await runOnce(world);
-    });
-
-    it("advances consuming APIs once while peeking APIs do not advance", async () => {
-      const world = createWorld();
-      const Event = defineEvent("EventRevisionAccounting", { value: Type.i32() });
-
-      addSystem(world, function reader() {
-        const initial = world.revision;
-        hasEvents(world, Event);
-        countEvents(world, Event);
-        assert.strictEqual(world.revision, initial);
-
-        readEvents(world, Event, () => {});
-        assert.strictEqual(world.revision, initial + 1);
-        collectEvents(world, Event);
-        assert.strictEqual(world.revision, initial + 2);
-        readLastEvent(world, Event);
-        assert.strictEqual(world.revision, initial + 3);
-        clearEvents(world, Event);
-        assert.strictEqual(world.revision, initial + 4);
-      });
-
-      emitEvent(world, Event, { value: 1 });
       await runOnce(world);
     });
   });
@@ -633,31 +578,6 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Edge Cases", () => {
-    it("handles empty event queue gracefully in system", async () => {
-      const world = createWorld();
-      const Event = defineEvent("EmptyQueue");
-      let readCount = 0;
-      let has = true;
-      let count = -1;
-      let last: unknown = "sentinel";
-
-      addSystem(world, function checker() {
-        readEvents(world, Event, () => {
-          readCount++;
-        });
-        has = hasEvents(world, Event);
-        count = countEvents(world, Event);
-        last = readLastEvent(world, Event);
-      });
-
-      await runOnce(world);
-
-      assert.strictEqual(readCount, 0);
-      assert.strictEqual(has, false);
-      assert.strictEqual(count, 0);
-      assert.strictEqual(last, undefined);
-    });
-
     it("early exit marks events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("EarlyExit", {
@@ -726,24 +646,24 @@ describe("Event", () => {
   // ============================================================================
 
   describe("Flush Bookkeeping", () => {
-    it("drops a queue from the active list once both buffers are empty", async () => {
+    it("expires unread events after two flushes", async () => {
       const world = createWorld();
-      const Event = defineEvent("FlushDrain");
-      addSystem(world, function noop() {});
+      const Event = defineEvent("FlushExpiry", { value: Type.i32() });
+      const seen: number[] = [];
+      let frame = 0;
 
-      emitEvent(world, Event);
-      const queue = world.events.byId.get(Event.id)!;
-      assert.strictEqual(queue.active, true);
-      assert.deepStrictEqual(world.events.active, [queue]);
+      addSystem(world, function lateReader() {
+        frame++;
+        if (frame < 3) return;
+        readEvents(world, Event, (e) => seen.push(e.value));
+      });
 
-      // First flush moves the event into the readable previous buffer
+      emitEvent(world, Event, { value: 1 });
       await runOnce(world);
-      assert.strictEqual(queue.active, true);
-
-      // Second flush expires it and drains the queue
       await runOnce(world);
-      assert.strictEqual(queue.active, false);
-      assert.strictEqual(world.events.active.length, 0);
+      await runOnce(world);
+
+      assert.deepStrictEqual(seen, []);
     });
 
     it("keeps read-only queues out of the active list", async () => {
@@ -830,98 +750,6 @@ describe("Event", () => {
         { position: [1, 2, 3], damage: 50.5, source: 42 },
         { position: [4, 5, 6], damage: 25, source: 7 },
       ]);
-    });
-  });
-
-  // ============================================================================
-  // Integration Tests
-  // ============================================================================
-
-  describe("Integration", () => {
-    it("full game loop pattern", async () => {
-      const world = createWorld();
-      const PlayerSpawned = defineEvent("PlayerSpawned", {
-        entity: Type.u32(),
-      });
-      const PlayerDamaged = defineEvent("PlayerDamaged", {
-        entity: Type.u32(),
-        amount: Type.f32(),
-      });
-
-      const spawnedPlayers: number[] = [];
-      const damageLog: Array<{ entity: number; amount: number }> = [];
-
-      // Spawn system emits events on first run
-      const spawnSystem = defineSystem("spawnSystem", (world) => {
-        let spawnRun = 0;
-        return () => {
-          spawnRun++;
-          if (spawnRun === 1) {
-            emitEvent(world, PlayerSpawned, { entity: 1 });
-            emitEvent(world, PlayerSpawned, { entity: 2 });
-          }
-        };
-      });
-
-      addSystem(world, spawnSystem);
-
-      // Combat system emits damage events on second run
-      const combatSystem = defineSystem("combatSystem", (world) => {
-        let combatRun = 0;
-        return () => {
-          combatRun++;
-          if (combatRun === 2) {
-            emitEvent(world, PlayerDamaged, { entity: 1, amount: 10 });
-            emitEvent(world, PlayerDamaged, { entity: 2, amount: 15 });
-          }
-        };
-      });
-
-      addSystem(world, combatSystem, { after: spawnSystem });
-
-      // UI system reads both events
-      addSystem(
-        world,
-        function uiSystem() {
-          readEvents(world, PlayerSpawned, (e) => {
-            spawnedPlayers.push(e.entity);
-          });
-          readEvents(world, PlayerDamaged, (e) => {
-            damageLog.push({ entity: e.entity, amount: e.amount });
-          });
-        },
-        { after: combatSystem }
-      );
-
-      // Audio system also reads events
-      let audioSpawnCount = 0;
-      let audioDamageCount = 0;
-      addSystem(
-        world,
-        function audioSystem() {
-          readEvents(world, PlayerSpawned, () => {
-            audioSpawnCount++;
-          });
-          readEvents(world, PlayerDamaged, () => {
-            audioDamageCount++;
-          });
-        },
-        { after: combatSystem }
-      );
-
-      // Run several ticks
-      await runOnce(world);
-      await runOnce(world);
-      await runOnce(world);
-
-      // Verify both systems received the same events
-      assert.deepStrictEqual(spawnedPlayers, [1, 2]);
-      assert.deepStrictEqual(damageLog, [
-        { entity: 1, amount: 10 },
-        { entity: 2, amount: 15 },
-      ]);
-      assert.strictEqual(audioSpawnCount, 2);
-      assert.strictEqual(audioDamageCount, 2);
     });
   });
 

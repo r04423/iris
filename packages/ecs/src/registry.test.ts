@@ -193,6 +193,7 @@ describe("Registry", () => {
     it("is defined as first relation (ID 0)", () => {
       // Wildcard is defined when registry.ts is imported, so it should be ID 0
       assert.strictEqual(extractType(Wildcard), RELATIONSHIP_TYPE);
+      assert.strictEqual(extractId(Wildcard), 0);
     });
 
     it("has name 'Wildcard'", () => {
@@ -205,10 +206,6 @@ describe("Registry", () => {
       const meta = COMPONENT_REGISTRY.byId.get(Wildcard);
       assert.ok(meta);
       assert.strictEqual(meta.schema, undefined);
-    });
-
-    it("is a valid relation type", () => {
-      assert.strictEqual(extractType(Wildcard), RELATIONSHIP_TYPE);
     });
   });
 

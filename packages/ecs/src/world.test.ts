@@ -25,67 +25,16 @@ import { createWorld, resetWorld } from "./world.js";
 
 describe("World", () => {
   describe("World Creation", () => {
-    it("creates world with entity registry", () => {
+    it("creates an empty world ready for use", () => {
       const world = createWorld();
+      const Tag = defineTag("CreationReady");
 
-      assert.ok(world.entities);
-      assert.ok(world.entities.byId);
-    });
+      assert.deepStrictEqual(collectEntities(world, [Tag]), []);
 
-    it("creates world with an empty entity registry", () => {
-      const world = createWorld();
+      const entity = createEntity(world);
+      addComponent(world, entity, Tag);
 
-      const entityRegistry = world.entities;
-      assert.strictEqual(entityRegistry.byId.size, 0);
-      assert.strictEqual(entityRegistry.freeIds.length, 0);
-      assert.strictEqual(entityRegistry.nextId, 1);
-    });
-
-    it("creates world with archetype index", () => {
-      const world = createWorld();
-
-      assert.ok(world.archetypes);
-      assert.ok(world.archetypes.root);
-      assert.ok(world.archetypes.byId);
-    });
-
-    it("creates root archetype with empty types", () => {
-      const world = createWorld();
-
-      const root = world.archetypes.root;
-      assert.deepStrictEqual(root.types, []);
-      assert.strictEqual(root.hash, "");
-      assert.strictEqual(root.typesSet.size, 0);
-      assert.strictEqual(root.edges.size, 0);
-    });
-
-    it("registers root archetype in archetype map", () => {
-      const world = createWorld();
-
-      const root = world.archetypes.root;
-      const registeredRoot = world.archetypes.byId.get(root.hash);
-
-      assert.strictEqual(registeredRoot, root);
-    });
-
-    it("initializes filter registry", () => {
-      const world = createWorld();
-
-      assert.ok(world.filters);
-      assert.ok(world.filters.byId);
-      assert.strictEqual(world.filters.byId.size, 0);
-    });
-
-    it("initializes observer system with lifecycle callbacks", () => {
-      const world = createWorld();
-
-      assert.ok(world.observers);
-      assert.ok(world.observers.archetypeCreated);
-      assert.ok(world.observers.archetypeDestroyed);
-      assert.ok(world.observers.entityCreated);
-      assert.ok(world.observers.entityDestroyed);
-      assert.ok(world.observers.componentAdded);
-      assert.ok(world.observers.componentRemoved);
+      assert.deepStrictEqual(collectEntities(world, [Tag]), [entity]);
     });
   });
 

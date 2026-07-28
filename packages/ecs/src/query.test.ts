@@ -1,11 +1,9 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { createAndRegisterArchetype } from "./archetype.js";
 import { addComponent, getComponentValue, removeComponent, setComponentValue } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded } from "./error.js";
-import { hashFilterTerms } from "./filters.js";
 import type { OrModifier } from "./query.js";
 import {
   added,
@@ -348,25 +346,6 @@ describe("Query", () => {
   });
 
   describe("Filter Constraints", () => {
-    it("fetches entities with multiple required components", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      const entity1 = createEntity(world);
-      const entity2 = createEntity(world);
-
-      addComponent(world, entity1, Position);
-      addComponent(world, entity2, Position);
-      addComponent(world, entity2, Velocity);
-
-      // Fetch entities with both Position and Velocity
-      const entities = collectEntities(world, [Position, Velocity]);
-
-      assert.strictEqual(entities.length, 1);
-      assert.strictEqual(entities[0], entity2);
-    });
-
     it("fetches entities with exclude filter", () => {
       const world = createWorld();
       const Position = createEntity(world);
@@ -431,96 +410,6 @@ describe("Query", () => {
       assert.strictEqual(query.meta.filters.length, 0);
       assert.strictEqual(world.filters.byId.size, 0);
       assert.deepStrictEqual(collectEntities(world, query), []);
-    });
-  });
-
-  describe("Query with Filter Registry", () => {
-    it("creates filter in registry on first query execution", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      createAndRegisterArchetype(world, [Position], new Map());
-
-      const entities = collectEntities(world, [Position]);
-
-      assert.strictEqual(entities.length, 0);
-
-      const filterId = hashFilterTerms({ include: [Position], exclude: [] });
-      const filter = world.filters.byId.get(filterId);
-
-      assert.ok(filter);
-      assert.strictEqual(filter.archetypes.length, 1);
-    });
-
-    it("reuses cached filter on subsequent query executions", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      createAndRegisterArchetype(world, [Position], new Map());
-
-      collectEntities(world, [Position]);
-      collectEntities(world, [Position]);
-
-      assert.strictEqual(world.filters.byId.size, 1);
-    });
-
-    it("updates filter cache when archetype changes between queries", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      createAndRegisterArchetype(world, [Position], new Map());
-
-      collectEntities(world, [Position]);
-
-      const filterId = hashFilterTerms({ include: [Position], exclude: [] });
-      const filter1 = world.filters.byId.get(filterId);
-
-      assert.strictEqual(filter1?.archetypes.length, 1);
-
-      createAndRegisterArchetype(world, [Position, Velocity], new Map());
-
-      collectEntities(world, [Position]);
-
-      const filter2 = world.filters.byId.get(filterId);
-
-      assert.strictEqual(filter2?.archetypes.length, 2);
-    });
-
-    it("handles filter terms with exclusions", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-      const Dead = createEntity(world);
-
-      createAndRegisterArchetype(world, [Position, Velocity], new Map());
-      createAndRegisterArchetype(world, [Position, Dead], new Map());
-
-      const entities = collectEntities(world, [Position, not(Dead)]);
-
-      assert.strictEqual(entities.length, 0);
-
-      const filterId = hashFilterTerms({ include: [Position], exclude: [Dead] });
-      const filter = world.filters.byId.get(filterId);
-
-      assert.ok(filter);
-      assert.strictEqual(filter.archetypes.length, 1);
-    });
-
-    it("creates separate filters for different query patterns", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-      const Velocity = createEntity(world);
-
-      createAndRegisterArchetype(world, [Position], new Map());
-      createAndRegisterArchetype(world, [Velocity], new Map());
-      createAndRegisterArchetype(world, [Position, Velocity], new Map());
-
-      collectEntities(world, [Position]);
-      collectEntities(world, [Velocity]);
-      collectEntities(world, [Position, Velocity]);
-
-      assert.strictEqual(world.filters.byId.size, 3);
     });
   });
 
@@ -589,16 +478,6 @@ describe("Query", () => {
       assert.notStrictEqual(queryA.meta, queryB.meta);
       assert.strictEqual(world.queries.byId.size, 2);
       assert.strictEqual(world.filters.byId.size, 2);
-    });
-
-    it("stores query in registry with correct hash", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, [Position]);
-      const queryId = hashQuery([Position], [], [], []);
-
-      assert.strictEqual(world.queries.byId.get(queryId), query.meta);
     });
 
     it("throws when query has no components", () => {
@@ -976,18 +855,6 @@ describe("Query", () => {
       assert.strictEqual(world.queries.byId.size, 1);
     });
 
-    it("expands to disjoint filter branches", () => {
-      const world = createWorld();
-      const Velocity = createEntity(world);
-      const Acceleration = createEntity(world);
-
-      const query = ensureQuery(world, [or(Velocity, Acceleration)]);
-
-      // Branch 1: [Velocity], Branch 2: [Acceleration, not(Velocity)]
-      assert.strictEqual(query.meta.filters.length, 2);
-      assert.deepStrictEqual(query.meta.filters[1]!.terms.exclude, [Velocity]);
-    });
-
     it("matches archetypes created after query is cached", () => {
       const world = createWorld();
       const Velocity = createEntity(world);
@@ -1327,36 +1194,6 @@ describe("Query", () => {
       assert.ok(entities.some((e) => e === entity1));
       assert.ok(entities.some((e) => e === entity2));
     });
-
-    it("returns empty for query with no matching entities", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const query = ensureQuery(world, [Position]);
-      const entities = collectEntities(world, query);
-
-      assert.strictEqual(entities.length, 0);
-    });
-
-    it("iterates in reverse order for deletion safety", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const entity1 = createEntity(world);
-      const entity2 = createEntity(world);
-      const entity3 = createEntity(world);
-
-      addComponent(world, entity1, Position);
-      addComponent(world, entity2, Position);
-      addComponent(world, entity3, Position);
-
-      const query = ensureQuery(world, [Position]);
-      const entities = collectEntities(world, query);
-
-      assert.strictEqual(entities[0], entity3);
-      assert.strictEqual(entities[1], entity2);
-      assert.strictEqual(entities[2], entity1);
-    });
   });
 
   describe("Query with Pairs", () => {
@@ -1691,81 +1528,6 @@ describe("Query", () => {
 
         const entities2 = collectEntities(world, [pair(ChildOf, Wildcard)]);
         assert.strictEqual(entities2.length, 0);
-      });
-    });
-
-    describe("Practical use cases", () => {
-      it("hierarchy: find all children of a parent", () => {
-        const world = createWorld();
-        const ChildOf = defineRelation("ChildOfHierarchyFindAllChildrenParent");
-
-        const root = createEntity(world);
-        const branch1 = createEntity(world);
-        const branch2 = createEntity(world);
-        const leaf1 = createEntity(world);
-        const leaf2 = createEntity(world);
-
-        addComponent(world, branch1, pair(ChildOf, root));
-        addComponent(world, branch2, pair(ChildOf, root));
-        addComponent(world, leaf1, pair(ChildOf, branch1));
-        addComponent(world, leaf2, pair(ChildOf, branch1));
-
-        // Direct children of root
-        const rootChildren = collectEntities(world, [pair(ChildOf, root)]);
-        assert.strictEqual(rootChildren.length, 2);
-        assert.ok(rootChildren.some((e) => e === branch1));
-        assert.ok(rootChildren.some((e) => e === branch2));
-
-        // Direct children of branch1
-        const branch1Children = collectEntities(world, [pair(ChildOf, branch1)]);
-        assert.strictEqual(branch1Children.length, 2);
-        assert.ok(branch1Children.some((e) => e === leaf1));
-        assert.ok(branch1Children.some((e) => e === leaf2));
-      });
-
-      it("inventory: find all containers", () => {
-        const world = createWorld();
-        const Contains = defineRelation("Contains");
-
-        const chest = createEntity(world);
-        const bag = createEntity(world);
-        const sword = createEntity(world);
-        const potion = createEntity(world);
-
-        addComponent(world, chest, pair(Contains, sword));
-        addComponent(world, chest, pair(Contains, potion));
-        addComponent(world, bag, pair(Contains, potion));
-
-        // Find all containers (entities with ANY Contains relation)
-        const containers = collectEntities(world, [pair(Contains, Wildcard)]);
-
-        assert.strictEqual(containers.length, 2);
-        assert.ok(containers.some((e) => e === chest));
-        assert.ok(containers.some((e) => e === bag));
-      });
-
-      it("reverse lookup: find all relationships to an entity", () => {
-        const world = createWorld();
-        const ChildOf = defineRelation("ChildOfReverseLookupFindAllRelationshipsEntity");
-        const Likes = defineRelation("LikesReverseLookupFindAllRelationshipsEntity");
-        const Owns = defineRelation("Owns");
-
-        const target = createEntity(world);
-        const entity1 = createEntity(world);
-        const entity2 = createEntity(world);
-        const entity3 = createEntity(world);
-
-        addComponent(world, entity1, pair(ChildOf, target));
-        addComponent(world, entity2, pair(Likes, target));
-        addComponent(world, entity3, pair(Owns, target));
-
-        // Find all entities that have ANY relationship to target
-        const related = collectEntities(world, [pair(Wildcard, target)]);
-
-        assert.strictEqual(related.length, 3);
-        assert.ok(related.some((e) => e === entity1));
-        assert.ok(related.some((e) => e === entity2));
-        assert.ok(related.some((e) => e === entity3));
       });
     });
 

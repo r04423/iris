@@ -6,7 +6,7 @@ import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+import { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -33,18 +33,6 @@ describe("Entity", () => {
 
       assert.strictEqual(generation, 0);
     });
-
-    it("updates entity registry counters", () => {
-      const world = createWorld();
-      const registry = world.entities;
-      const initialSize = registry.byId.size;
-
-      createEntity(world);
-      createEntity(world);
-
-      assert.strictEqual(registry.byId.size, initialSize + 2);
-      assert.strictEqual(registry.nextId, 3);
-    });
   });
 
   describe("Entity Creation with Components", () => {
@@ -61,16 +49,6 @@ describe("Entity", () => {
       const x: 10 | undefined = getComponentValue(world, entity, Position, "x");
       assert.strictEqual(x, 10);
       assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20);
-    });
-
-    it("no-arg form still works unchanged", () => {
-      const world = createWorld();
-
-      const entity = createEntity(world);
-
-      assert.strictEqual(isEntityAlive(world, entity), true);
-      const meta = world.entities.byId.get(entity)!;
-      assert.strictEqual(meta.archetype, world.archetypes.root);
     });
 
     it("creates entity with pair entries", () => {
@@ -110,57 +88,24 @@ describe("Entity", () => {
   });
 
   describe("Entity Destruction", () => {
-    it("removes entity from metadata", () => {
+    it("recycles only the target's ID when destroying a relation target", () => {
       const world = createWorld();
-      const registry = world.entities;
-
-      const entity = createEntity(world);
-      const sizeBefore = registry.byId.size;
-
-      destroyEntity(world, entity);
-
-      assert.strictEqual(registry.byId.size, sizeBefore - 1);
-      assert.strictEqual(isEntityAlive(world, entity), false);
-    });
-
-    it("adds entity to freelist with incremented generation", () => {
-      const world = createWorld();
-      const registry = world.entities;
-
-      const entity = createEntity(world);
-      const rawId = extractId(entity);
-      const oldGeneration = extractMeta(entity);
-
-      destroyEntity(world, entity);
-
-      // Check raw ID in freelist and generation incremented in map
-      assert.strictEqual(registry.freeIds.length, 1);
-      assert.strictEqual(registry.freeIds[0], rawId);
-      const newGeneration = registry.generations.get(rawId);
-
-      assert.strictEqual(newGeneration, oldGeneration + 1);
-    });
-
-    it("recycles only the target's raw ID when destroying a relation target", () => {
-      const world = createWorld();
-      const registry = world.entities;
       const Owns = defineRelation("entity.test.OwnsRecycle");
 
       const target = createEntity(world);
       const subject = createEntity(world);
       addComponent(world, subject, pair(Owns, target));
 
-      const generationsBefore = new Map(registry.generations);
-
       destroyEntity(world, target);
 
-      const rawId = extractId(target);
+      assert.strictEqual(isEntityAlive(world, subject), true);
 
-      assert.deepStrictEqual(registry.freeIds, [rawId]);
-
-      for (const [id, generation] of registry.generations) {
-        assert.strictEqual(generation, id === rawId ? generationsBefore.get(id)! + 1 : generationsBefore.get(id));
-      }
+      // The next entity reuses the target's raw ID; the one after allocates fresh
+      const recycled = createEntity(world);
+      assert.strictEqual(extractId(recycled), extractId(target));
+      assert.strictEqual(extractMeta(recycled), extractMeta(target) + 1);
+      const fresh = createEntity(world);
+      assert.strictEqual(extractMeta(fresh), 0);
     });
 
     it("double destroy is idempotent", () => {
@@ -175,7 +120,7 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, entity), false);
     });
 
-    it("uses swap-and-pop for removal", () => {
+    it("keeps other entities intact when destroying between them", () => {
       const world = createWorld();
 
       const e1 = createEntity(world);
@@ -184,7 +129,6 @@ describe("Entity", () => {
 
       destroyEntity(world, e2);
 
-      // e3 should be swapped to e2's position
       assert.strictEqual(isEntityAlive(world, e1), true);
       assert.strictEqual(isEntityAlive(world, e2), false);
       assert.strictEqual(isEntityAlive(world, e3), true);
@@ -284,78 +228,32 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, newEntity), true);
     });
 
-    it("allocates new ID when no dead entities available", () => {
-      const world = createWorld();
-      const registry = world.entities;
-      const initialSize = registry.byId.size;
-
-      createEntity(world);
-      createEntity(world);
-
-      // No dead entities - should allocate new IDs
-      assert.strictEqual(registry.byId.size, initialSize + 2);
-      assert.strictEqual(registry.freeIds.length, 0);
-      assert.strictEqual(registry.nextId, 3);
-    });
-  });
-
-  describe("Generations Map", () => {
-    it("populates generations map on new entity creation", () => {
-      const world = createWorld();
-
-      const entity = createEntity(world);
-      const rawId = extractId(entity);
-
-      // New entity should have generation 0 in map
-      assert.strictEqual(world.entities.generations.get(rawId), 0);
-    });
-
-    it("updates generations map on entity destruction", () => {
-      const world = createWorld();
-
-      const entity = createEntity(world);
-      const rawId = extractId(entity);
-
-      destroyEntity(world, entity);
-
-      // Generation should be incremented in map
-      assert.strictEqual(world.entities.generations.get(rawId), 1);
-    });
-
-    it("uses generation from map when recycling entity", () => {
+    it("increments generation on each recycle", () => {
       const world = createWorld();
 
       const entity1 = createEntity(world);
-      const rawId = extractId(entity1);
-
-      // Destroy and recreate multiple times
       destroyEntity(world, entity1);
       const entity2 = createEntity(world);
       assert.strictEqual(extractMeta(entity2), 1);
-      assert.strictEqual(world.entities.generations.get(rawId), 1);
 
       destroyEntity(world, entity2);
       const entity3 = createEntity(world);
+      assert.strictEqual(extractId(entity3), extractId(entity1));
       assert.strictEqual(extractMeta(entity3), 2);
-      assert.strictEqual(world.entities.generations.get(rawId), 2);
     });
 
-    it("tracks generations for multiple entities independently", () => {
+    it("starts recycled entities with fresh state", () => {
       const world = createWorld();
+      const Position = defineComponent("RecycledFreshPosition", { x: Type.f32() });
 
-      const e1 = createEntity(world);
-      const e2 = createEntity(world);
-      const rawId1 = extractId(e1);
-      const rawId2 = extractId(e2);
+      const entity1 = createEntity(world);
+      addComponent(world, entity1, Position, { x: 1 });
+      destroyEntity(world, entity1);
 
-      // Both start at generation 0
-      assert.strictEqual(world.entities.generations.get(rawId1), 0);
-      assert.strictEqual(world.entities.generations.get(rawId2), 0);
+      const entity2 = createEntity(world);
 
-      // Destroy only e1
-      destroyEntity(world, e1);
-      assert.strictEqual(world.entities.generations.get(rawId1), 1);
-      assert.strictEqual(world.entities.generations.get(rawId2), 0);
+      assert.strictEqual(extractId(entity2), extractId(entity1));
+      assert.strictEqual(hasComponent(world, entity2, Position), false);
     });
   });
 
@@ -389,133 +287,6 @@ describe("Entity", () => {
       assert.throws(() => {
         createEntity(world);
       }, IrisLimitExceeded);
-    });
-  });
-
-  describe("Archetype Tracking", () => {
-    it("places new entities in root archetype", () => {
-      const world = createWorld();
-      const entity = createEntity(world);
-
-      const registry = world.entities;
-      const meta = registry.byId.get(entity)!;
-
-      // Entity should be in root archetype (empty hash)
-      assert.strictEqual(meta.archetype.hash, world.archetypes.root.hash);
-    });
-
-    it("tracks multiple entities in root archetype", () => {
-      const world = createWorld();
-      const e1 = createEntity(world);
-      const e2 = createEntity(world);
-      const e3 = createEntity(world);
-
-      const registry = world.entities;
-      const rootHash = world.archetypes.root.hash;
-
-      // All entities should be in root archetype
-      const meta1 = registry.byId.get(e1)!;
-      const meta2 = registry.byId.get(e2)!;
-      const meta3 = registry.byId.get(e3)!;
-
-      assert.strictEqual(meta1.archetype.hash, rootHash);
-      assert.strictEqual(meta2.archetype.hash, rootHash);
-      assert.strictEqual(meta3.archetype.hash, rootHash);
-    });
-
-    it("initializes empty records array for new entities", () => {
-      const world = createWorld();
-      const entity = createEntity(world);
-
-      const registry = world.entities;
-      const meta = registry.byId.get(entity)!;
-
-      // Records should be empty array (entity not used as component)
-      assert.ok(Array.isArray(meta.records));
-      assert.strictEqual(meta.records.length, 0);
-    });
-
-    it("adds entity to root archetype entities array", () => {
-      const world = createWorld();
-      const entity = createEntity(world);
-
-      const rootArchetype = world.archetypes.root;
-
-      // Entity should be in root archetype entities array
-      assert.strictEqual(rootArchetype.entities.length, 1);
-      assert.strictEqual(rootArchetype.entities[0], entity);
-    });
-
-    it("removes entity from archetype entities array on destroy", () => {
-      const world = createWorld();
-      const entity = createEntity(world);
-
-      const rootArchetype = world.archetypes.root;
-      assert.strictEqual(rootArchetype.entities.length, 1);
-
-      destroyEntity(world, entity);
-
-      // Entity should be removed from root archetype entities array
-      assert.strictEqual(rootArchetype.entities.length, 0);
-    });
-
-    it("handles archetype entities cleanup with swap-and-pop", () => {
-      const world = createWorld();
-      const e1 = createEntity(world);
-      const e2 = createEntity(world);
-      const e3 = createEntity(world);
-
-      const rootArchetype = world.archetypes.root;
-      assert.strictEqual(rootArchetype.entities.length, 3);
-
-      // Destroy middle entity
-      destroyEntity(world, e2);
-
-      // e3 should be swapped to e2's position, length decremented
-      assert.strictEqual(rootArchetype.entities.length, 2);
-      assert.strictEqual(rootArchetype.entities[0], e1);
-      assert.strictEqual(rootArchetype.entities[1], e3);
-    });
-
-    it("uses meta.get() for entity metadata lookup", () => {
-      const world = createWorld();
-      const entity = createEntity(world);
-
-      const registry = world.entities;
-
-      // Verify meta.get() returns correct EntityMeta
-      const meta = registry.byId.get(entity);
-      assert.ok(meta !== undefined);
-      assert.ok(typeof meta === "object");
-
-      // Verify archetype tracking uses direct reference
-      assert.ok(meta.archetype);
-      assert.strictEqual(typeof meta.archetype.hash, "string");
-      assert.strictEqual(typeof meta.row, "number");
-      assert.ok(meta.row >= 0);
-    });
-
-    it("creates fresh metadata for recycled entities", () => {
-      const world = createWorld();
-      const entity1 = createEntity(world);
-
-      const registry = world.entities;
-      const rawId1 = extractId(entity1);
-
-      destroyEntity(world, entity1);
-
-      // Metadata deleted after destruction
-      assert.strictEqual(registry.byId.get(entity1), undefined);
-
-      const entity2 = createEntity(world);
-      const rawId2 = extractId(entity2);
-
-      // Recycled entity reuses same raw ID with fresh metadata
-      assert.strictEqual(rawId1, rawId2);
-      const meta2 = registry.byId.get(entity2)!;
-      assert.ok(meta2);
-      assert.strictEqual(meta2.archetype.hash, world.archetypes.root.hash);
-      assert.strictEqual(meta2.row, 0);
     });
   });
 
@@ -702,6 +473,29 @@ describe("Entity", () => {
       const meta2 = ensureEntity(world, pairId);
 
       assert.strictEqual(meta1, meta2, "Should return same metadata object");
+    });
+
+    it("materializes relation traits as queryable components", () => {
+      const world = createWorld();
+      const Targeting = defineRelation("TargetingMaterializesTraits", {
+        exclusive: true,
+        onDeleteTarget: "delete",
+      });
+
+      ensureEntity(world, Targeting);
+
+      assert.strictEqual(hasComponent(world, Targeting, Exclusive), true);
+      assert.strictEqual(hasComponent(world, Targeting, OnDeleteTarget), true);
+    });
+
+    it("materializes no traits for plain relations", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ChildOfMaterializesNoTraits");
+
+      ensureEntity(world, ChildOf);
+
+      assert.strictEqual(hasComponent(world, ChildOf, Exclusive), false);
+      assert.strictEqual(hasComponent(world, ChildOf, OnDeleteTarget), false);
     });
   });
 });

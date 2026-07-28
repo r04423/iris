@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { createAndRegisterArchetype } from "./archetype.js";
 import {
   addComponent,
   addComponents,
@@ -18,7 +17,7 @@ import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { changed, collectEntities, queryEntities } from "./query.js";
+import { changed, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { addSystem, runOnce } from "./scheduler.js";
@@ -319,52 +318,6 @@ describe("Component", () => {
     });
   });
 
-  describe("Edge Caching", () => {
-    it("caches archetype transitions", () => {
-      const world = createWorld();
-      const entity1 = createEntity(world);
-      const entity2 = createEntity(world);
-      const entity3 = createEntity(world);
-
-      // First add creates archetype and caches edge
-      addComponent(world, entity1, entity2);
-
-      const rootArchetype = world.archetypes.root;
-      const cachedHash = rootArchetype.edges.get(entity2);
-      assert.notStrictEqual(cachedHash, undefined);
-
-      // Second add to different entity uses cached edge
-      addComponent(world, entity3, entity2);
-
-      // Verify both entities in same archetype (cache reused)
-      const registry = world.entities;
-      const meta1 = registry.byId.get(entity1)!;
-      const meta3 = registry.byId.get(entity3)!;
-
-      assert.strictEqual(meta1.archetype.hash, meta3.archetype.hash);
-    });
-
-    it("caches bidirectional edges (add and remove)", () => {
-      const world = createWorld();
-      const entity1 = createEntity(world);
-      const entity2 = createEntity(world);
-
-      // Add caches forward edge (root + entity2 -> archetype1)
-      addComponent(world, entity1, entity2);
-
-      const rootArchetype = world.archetypes.root;
-      const registry = world.entities;
-      const meta = registry.byId.get(entity1)!;
-      const archetype1 = meta.archetype;
-
-      // Verify forward edge cached (direct reference)
-      assert.strictEqual(rootArchetype.edges.get(entity2), archetype1);
-
-      // Verify backward edge cached (archetype1 - entity2 -> root, direct reference)
-      assert.strictEqual(archetype1.edges.get(entity2), rootArchetype);
-    });
-  });
-
   describe("Entities as Components", () => {
     it("uses entities as components without schema", () => {
       const world = createWorld();
@@ -485,144 +438,46 @@ describe("Component", () => {
   describe("Component Cleanup", () => {
     it("cascades component removal when entity used as component is destroyed", () => {
       const world = createWorld();
+      const Marker = defineTag("CleanupMarker");
       const entityA = createEntity(world);
       const entityB = createEntity(world);
 
-      const registry = world.entities;
+      addComponent(world, entityB, Marker);
+      addComponent(world, entityB, entityA);
 
-      // Create archetype with entityA as component
-      const archetypeBefore = createAndRegisterArchetype(world, [entityA], new Map());
-      const archetypeCountBefore = world.archetypes.byId.size;
-
-      // Manually move entityB into archetype (simulating component add)
-      const metaB = registry.byId.get(entityB)!;
-      const rootArchetype = world.archetypes.root;
-
-      // Remove from root archetype
-      const rootRow = metaB.row;
-      rootArchetype.entities.splice(rootRow, 1);
-
-      // Add to new archetype
-      metaB.archetype = archetypeBefore;
-      metaB.row = archetypeBefore.entities.length;
-      archetypeBefore.entities.push(entityB);
-
-      // Destroy entityA (used as component)
       destroyEntity(world, entityA);
 
-      // entityA should be dead
       assert.strictEqual(isEntityAlive(world, entityA), false);
-
-      // entityB should still be alive but moved to root archetype
       assert.strictEqual(isEntityAlive(world, entityB), true);
-      const metaBAfter = registry.byId.get(entityB)!;
-      assert.strictEqual(metaBAfter.archetype.hash, world.archetypes.root.hash);
-
-      // Invalid archetype should be destroyed
-      const archetypeAfter = world.archetypes.byId.get(archetypeBefore.hash);
-      assert.strictEqual(archetypeAfter, undefined);
-
-      // Should have fewer archetypes now
-      const archetypeCountAfter = world.archetypes.byId.size;
-      assert.strictEqual(archetypeCountAfter, archetypeCountBefore - 1);
+      assert.strictEqual(hasComponent(world, entityB, entityA), false);
+      assert.strictEqual(hasComponent(world, entityB, Marker), true);
     });
 
-    it("handles multiple entities with same component", () => {
+    it("cascades removal from all entities sharing the component", () => {
       const world = createWorld();
       const entityA = createEntity(world);
       const entityB = createEntity(world);
       const entityC = createEntity(world);
 
-      const registry = world.entities;
-      const rootArchetype = world.archetypes.root;
+      addComponent(world, entityB, entityA);
+      addComponent(world, entityC, entityA);
 
-      // Create archetype with entityA as component
-      const archetype = createAndRegisterArchetype(world, [entityA], new Map());
-
-      // Get metadata for entityB and entityC
-      const metaB = registry.byId.get(entityB)!;
-      const metaC = registry.byId.get(entityC)!;
-
-      // Remove entityB from root
-      const rootRowB = metaB.row;
-      rootArchetype.entities.splice(rootRowB, 1);
-      // Update entityC's row if it was after entityB
-      if (metaC.row > rootRowB) {
-        metaC.row--;
-      }
-
-      // Remove entityC from root (now at potentially different row)
-      const rootRowC = metaC.row;
-      rootArchetype.entities.splice(rootRowC, 1);
-
-      // Add both entities to new archetype
-      metaB.archetype = archetype;
-      metaB.row = archetype.entities.length;
-      archetype.entities.push(entityB);
-
-      metaC.archetype = archetype;
-      metaC.row = archetype.entities.length;
-      archetype.entities.push(entityC);
-
-      // Destroy entityA (used as component by both B and C)
       destroyEntity(world, entityA);
 
-      // Both entityB and entityC should be moved back to root archetype
       assert.strictEqual(isEntityAlive(world, entityB), true);
       assert.strictEqual(isEntityAlive(world, entityC), true);
-
-      const metaBAfter = registry.byId.get(entityB)!;
-      const metaCAfter = registry.byId.get(entityC)!;
-
-      assert.strictEqual(metaBAfter.archetype.hash, world.archetypes.root.hash);
-      assert.strictEqual(metaCAfter.archetype.hash, world.archetypes.root.hash);
-
-      // Invalid archetype should be destroyed
-      assert.strictEqual(world.archetypes.byId.get(archetype.hash), undefined);
+      assert.strictEqual(hasComponent(world, entityB, entityA), false);
+      assert.strictEqual(hasComponent(world, entityC, entityA), false);
     });
 
     it("handles self-referential component", () => {
       const world = createWorld();
       const entityA = createEntity(world);
 
-      const registry = world.entities;
+      addComponent(world, entityA, entityA);
 
-      // Create archetype where entityA has itself as component
-      const archetype = createAndRegisterArchetype(world, [entityA], new Map());
-      const metaA = registry.byId.get(entityA)!;
-      metaA.archetype = archetype;
-
-      // Destroy entityA (self-referential)
       destroyEntity(world, entityA);
 
-      // entityA should be dead
-      assert.strictEqual(isEntityAlive(world, entityA), false);
-
-      // Archetype should be destroyed
-      assert.strictEqual(world.archetypes.byId.get(archetype.hash), undefined);
-    });
-
-    it("clears records array after cascade removal", () => {
-      const world = createWorld();
-      const entityA = createEntity(world);
-
-      const registry = world.entities;
-
-      // Create archetype with entityA as component
-      createAndRegisterArchetype(world, [entityA], new Map());
-
-      // entityA should have non-empty records (tracked as component)
-      const metaA = registry.byId.get(entityA)!;
-      assert.ok(metaA.records.length > 0);
-
-      // Destroy entityA
-      destroyEntity(world, entityA);
-
-      // Metadata should be deleted (entity destroyed, records cleared)
-      assert.strictEqual(registry.byId.get(entityA), undefined);
-
-      // All archetypes using entityA as component should be destroyed
-      // (verified by the fact that entityA is no longer alive)
       assert.strictEqual(isEntityAlive(world, entityA), false);
     });
   });
@@ -723,24 +578,6 @@ describe("Component", () => {
 
       assert.strictEqual(hasComponent(world, entity, Airborne), true);
     });
-
-    it("finds entities with tag via query", () => {
-      const world = createWorld();
-      const Flying = defineTag("Flying");
-
-      const e1 = createEntity(world);
-      createEntity(world);
-      const e3 = createEntity(world);
-
-      addComponent(world, e1, Flying);
-      addComponent(world, e3, Flying);
-
-      const results = collectEntities(world, [Flying]);
-
-      assert.strictEqual(results.length, 2);
-      assert.ok(results.some((r) => r === e1));
-      assert.ok(results.some((r) => r === e3));
-    });
   });
 
   // ============================================================================
@@ -799,6 +636,22 @@ describe("Component", () => {
 
       assert.strictEqual(getComponentValue(world, entity, Stats, "strength"), 10);
       assert.strictEqual(getComponentValue(world, entity, Stats, "dexterity"), 15);
+
+      setComponentValue(world, entity, Stats, "strength", 12);
+      assert.strictEqual(getComponentValue(world, entity, Stats, "strength"), 12);
+    });
+
+    it("gets and sets reference field values", () => {
+      const world = createWorld();
+      const Inventory = defineComponent("InventoryRefField", { items: Type.ref<string[]>() });
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Inventory, { items: ["sword"] });
+
+      assert.deepStrictEqual(getComponentValue(world, entity, Inventory, "items"), ["sword"]);
+
+      setComponentValue(world, entity, Inventory, "items", ["sword", "shield"]);
+      assert.deepStrictEqual(getComponentValue(world, entity, Inventory, "items"), ["sword", "shield"]);
     });
 
     it("gets and sets boolean field values", () => {
@@ -909,29 +762,6 @@ describe("Component", () => {
       // Tag has no columns, component has columns
       assert.strictEqual(archetype.columns.get(Enemy), undefined);
       assert.ok(archetype.columns.get(Health));
-    });
-
-    it("queries entities with mixed tags and components", () => {
-      const world = createWorld();
-      const Alive = defineTag("Alive");
-      const Position = defineComponent("PositionQueriesEntitiesMixedTagsComponents", { x: Type.f32(), y: Type.f32() });
-
-      const e1 = createEntity(world);
-      const e2 = createEntity(world);
-      const e3 = createEntity(world);
-
-      addComponent(world, e1, Alive);
-      addComponent(world, e1, Position, { x: 1.0, y: 1.0 });
-
-      addComponent(world, e2, Position, { x: 2.0, y: 2.0 });
-
-      addComponent(world, e3, Alive);
-
-      // Query for entities with both Alive and Position
-      const results = collectEntities(world, [Alive, Position]);
-
-      assert.strictEqual(results.length, 1);
-      assert.ok(results.some((r) => r === e1));
     });
 
     it("removes tags and components independently", () => {

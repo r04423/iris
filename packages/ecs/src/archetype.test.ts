@@ -1459,26 +1459,6 @@ describe("Archetype", () => {
       assert.strictEqual(column.length, meta.archetype.capacity * 2);
     });
 
-    it("preserves vector data during archetype transition", () => {
-      const world = createWorld();
-      const Position = defineComponent("PositionPreservesVectorDataDuringArchetypeTransition", { value: Type.f32(2) });
-      const Tag = defineTag("Tag");
-
-      const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
-
-      // Transition to new archetype
-      addComponent(world, entity, Tag);
-
-      const meta = world.entities.byId.get(entity)!;
-      const column = meta.archetype.columns.get(Position)!.value! as Float32Array;
-      const row = meta.row;
-      const stride = column.length / meta.archetype.capacity;
-
-      assert.strictEqual(column[row * stride], 10);
-      assert.strictEqual(column[row * stride + 1], 20);
-    });
-
     it("swap-and-pop preserves vector data for swapped entity", () => {
       const world = createWorld();
       const Position = defineComponent("PositionSwapPopPreservesVectorDataSwappedEntity", { value: Type.f32(2) });

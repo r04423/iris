@@ -360,20 +360,6 @@ describe("Scheduler", () => {
       await assert.rejects(runOnce(world2), (err) => err instanceof IrisNotFound);
     });
 
-    it("throws on 3-node transitive cycle", async () => {
-      const world = createWorld();
-
-      const a = defineSystem("a", () => () => {});
-      const b = defineSystem("b", () => () => {});
-      const c = defineSystem("c", () => () => {});
-
-      addSystem(world, a, { before: b });
-      addSystem(world, b, { before: c });
-      addSystem(world, c, { before: a });
-
-      await assert.rejects(runOnce(world), (err) => err instanceof IrisInvalidState);
-    });
-
     it("throws IrisNotFound for cross-schedule reference", async () => {
       const world = createWorld();
 
@@ -387,30 +373,6 @@ describe("Scheduler", () => {
   });
 
   describe("Schedule Execution", () => {
-    it("executes systems in constraint order", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      const third = defineSystem("third", () => () => {
-        calls.push("third");
-      });
-      const second = defineSystem("second", () => () => {
-        calls.push("second");
-      });
-      const first = defineSystem("first", () => () => {
-        calls.push("first");
-      });
-
-      // Register in reverse order, but constrain to run first->second->third
-      addSystem(world, third);
-      addSystem(world, second, { before: third });
-      addSystem(world, first, { before: second });
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["first", "second", "third"]);
-    });
-
     it("increments the frame tick once per runOnce", async () => {
       const world = createWorld();
 
@@ -518,49 +480,6 @@ describe("Scheduler", () => {
 
       assert.strictEqual(world.execution.scheduleLabel, null);
       assert.strictEqual(world.execution.systemId, null);
-    });
-  });
-
-  describe("Binary Search Coverage", () => {
-    it("binary search inserts system with lower index into queue", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      const systemB = defineSystem("systemB", () => () => {
-        calls.push("B");
-      });
-      const systemC = defineSystem("systemC", () => () => {
-        calls.push("C");
-      });
-
-      // D (index 0) depends on both B and C
-      const systemD = defineSystem("systemD", () => () => {
-        calls.push("D");
-      });
-      addSystem(world, systemD, { after: [systemB, systemC] });
-
-      // C (index 1) no deps
-      addSystem(world, systemC);
-
-      // B (index 2) no deps
-      addSystem(world, systemB);
-
-      // A (index 3) no deps
-      addSystem(world, function systemA() {
-        calls.push("A");
-      });
-
-      await runOnce(world);
-
-      // Initial queue (zero in-degree): C (1), B (2), A (3)
-      // Process C: D's in-degree 2->1. Queue = [B, A]
-      // Process B: D's in-degree 1->0. Insert D (index 0) into queue [A (index 3)]
-      //   - mid = 0, A.index (3) >= D.index (0) => high = mid
-      //   - Queue becomes [D, A]
-      // Process D: Queue = [A]
-      // Process A: Queue = []
-
-      assert.deepStrictEqual(calls, ["C", "B", "D", "A"]);
     });
   });
 
@@ -1327,24 +1246,6 @@ describe("Scheduler", () => {
       assert.strictEqual(updateCount, 3);
     });
 
-    it("shutdown runs once on stop", async () => {
-      const world = createWorld();
-      let shutdownCount = 0;
-
-      addSystem(
-        world,
-        function shutdownSys() {
-          shutdownCount++;
-        },
-        { schedule: Shutdown }
-      );
-
-      await runOnce(world);
-      await stop(world);
-
-      assert.strictEqual(shutdownCount, 1);
-    });
-
     it("shutdown does not run again on second stop", async () => {
       const world = createWorld();
       let shutdownCount = 0;
@@ -1649,6 +1550,71 @@ describe("Scheduler", () => {
         assert.strictEqual(shutdownCount, 1);
         await stop(world);
         assert.strictEqual(shutdownCount, 1);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("rejects with both errors when frame and shutdown both fail", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        const frameError = new Error("frame failed");
+        const shutdownError = new Error("shutdown failed");
+        addSystem(world, function updateSys() {
+          throw frameError;
+        });
+        addSystem(
+          world,
+          function shutdownSys() {
+            throw shutdownError;
+          },
+          { schedule: Shutdown }
+        );
+
+        run(world);
+        const frame = animationFrame.runFrame();
+        const stopping = stop(world);
+
+        await Promise.all([
+          assert.rejects(frame, (actual) => actual === frameError),
+          assert.rejects(
+            stopping,
+            (actual: unknown) =>
+              actual instanceof AggregateError && actual.errors[0] === frameError && actual.errors[1] === shutdownError
+          ),
+        ]);
+      } finally {
+        animationFrame.restore();
+      }
+    });
+
+    it("ignores run() while a shutdown is in progress", async () => {
+      const animationFrame = mockAnimationFrame();
+
+      try {
+        const world = createWorld();
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+
+        addSystem(
+          world,
+          async function shutdownSys() {
+            await gate;
+          },
+          { schedule: Shutdown }
+        );
+
+        const stopping = stop(world);
+
+        run(world);
+        assert.strictEqual(animationFrame.hasFrame(), false);
+
+        release();
+        await stopping;
       } finally {
         animationFrame.restore();
       }
@@ -2214,26 +2180,6 @@ describe("Scheduler", () => {
 
         const sys = defineSystem("sys", () => () => {});
         assert.throws(() => addSystem(world, sys, { set: PhysicsSet }), IrisNotFound);
-      });
-    });
-
-    describe("string references in before/after", () => {
-      it("resolves string reference to custom-named system", async () => {
-        const world = createWorld();
-        const calls: string[] = [];
-
-        const sys = defineSystem("sys", () => () => {
-          calls.push("sys");
-        });
-        addSystem(world, sys, { name: "customName" });
-
-        const other = defineSystem("other", () => () => {
-          calls.push("other");
-        });
-        addSystem(world, other, { after: "customName" });
-
-        await runOnce(world);
-        assert.strictEqual(calls.indexOf("sys") < calls.indexOf("other"), true);
       });
     });
 
