@@ -9,6 +9,7 @@ import {
   hasComponent,
   markComponentChanged,
   removeComponent,
+  removeComponents,
   setComponentValue,
   setComponentVectorValue,
 } from "./component.js";
@@ -17,7 +18,7 @@ import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { changed, queryEntities } from "./query.js";
+import { added, changed, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { addSystem, runOnce } from "./scheduler.js";
@@ -222,6 +223,155 @@ describe("Component", () => {
       assert.strictEqual(x, 1);
       assert.strictEqual(vx, 3);
     });
+
+    it("observers see the whole batch applied when added events fire", () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_obs_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineTag("ba_obs_Player");
+      const entity = createEntity(world);
+
+      // Every callback already sees the full non-pair batch on the entity
+      const sawBoth: boolean[] = [];
+      registerObserverCallback(world, "componentAdded", (_componentId, observedEntity) => {
+        if (observedEntity === entity) {
+          sawBoth.push(hasComponent(world, entity, Position) && hasComponent(world, entity, Player));
+        }
+      });
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
+
+      assert.deepStrictEqual(sawBoth, [true, true]);
+    });
+
+    it("keeps existing data for components already present and fires no added event", () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_keep_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineTag("ba_keep_Player");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, Position, { x: 1, y: 2 });
+
+      let positionAdds = 0;
+      registerObserverCallback(world, "componentAdded", (componentId) => {
+        if (componentId === Position) {
+          positionAdds++;
+        }
+      });
+
+      addComponents(world, entity, [[Position, { x: 9, y: 9 }], Player]);
+
+      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 1);
+      assert.strictEqual(positionAdds, 0);
+      assert.strictEqual(hasComponent(world, entity, Player), true);
+    });
+
+    it("applies only the first of duplicate data entries", () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_dup_Position", { x: Type.f32(), y: Type.f32() });
+      const entity = createEntity(world);
+
+      let addedCount = 0;
+      registerObserverCallback(world, "componentAdded", (componentId) => {
+        if (componentId === Position) {
+          addedCount++;
+        }
+      });
+
+      addComponents(world, entity, [
+        [Position, { x: 1, y: 2 }],
+        [Position, { x: 9, y: 9 }],
+      ]);
+
+      assert.strictEqual(getComponentValue(world, entity, Position, "x"), 1);
+      assert.strictEqual(addedCount, 1);
+    });
+
+    it("fires added events in entry order when pairs come first", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ba_order_ChildOf");
+      const Player = defineTag("ba_order_Player");
+      const entity = createEntity(world);
+      const parent = createEntity(world);
+
+      const order: EntityId[] = [];
+      registerObserverCallback(world, "componentAdded", (componentId, observedEntity) => {
+        if (observedEntity === entity) {
+          order.push(componentId);
+        }
+      });
+
+      addComponents(world, entity, [pair(ChildOf, parent), Player]);
+
+      assert.ok(order.indexOf(pair(ChildOf, parent)) < order.indexOf(Player));
+    });
+
+    it("feeds added and changed detection for every entry", async () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_detect_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineTag("ba_detect_Player");
+      const entity = createEntity(world);
+
+      const addedResults: EntityId[][] = [];
+      const changedResults: EntityId[][] = [];
+
+      addSystem(world, function tracker() {
+        const addedBatch: EntityId[] = [];
+        const changedBatch: EntityId[] = [];
+        queryEntities(world, [added(Player)], (e) => {
+          addedBatch.push(e);
+        });
+        queryEntities(world, [changed(Position)], (e) => {
+          changedBatch.push(e);
+        });
+        addedResults.push(addedBatch);
+        changedResults.push(changedBatch);
+      });
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
+
+      // First frame sees the batch, second frame has nothing new
+      await runOnce(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual(addedResults, [[entity], []]);
+      assert.deepStrictEqual(changedResults, [[entity], []]);
+    });
+
+    it("fires changed events only for entries carrying data", () => {
+      const world = createWorld();
+      const Position = defineComponent("ba_chg_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineTag("ba_chg_Player");
+      const entity = createEntity(world);
+
+      const changedIds: EntityId[] = [];
+      registerObserverCallback(world, "componentChanged", (componentId) => {
+        changedIds.push(componentId);
+      });
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
+
+      assert.deepStrictEqual(changedIds, [Position]);
+    });
+
+    it("throws for wildcard pair entries", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("ba_wild_ChildOf");
+      const entity = createEntity(world);
+
+      assert.throws(() => addComponents(world, entity, [encodePair(ChildOf, Wildcard)]), IrisInvalidArgument);
+    });
+
+    it("throws for destroyed entities (fail-fast)", () => {
+      const world = createWorld();
+      const Player = defineTag("ba_dead_Player");
+      const entity = createEntity(world);
+
+      destroyEntity(world, entity);
+
+      assert.throws(() => {
+        addComponents(world, entity, [Player]);
+      }, IrisNotFound);
+    });
   });
 
   describe("Component Remove", () => {
@@ -304,6 +454,146 @@ describe("Component", () => {
       assert.throws(() => {
         removeComponent(world, entity1, entity2);
       }, IrisNotFound);
+    });
+  });
+
+  describe("Batch Component Remove", () => {
+    it("removes multiple components", () => {
+      const world = createWorld();
+      const Position = defineComponent("br_Position", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("br_Velocity", { vx: Type.f32(), vy: Type.f32() });
+      const Player = defineTag("br_Player");
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], [Velocity, { vx: 3, vy: 4 }], Player]);
+
+      removeComponents(world, entity, [Position, Player]);
+
+      assert.strictEqual(hasComponent(world, entity, Position), false);
+      assert.strictEqual(hasComponent(world, entity, Player), false);
+      assert.strictEqual(hasComponent(world, entity, Velocity), true);
+    });
+
+    it("removes pairs alongside components", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("br_pair_ChildOf");
+      const Player = defineTag("br_pair_Player");
+      const entity = createEntity(world);
+      const parent = createEntity(world);
+
+      addComponents(world, entity, [Player, pair(ChildOf, parent)]);
+
+      removeComponents(world, entity, [Player, pair(ChildOf, parent)]);
+
+      assert.strictEqual(hasComponent(world, entity, Player), false);
+      assert.strictEqual(hasComponent(world, entity, pair(ChildOf, parent)), false);
+    });
+
+    it("is idempotent for absent components", () => {
+      const world = createWorld();
+      const Position = defineComponent("br_idem_Position", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("br_idem_Velocity", { vx: Type.f32(), vy: Type.f32() });
+      const entity = createEntity(world);
+
+      addComponent(world, entity, Position, { x: 1, y: 2 });
+      const archetypeBefore = getEntityMeta(world, entity)!.archetype;
+
+      removeComponents(world, entity, [Velocity]);
+
+      assert.strictEqual(getEntityMeta(world, entity)!.archetype, archetypeBefore);
+    });
+
+    it("skips absent components while removing present ones", () => {
+      const world = createWorld();
+      const Position = defineComponent("br_mixed_Position", { x: Type.f32(), y: Type.f32() });
+      const Velocity = defineComponent("br_mixed_Velocity", { vx: Type.f32(), vy: Type.f32() });
+      const Player = defineTag("br_mixed_Player");
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
+
+      const removedIds: EntityId[] = [];
+      registerObserverCallback(world, "componentRemoved", (componentId) => {
+        removedIds.push(componentId);
+      });
+
+      removeComponents(world, entity, [Position, Velocity, Player]);
+
+      assert.strictEqual(hasComponent(world, entity, Position), false);
+      assert.strictEqual(hasComponent(world, entity, Player), false);
+      assert.deepStrictEqual(removedIds, [Position, Player]);
+    });
+
+    it("fires a single removed event for duplicate entries", () => {
+      const world = createWorld();
+      const Player = defineTag("br_dup_Player");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, Player);
+
+      let removedCount = 0;
+      registerObserverCallback(world, "componentRemoved", (componentId) => {
+        if (componentId === Player) {
+          removedCount++;
+        }
+      });
+
+      removeComponents(world, entity, [Player, Player]);
+
+      assert.strictEqual(removedCount, 1);
+    });
+
+    it("observers see the whole batch removed when removed events fire", () => {
+      const world = createWorld();
+      const Position = defineComponent("br_obs_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineTag("br_obs_Player");
+      const entity = createEntity(world);
+
+      addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
+
+      // Every callback already sees the entity without the full non-pair batch
+      const sawNeither: boolean[] = [];
+      registerObserverCallback(world, "componentRemoved", (_componentId, observedEntity) => {
+        if (observedEntity === entity) {
+          sawNeither.push(!hasComponent(world, entity, Position) && !hasComponent(world, entity, Player));
+        }
+      });
+
+      removeComponents(world, entity, [Position, Player]);
+
+      assert.deepStrictEqual(sawNeither, [true, true]);
+    });
+
+    it("handles empty component list", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      const archetypeBefore = getEntityMeta(world, entity)!.archetype;
+
+      removeComponents(world, entity, []);
+
+      assert.strictEqual(getEntityMeta(world, entity)!.archetype, archetypeBefore);
+    });
+
+    it("throws for wildcard pairs", () => {
+      const world = createWorld();
+      const ChildOf = defineRelation("br_wild_ChildOf");
+      const entity = createEntity(world);
+      const parent = createEntity(world);
+
+      addComponent(world, entity, pair(ChildOf, parent));
+
+      assert.throws(() => removeComponents(world, entity, [encodePair(ChildOf, Wildcard)]), IrisInvalidArgument);
+    });
+
+    it("throws for destroyed entities (fail-fast)", () => {
+      const world = createWorld();
+      const Player = defineTag("br_dead_Player");
+      const entity = createEntity(world);
+
+      addComponent(world, entity, Player);
+      destroyEntity(world, entity);
+
+      assert.throws(() => removeComponents(world, entity, [Player]), IrisNotFound);
     });
   });
 

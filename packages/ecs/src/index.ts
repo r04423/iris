@@ -65,6 +65,7 @@ export {
   hasComponent,
   markComponentChanged,
   removeComponent,
+  removeComponents,
   setComponentValue,
   setComponentVectorValue,
 } from "./component.js";

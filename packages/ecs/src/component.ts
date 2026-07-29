@@ -210,13 +210,20 @@ export type ValidateEntries<T extends readonly ComponentEntry[]> = {
 export type EntryComponent<E extends ComponentEntry> = E extends readonly [infer C extends EntityId, unknown] ? C : E;
 
 /**
- * Adds multiple components to an entity in one call.
+ * Adds multiple components to an entity in one call, faster than adding them
+ * one by one.
  *
- * Equivalent to calling {@link addComponent} for each entry in order.
+ * Idempotent per entry: components the entity already has -- including
+ * duplicates within the batch -- are skipped and keep their existing data.
+ * Observer events fire in entry order, and callbacks may see entries from
+ * later in the batch already applied.
  *
  * Acts as an assertion: after the call the entity is narrowed for every entry,
  * making the typed accessors like {@link getComponentValue} return
  * non-optional values.
+ *
+ * @throws {IrisEntityNotFound} If the entity or a component in the entries is not alive
+ * @throws {IrisInvalidPair} If a pair entry contains a wildcard
  *
  * @example
  * ```typescript
@@ -234,23 +241,59 @@ export function addComponents<const T extends readonly ComponentEntry[]>(
 ): asserts entityId is EntityWith<EntryComponent<T[number]>>;
 
 export function addComponents(world: World, entityId: EntityId, entries: readonly ComponentEntry[]): void {
+  const meta = ensureEntity(world, entityId);
+  const fromArchetype = meta.archetype;
+
+  // Fold every non-pair entry into one transition
+  let toArchetype = fromArchetype;
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
+    const componentId = typeof entry === "number" ? entry : entry[0];
 
-    if (typeof entry === "number") {
-      addComponent(world, entityId, entry as Entity | Tag | Pair<Relation<Record<string, never>>>);
-    } else {
-      const [componentId, data] = entry;
-
-      addComponent(
-        world,
-        entityId,
-        // May also be a data pair; the component overload stands in for both since
-        // entries were already validated by ValidateEntries and the overloads share one implementation
-        componentId as Component<SchemaRecord>,
-        data as InferSchemaRecord<SchemaRecord>
-      );
+    if (isPair(componentId)) {
+      continue;
     }
+
+    const { schema } = ensureEntity(world, componentId);
+    toArchetype = archetypeTraverseAdd(world, toArchetype, componentId, schema);
+  }
+
+  if (toArchetype !== fromArchetype) {
+    moveEntityToArchetype(world, meta, toArchetype);
+  }
+
+  // Replay the fold over its now-cached edges to tell which entries applied:
+  // one that does not advance the cursor was already present or a duplicate
+  let cursor = fromArchetype;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    const componentId = typeof entry === "number" ? entry : entry[0];
+
+    if (isPair(componentId)) {
+      if (typeof entry === "number") {
+        addComponent(world, entityId, entry as Pair<Relation<Record<string, never>>>);
+      } else {
+        addComponent(world, entityId, componentId, entry[1] as InferSchemaRecord<SchemaRecord>);
+      }
+
+      continue;
+    }
+
+    const next = archetypeTraverseAdd(world, cursor, componentId);
+
+    if (next === cursor) {
+      continue;
+    }
+
+    cursor = next;
+
+    if (typeof entry !== "number" && writeComponentData(world, meta, componentId, entry[1])) {
+      fireObserverEvent(world, "componentChanged", componentId, entityId);
+    }
+
+    fireObserverEvent(world, "componentAdded", componentId, entityId);
   }
 }
 
@@ -323,6 +366,63 @@ export function removeComponent(world: World, entityId: EntityId, componentId: E
 
   if (removedRelationWildcard) {
     fireObserverEvent(world, "componentRemoved", relationWildcard, entityId);
+  }
+}
+
+/**
+ * Removes multiple components from an entity in one call, faster than removing
+ * them one by one.
+ *
+ * Idempotent per entry: components the entity lacks -- including duplicates
+ * within the batch -- are skipped. Observer events fire in entry order, and
+ * removal is observable through `removed()` events.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisInvalidPair} If a pair entry contains a wildcard
+ *
+ * @example
+ * ```typescript
+ * removeComponents(world, entity, [Poisoned, Burning, pair(ChildOf, parent)]);
+ * ```
+ */
+export function removeComponents(world: World, entityId: EntityId, componentIds: readonly EntityId[]): void {
+  const meta = ensureEntity(world, entityId);
+  const fromArchetype = meta.archetype;
+
+  // Fold every non-pair removal into one transition
+  let toArchetype = fromArchetype;
+
+  for (let i = 0; i < componentIds.length; i++) {
+    const componentId = componentIds[i]!;
+
+    if (!isPair(componentId)) {
+      toArchetype = archetypeTraverseRemove(world, toArchetype, componentId);
+    }
+  }
+
+  if (toArchetype !== fromArchetype) {
+    moveEntityToArchetype(world, meta, toArchetype);
+  }
+
+  // Replay the fold over its now-cached edges to tell which entries applied:
+  // one that does not advance the cursor was already absent or a duplicate
+  let cursor = fromArchetype;
+
+  for (let i = 0; i < componentIds.length; i++) {
+    const componentId = componentIds[i]!;
+
+    if (isPair(componentId)) {
+      removeComponent(world, entityId, componentId);
+
+      continue;
+    }
+
+    const next = archetypeTraverseRemove(world, cursor, componentId);
+
+    if (next !== cursor) {
+      cursor = next;
+      fireObserverEvent(world, "componentRemoved", componentId, entityId);
+    }
   }
 }
 

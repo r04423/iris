@@ -119,34 +119,34 @@ export const iris: LibraryAdapter = {
 
 ### Entity Create
 
-Create an entity and add each type in the template. Template selection is randomized (weighted distribution preserved).
+Create an entity and add every type in the template through a single `addComponents` batch. Template selection is randomized (weighted distribution preserved). The entries array is built per operation -- it is part of the real spawn cost.
 
 Latency -- avg (P99):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|------:|------:|------:|------:|
-| create empty entity | 128 ns (750 ns) | 54 ns (125 ns) | 53 ns (125 ns) | 66 ns (125 ns) | 51 ns (84 ns) |
-| create entity + 2 types | 359 ns (1.25 us) | 331 ns (833 ns) | 277 ns (421 ns) | 295 ns (458 ns) | 289 ns (375 ns) |
-| create entity + 4 types | 704 ns (1.50 us) | 649 ns (1.33 us) | 619 ns (796 ns) | 645 ns (875 ns) | 633 ns (875 ns) |
-| create entity + 8 types | 2.01 us (2.80 us) | 2.01 us (3.38 us) | 1.96 us (2.50 us) | 2.07 us (2.46 us) | 1.91 us (2.21 us) |
+| create empty entity | 114 ns (833 ns) | 55 ns (125 ns) | 62 ns (166 ns) | 54 ns (84 ns) | 45 ns (84 ns) |
+| create entity + 2 types | 412 ns (1.62 us) | 248 ns (588 ns) | 249 ns (500 ns) | 248 ns (292 ns) | 239 ns (292 ns) |
+| create entity + 4 types | 415 ns (1.13 us) | 426 ns (1.04 us) | 459 ns (1.04 us) | 362 ns (458 ns) | 370 ns (625 ns) |
+| create entity + 8 types | 667 ns (1.42 us) | 679 ns (1.33 us) | 640 ns (1.17 us) | 638 ns (833 ns) | 653 ns (833 ns) |
 
 ops/sec (ops/frame):
 
 | Benchmark | empty | xsmall | small | medium | large |
 |-----------|------:|------:|------:|------:|------:|
-| create empty entity | 7,818,950 (130,316) | 18,403,860 (306,731) | 18,929,311 (315,489) | 15,091,976 (251,533) | 19,722,318 (328,705) |
-| create entity + 2 types | 2,786,415 (46,440) | 3,021,676 (50,361) | 3,605,726 (60,095) | 3,387,146 (56,452) | 3,462,611 (57,710) |
-| create entity + 4 types | 1,421,004 (23,683) | 1,540,033 (25,667) | 1,615,561 (26,926) | 1,549,454 (25,824) | 1,580,476 (26,341) |
-| create entity + 8 types | 498,600 (8,310) | 497,906 (8,298) | 508,926 (8,482) | 482,991 (8,050) | 524,613 (8,744) |
+| create empty entity | 8,752,240 (145,871) | 18,024,520 (300,409) | 16,155,529 (269,259) | 18,445,673 (307,428) | 22,321,404 (372,023) |
+| create entity + 2 types | 2,428,444 (40,474) | 4,024,805 (67,080) | 4,010,924 (66,849) | 4,038,665 (67,311) | 4,179,824 (69,664) |
+| create entity + 4 types | 2,412,271 (40,205) | 2,349,917 (39,165) | 2,178,030 (36,301) | 2,763,168 (46,053) | 2,703,685 (45,061) |
+| create entity + 8 types | 1,498,460 (24,974) | 1,472,360 (24,539) | 1,563,008 (26,050) | 1,566,403 (26,107) | 1,530,555 (25,509) |
 
 alloc/op (retained):
 
 | Benchmark | empty | small | medium | large |
 |-----------|------:|------:|-------:|------:|
-| create empty entity | 508 B (+209 B) | 149 B (+209 B) | 248 B (+86 B) | 101 B (+94 B) |
-| create entity + 2 types | 707 B (+246 B) | 475 B (+245 B) | 435 B (+303 B) | 282 B (-135 B) |
-| create entity + 4 types | 630 B (+312 B) | 476 B (+318 B) | 491 B (+148 B) | 336 B (+110 B) |
-| create entity + 8 types | 1.0 KB (+371 B) | 839 B (+373 B) | 744 B (+382 B) | 576 B (+90 B) |
+| create empty entity | 382 B (+117 B) | 144 B (+120 B) | 117 B (+102 B) | 109 B (+102 B) |
+| create entity + 2 types | 1,018 B (+183 B) | 663 B (+184 B) | 595 B (+469 B) | 549 B (-288 B) |
+| create entity + 4 types | 948 B (+294 B) | 746 B (+313 B) | 600 B (+212 B) | 583 B (+118 B) |
+| create entity + 8 types | 1.3 KB (+395 B) | 1.1 KB (+412 B) | 853 B (+614 B) | 824 B (+98 B) |
 
 ### Entity Destroy
 

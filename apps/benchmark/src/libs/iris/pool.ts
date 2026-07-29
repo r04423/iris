@@ -1,4 +1,13 @@
-import { addComponent, type Component, type Entity, type EntityId, type Tag, type World } from "iris-ecs";
+import {
+  addComponent,
+  addComponents,
+  type Component,
+  type ComponentEntry,
+  type Entity,
+  type EntityId,
+  type Tag,
+  type World,
+} from "iris-ecs";
 import { GENERATED_COMPONENTS, GENERATED_TAGS } from "./fixtures.js";
 import { splitmix32 } from "./rng.js";
 
@@ -263,19 +272,18 @@ export function generateTemplatePool(count: number, group: TemplateGroup, option
 // ============================================================================
 
 /**
- * Adds a template's types to an entity. Components get `{ v: 0 }` data;
- * tags get no data.
+ * Adds a template's types to an entity in one addComponents batch. Components
+ * get `{ v: 0 }` data; tags get no data. Entry construction stays in the hot
+ * path on purpose -- it is part of the real spawn cost.
  */
 export function addTemplateTypes(world: World, entity: Entity, template: Template): void {
+  const entries: ComponentEntry[] = [];
   for (let i = 0; i < template.types.length; i++) {
     const type = template.types[i]!;
-    if (componentSet.has(type)) {
-      // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
-      addComponent(world, entity, type as any, { v: 0 });
-    } else {
-      addComponent(world, entity, type as Tag);
-    }
+    entries.push(componentSet.has(type) ? [type, { v: 0 }] : type);
   }
+  // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
+  addComponents(world, entity, entries as any);
 }
 
 /**
