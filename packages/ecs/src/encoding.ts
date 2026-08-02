@@ -6,49 +6,25 @@ import type { Schema, SchemaRecord } from "./schema.js";
 
 /**
  * ID type constant for entities created with `createEntity`.
- *
- * Compare with the result of {@link extractType} to discriminate ID kinds.
- *
- * @example
- * ```typescript
- * extractType(entity) === ENTITY_TYPE; // true
- * ```
+ * @internal
  */
 export const ENTITY_TYPE = 0x1;
 
 /**
  * ID type constant for tags defined with `defineTag`.
- *
- * Compare with the result of {@link extractType} to discriminate ID kinds.
- *
- * @example
- * ```typescript
- * extractType(Player) === TAG_TYPE; // true
- * ```
+ * @internal
  */
 export const TAG_TYPE = 0x2;
 
 /**
  * ID type constant for data components defined with `defineComponent`.
- *
- * Compare with the result of {@link extractType} to discriminate ID kinds.
- *
- * @example
- * ```typescript
- * extractType(Position) === COMPONENT_TYPE; // true
- * ```
+ * @internal
  */
 export const COMPONENT_TYPE = 0x3;
 
 /**
  * ID type constant for relations defined with `defineRelation`.
- *
- * Compare with the result of {@link extractType} to discriminate ID kinds.
- *
- * @example
- * ```typescript
- * extractType(ChildOf) === RELATIONSHIP_TYPE; // true
- * ```
+ * @internal
  */
 export const RELATIONSHIP_TYPE = 0x4;
 
@@ -242,20 +218,9 @@ function encode(type: number, rawId: number, meta: number): number {
 }
 
 /**
- * Encodes a raw ID and generation into an entity ID.
- *
- * The inverse of {@link extractId} and {@link extractMeta} -- together they
- * round-trip entity IDs through serialized form. Does not allocate or
- * register anything; `createEntity` is the way to obtain new IDs.
- *
- * @param rawId - Raw entity ID (0 to 1,048,575)
- * @param generation - Generation number (0 to 255)
- *
- * @example
- * ```typescript
- * const restored = encodeEntity(savedRawId, savedGeneration);
- * isEntityAlive(world, restored);
- * ```
+ * Encodes a raw ID and generation into an entity ID. Does not allocate or
+ * register anything; `createEntity` owns allocation.
+ * @internal
  */
 export function encodeEntity(rawId: number, generation: number): Entity {
   return encode(ENTITY_TYPE, rawId, generation) as Entity;
@@ -308,32 +273,18 @@ export function encodePair<R extends Relation, T extends EntityId>(relation: R, 
 // ============================================================================
 
 /**
- * Extracts the type tag from an encoded ID.
- *
- * Returns one of {@link ENTITY_TYPE}, {@link TAG_TYPE}, {@link COMPONENT_TYPE},
- * or {@link RELATIONSHIP_TYPE}. Check {@link isPair} first: for a pair the
- * result describes the pair's target, not the pair itself.
- *
- * @example
- * ```typescript
- * const isDefinition = !isPair(id) && extractType(id) !== ENTITY_TYPE;
- * ```
+ * Extracts the type tag from an encoded ID. For a pair the result describes
+ * the pair's target, not the pair itself -- check `isPair` first.
+ * @internal
  */
 export function extractType(id: number): number {
   return (id >>> TYPE_SHIFT) & TYPE_MASK;
 }
 
 /**
- * Extracts the raw numeric ID from an encoded ID.
- *
- * Useful for compact serialization and debug logging; combine with
- * {@link extractMeta} to round-trip entity IDs through {@link encodeEntity}.
- * Meaningful for non-pair IDs only.
- *
- * @example
- * ```typescript
- * console.log(`entity #${extractId(entity)} gen ${extractMeta(entity)}`);
- * ```
+ * Extracts the raw numeric ID from an encoded ID. Meaningful for non-pair
+ * IDs only.
+ * @internal
  */
 export function extractId(id: number): number {
   const type = extractType(id);
@@ -355,14 +306,7 @@ export function extractId(id: number): number {
 /**
  * Extracts the meta field from an encoded ID: the generation for entities,
  * always zero for tags, components, and relations.
- *
- * With {@link extractId} it captures everything needed to rebuild an entity
- * ID via {@link encodeEntity}.
- *
- * @example
- * ```typescript
- * const generation = extractMeta(entity);
- * ```
+ * @internal
  */
 export function extractMeta(id: number): number {
   const type = extractType(id);

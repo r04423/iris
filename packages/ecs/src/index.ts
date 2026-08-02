@@ -80,6 +80,7 @@ export { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, 
 // Relation Operations
 // ============================================================================
 
+export { isPair } from "./encoding.js";
 export { getPairRelation, getPairTarget, getRelationTargets, pair } from "./relation.js";
 
 // ============================================================================
@@ -242,19 +243,3 @@ export { Type } from "./schema.js";
 // ============================================================================
 
 export { defineActions } from "./actions.js";
-
-// ============================================================================
-// Entity Encoding Utilities
-// ============================================================================
-
-export {
-  COMPONENT_TYPE,
-  ENTITY_TYPE,
-  encodeEntity,
-  extractId,
-  extractMeta,
-  extractType,
-  isPair,
-  RELATIONSHIP_TYPE,
-  TAG_TYPE,
-} from "./encoding.js";
