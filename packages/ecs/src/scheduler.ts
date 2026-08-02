@@ -1,3 +1,4 @@
+import type { ConditionFactory, ConditionTick } from "./conditions.js";
 import {
   addEdge,
   addNode,
@@ -368,7 +369,6 @@ export type SystemSetMeta = {
 // Scheduler Types
 // ============================================================================
 
-const CONDITION_FACTORY_BRAND: unique symbol = Symbol("ConditionFactory");
 const SYSTEM_FACTORY_BRAND: unique symbol = Symbol("SystemFactory");
 
 /**
@@ -386,43 +386,6 @@ export type SystemRunner = (world: World) => void | Promise<void>;
  * not passed as a parameter.
  */
 export type SystemTick = () => void | Promise<void>;
-
-/**
- * Synchronous condition tick. Returning false skips the attached system or set.
- *
- * Conditions execute outside system context, so event reads and change
- * detection see nothing. Conditions may observe world state, but must not
- * mutate gameplay data or scheduler registrations.
- *
- * @example
- * ```typescript
- * const enabled = defineCondition("enabled", (world) =>
- *   () => hasResource(world, Enabled)
- * );
- * ```
- */
-export type ConditionTick = () => boolean;
-
-/**
- * Reusable condition factory with per-attachment initialization.
- *
- * @example
- * ```typescript
- * const everyOtherRun = defineCondition("everyOtherRun", () => {
- *   let run = false;
- *   return () => (run = !run);
- * });
- * addSystem(world, movementSystem, { condition: everyOtherRun });
- * ```
- */
-export type ConditionFactory = {
-  /** @internal Runtime brand for condition factories. */
-  readonly [CONDITION_FACTORY_BRAND]: true;
-  /** Descriptive condition name. */
-  readonly name: string;
-  /** Initializes a synchronous tick for one attachment. */
-  readonly init: (world: World) => ConditionTick;
-};
 
 /**
  * System factory with init/tick separation, created by {@link defineSystem}.
@@ -746,28 +709,6 @@ export function addSystems(world: World, systems: (SystemRunner | SystemFactory)
  */
 export function defineSystem(name: string, init: (world: World) => SystemTick): SystemFactory {
   return { [SYSTEM_FACTORY_BRAND]: true, name, init };
-}
-
-/**
- * Defines a reusable synchronous scheduler condition.
- *
- * The initializer runs independently for every system or set attachment before
- * scheduling begins and again after `resetWorld()`. It may observe world state,
- * but must not mutate it.
- *
- * @param init - Initializer returning the boolean condition tick
- * @returns Condition factory for the `condition` option of {@link addSystem} or `addSystemSet()`
- *
- * @example
- * ```typescript
- * const gameIsRunning = defineCondition("gameIsRunning", (world) =>
- *   () => hasResource(world, GameState)
- * );
- * addSystem(world, movementSystem, { condition: gameIsRunning });
- * ```
- */
-export function defineCondition(name: string, init: (world: World) => ConditionTick): ConditionFactory {
-  return { [CONDITION_FACTORY_BRAND]: true, name, init };
 }
 
 /**

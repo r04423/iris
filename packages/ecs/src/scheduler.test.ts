@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { addComponent, getComponentValue } from "./component.js";
+import { defineCondition } from "./conditions.js";
 import { createEntity } from "./entity.js";
 import { IrisDuplicate, IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
@@ -13,7 +14,6 @@ import {
   addSystemSet,
   addSystems,
   createTimeoutDriver,
-  defineCondition,
   defineSchedule,
   defineSystem,
   defineSystemSet,

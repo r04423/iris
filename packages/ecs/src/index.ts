@@ -38,7 +38,7 @@ export {
 // Conditions
 // ============================================================================
 
-export { every, once } from "./conditions.js";
+export { defineCondition, every, once } from "./conditions.js";
 
 // ============================================================================
 // World Operations
@@ -129,7 +129,6 @@ export {
   addSystems,
   animationFrameDriver,
   createTimeoutDriver,
-  defineCondition,
   defineSchedule,
   defineSystem,
   defineSystemSet,
@@ -154,6 +153,7 @@ export {
 
 export type { ActionGetter, ActionInitializer, Actions } from "./actions.js";
 export type { ComponentEntry, EntryComponent, ValidateEntries } from "./component.js";
+export type { ConditionFactory, ConditionTick } from "./conditions.js";
 export type {
   Component,
   Entity,
@@ -179,8 +179,6 @@ export type {
   QueryModifier,
 } from "./query.js";
 export type {
-  ConditionFactory,
-  ConditionTick,
   FrameDriver,
   ScheduleLabel,
   SystemFactory,

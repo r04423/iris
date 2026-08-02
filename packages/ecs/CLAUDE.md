@@ -16,6 +16,7 @@ Core ECS library for Iris.
 | `filters.ts` | Query filter matching against archetypes |
 | `revision.ts` | Revision clock windows: consumption protocol shared by change detection and event reads |
 | `scheduler.ts` | System registration and schedule execution |
+| `conditions.ts` | Condition primitives (defineCondition, ConditionFactory) and built-ins (once, every) |
 | `observer.ts` | Lifecycle event callbacks (entityCreated, componentAdded, etc.) |
 | `event.ts` | Event queue system for inter-system communication |
 | `resource.ts` | Singleton resources (world-scoped data) |
