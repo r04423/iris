@@ -57,6 +57,10 @@ export type ComponentTicks = {
   added: Float64Array;
   /** World revision of the last write to each row (also stamped on add). */
   changed: Float64Array;
+  /** At least as high as every `added` stamp below; lets change queries skip untouched archetypes. */
+  maxAdded: number;
+  /** At least as high as every `changed` stamp below; lets change queries skip untouched archetypes. */
+  maxChanged: number;
 };
 
 // ============================================================================
@@ -322,6 +326,8 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
       archetype.ticks.set(componentId, {
         added: allocateColumn(REVISION_SCHEMA, initialCapacity) as Float64Array,
         changed: allocateColumn(REVISION_SCHEMA, initialCapacity) as Float64Array,
+        maxAdded: 0,
+        maxChanged: 0,
       });
     }
 
@@ -350,6 +356,51 @@ function ensureArchetypeCapacity(archetype: Archetype, requiredCapacity: number)
 }
 
 // ============================================================================
+// Tick Stamping
+// ============================================================================
+
+/**
+ * Stamps a row's added tick and lifts `maxAdded`.
+ */
+function stampAddedTick(ticks: ComponentTicks, row: number, revision: number): void {
+  ticks.added[row] = revision;
+
+  if (revision > ticks.maxAdded) {
+    ticks.maxAdded = revision;
+  }
+}
+
+/**
+ * Stamps a row's changed tick and lifts `maxChanged`.
+ */
+function stampChangedTick(ticks: ComponentTicks, row: number, revision: number): void {
+  ticks.changed[row] = revision;
+
+  if (revision > ticks.maxChanged) {
+    ticks.maxChanged = revision;
+  }
+}
+
+/**
+ * Stamps a component's changed tick on an archetype row, feeding `changed()`
+ * queries. No-op when the type has no tick columns (type absent, or nothing
+ * allocated yet). The sole changed-tick entry point for other modules.
+ * @internal
+ */
+export function stampComponentChanged(
+  archetype: Archetype,
+  componentId: EntityId,
+  row: number,
+  revision: number
+): void {
+  const ticks = archetype.ticks.get(componentId);
+
+  if (ticks) {
+    stampChangedTick(ticks, row, revision);
+  }
+}
+
+// ============================================================================
 // Entity Movement
 // ============================================================================
 
@@ -364,8 +415,8 @@ export function addEntityToArchetype(archetype: Archetype, entityId: EntityId, r
   archetype.entities.push(entityId);
 
   for (const componentTicks of archetype.ticks.values()) {
-    componentTicks.added[row] = revision;
-    componentTicks.changed[row] = revision;
+    stampAddedTick(componentTicks, row, revision);
+    stampChangedTick(componentTicks, row, revision);
   }
 
   return row;
@@ -394,8 +445,8 @@ export function removeEntityFromArchetypeByRow(archetype: Archetype, row: number
     }
 
     for (const componentTicks of archetype.ticks.values()) {
-      componentTicks.added[row] = componentTicks.added[lastIdx]!;
-      componentTicks.changed[row] = componentTicks.changed[lastIdx]!;
+      stampAddedTick(componentTicks, row, componentTicks.added[lastIdx]!);
+      stampChangedTick(componentTicks, row, componentTicks.changed[lastIdx]!);
     }
   }
 
@@ -449,8 +500,8 @@ export function transferEntityToArchetypeByRow(
     const toTicks = toArchetype.ticks.get(type);
 
     if (fromTicks && toTicks) {
-      toTicks.added[toRow] = fromTicks.added[fromRow]!;
-      toTicks.changed[toRow] = fromTicks.changed[fromRow]!;
+      stampAddedTick(toTicks, toRow, fromTicks.added[fromRow]!);
+      stampChangedTick(toTicks, toRow, fromTicks.changed[fromRow]!);
     }
   }
 

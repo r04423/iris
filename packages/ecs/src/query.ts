@@ -602,17 +602,23 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
   for (let f = 0; f < filters.length; f++) {
     const archetypes = filters[f]!.archetypes;
 
-    for (let a = 0; a < archetypes.length; a++) {
+    archetypeLoop: for (let a = 0; a < archetypes.length; a++) {
       const archetype = archetypes[a]!;
       const entities = archetype.entities;
 
-      // Pre-fetch revision arrays for this archetype
+      // Pre-fetch revision arrays for this archetype. When a term's max stamp
+      // sits at or before the window start, no row can satisfy that term, so
+      // the whole archetype is skipped
       addedRevisionArrays.length = 0;
 
       for (let j = 0; j < queryMeta.added.length; j++) {
         const ticks = archetype.ticks.get(queryMeta.added[j]!);
 
         if (ticks) {
+          if (ticks.maxAdded <= lastRevision) {
+            continue archetypeLoop;
+          }
+
           addedRevisionArrays.push(ticks.added);
         }
       }
@@ -623,6 +629,10 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
         const ticks = archetype.ticks.get(queryMeta.changed[j]!);
 
         if (ticks) {
+          if (ticks.maxChanged <= lastRevision) {
+            continue archetypeLoop;
+          }
+
           changedRevisionArrays.push(ticks.changed);
         }
       }

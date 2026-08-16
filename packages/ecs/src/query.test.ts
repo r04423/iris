@@ -1723,6 +1723,59 @@ describe("Query", () => {
       assert.strictEqual(count, 1);
     });
 
+    it("matches an entity that moved archetype after the change", async () => {
+      const world = createWorld();
+      const Position = defineComponent("PositionCDMove", { x: Type.f32() });
+      const Marker = defineTag("MarkerCDMove");
+
+      const entity = createEntity(world);
+      addComponent(world, entity, Position, { x: 0 });
+
+      const results: EntityId[] = [];
+
+      addSystem(world, function tracker() {
+        queryEntities(world, [changed(Position)], (e) => {
+          results.push(e);
+        });
+      });
+
+      await runOnce(world); // consume the initial add
+
+      // Change, then move the entity into a fresh archetype before the read
+      setComponentValue(world, entity, Position, "x", 5);
+      addComponent(world, entity, Marker);
+
+      await runOnce(world);
+      assert.deepStrictEqual(results, [entity, entity]);
+    });
+
+    it("matches a changed entity after a swap-remove reordered its row", async () => {
+      const world = createWorld();
+      const Position = defineComponent("PositionCDSwap", { x: Type.f32() });
+
+      const first = createEntity(world);
+      addComponent(world, first, Position, { x: 0 });
+      const second = createEntity(world);
+      addComponent(world, second, Position, { x: 0 });
+
+      const results: EntityId[] = [];
+
+      addSystem(world, function tracker() {
+        queryEntities(world, [changed(Position)], (e) => {
+          results.push(e);
+        });
+      });
+
+      await runOnce(world); // consume the initial adds
+
+      // Change the last row, then destroy the first so it swaps into row 0
+      setComponentValue(world, second, Position, "x", 5);
+      destroyEntity(world, first);
+
+      await runOnce(world);
+      assert.deepStrictEqual(results.slice(-1), [second]);
+    });
+
     it("does not match without modification after lastTick update", async () => {
       const world = createWorld();
       const Position = defineComponent("PositionCD2", { x: Type.f32() });

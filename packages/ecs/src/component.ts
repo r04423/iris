@@ -1,5 +1,11 @@
 import type { Archetype, Column } from "./archetype.js";
-import { archetypeTraverseAdd, archetypeTraverseRemove, destroyArchetype, getColumnStride } from "./archetype.js";
+import {
+  archetypeTraverseAdd,
+  archetypeTraverseRemove,
+  destroyArchetype,
+  getColumnStride,
+  stampComponentChanged,
+} from "./archetype.js";
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
@@ -602,17 +608,9 @@ function resolveColumn(archetype: Archetype, componentId: EntityId, fieldName: s
 
 /**
  * Stamps the change tick and fires `componentChanged`.
- *
- * Callers establish that the entity has the component first, so its tick
- * columns exist alongside the data columns.
  */
 function markChanged(world: World, archetype: Archetype, row: number, componentId: EntityId, entityId: EntityId): void {
-  const ticks = archetype.ticks.get(componentId);
-
-  if (ticks) {
-    ticks.changed[row] = world.revision;
-  }
-
+  stampComponentChanged(archetype, componentId, row, world.revision);
   fireObserverEvent(world, "componentChanged", componentId, entityId);
 }
 
@@ -662,11 +660,7 @@ function writeComponentData(
     }
   }
 
-  const ticks = archetype.ticks.get(componentId);
-
-  if (ticks) {
-    ticks.changed[row] = world.revision;
-  }
+  stampComponentChanged(archetype, componentId, row, world.revision);
 
   return true;
 }
@@ -756,17 +750,8 @@ function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): 
     return;
   }
 
-  const relationTicks = meta.archetype.ticks.get(encodePair(relation, Wildcard));
-
-  if (relationTicks) {
-    relationTicks.changed[meta.row] = world.revision;
-  }
-
-  const targetTicks = meta.archetype.ticks.get(encodePair(Wildcard, target));
-
-  if (targetTicks) {
-    targetTicks.changed[meta.row] = world.revision;
-  }
+  stampComponentChanged(meta.archetype, encodePair(relation, Wildcard), meta.row, world.revision);
+  stampComponentChanged(meta.archetype, encodePair(Wildcard, target), meta.row, world.revision);
 }
 
 // ============================================================================
