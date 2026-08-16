@@ -113,10 +113,8 @@ const REVISION_SCHEMA = Type.f64();
 /**
  * Derives the stride of a column from its length and the archetype capacity.
  * Scalar columns return 1, vector columns return their stride (e.g., 2 for vec2).
- *
- * @internal
  */
-export function getColumnStride(column: Column, capacity: number): number {
+function getColumnStride(column: Column, capacity: number): number {
   if (Array.isArray(column)) {
     return 1;
   }
@@ -193,6 +191,52 @@ function clearColumn(column: Column, index: number, capacity: number): void {
   for (let s = 0; s < stride; s++) {
     column[offset + s] = 0;
   }
+}
+
+/**
+ * Looks up the column backing one field of a component on an archetype.
+ * Undefined covers both missing component and missing field -- the field
+ * accessors treat them identically as "not present".
+ */
+function resolveColumn(archetype: Archetype, componentId: EntityId, fieldName: string): Column | undefined {
+  return archetype.columns.get(componentId)?.[fieldName];
+}
+
+/**
+ * Copies one row's vector elements out of a column into a fresh array.
+ */
+function readVectorSlot(column: Column, row: number, capacity: number): unknown[] {
+  const stride = getColumnStride(column, capacity);
+  const offset = row * stride;
+  const result = [];
+
+  for (let i = 0; i < stride; i++) {
+    result[i] = column[offset + i];
+  }
+
+  return result;
+}
+
+/**
+ * Writes an array of vector elements into one row of a column.
+ */
+function writeVectorSlot(column: Column, row: number, capacity: number, value: number[]): void {
+  const stride = getColumnStride(column, capacity);
+  const offset = row * stride;
+
+  for (let i = 0; i < stride; i++) {
+    column[offset + i] = value[i]!;
+  }
+}
+
+/**
+ * Returns a zero-copy subarray view of one row's vector elements.
+ */
+function viewVectorSlot(column: Exclude<Column, unknown[]>, row: number, capacity: number): TypedArrayInstance {
+  const stride = getColumnStride(column, capacity);
+  const offset = row * stride;
+
+  return column.subarray(offset, offset + stride) as TypedArrayInstance;
 }
 
 // ============================================================================
@@ -398,6 +442,154 @@ export function stampComponentChanged(
   if (ticks) {
     stampChangedTick(ticks, row, revision);
   }
+}
+
+// ============================================================================
+// Field Access
+// ============================================================================
+
+/**
+ * Reads one row's scalar field value. Undefined when the component or field
+ * is absent.
+ * @internal
+ */
+export function readField(archetype: Archetype, componentId: EntityId, fieldName: string, row: number): unknown {
+  return resolveColumn(archetype, componentId, fieldName)?.[row];
+}
+
+/**
+ * Writes one row's scalar field value and stamps the changed tick. Returns
+ * false without writing when the component or field is absent.
+ * @internal
+ */
+export function writeField(
+  archetype: Archetype,
+  componentId: EntityId,
+  fieldName: string,
+  row: number,
+  value: unknown,
+  revision: number
+): boolean {
+  const column = resolveColumn(archetype, componentId, fieldName);
+
+  if (!column) {
+    return false;
+  }
+
+  column[row] = value;
+  stampComponentChanged(archetype, componentId, row, revision);
+
+  return true;
+}
+
+/**
+ * Reads one row's vector field as a fresh array. Undefined when the component
+ * or field is absent.
+ * @internal
+ */
+export function readVectorField(
+  archetype: Archetype,
+  componentId: EntityId,
+  fieldName: string,
+  row: number
+): unknown[] | undefined {
+  const column = resolveColumn(archetype, componentId, fieldName);
+
+  if (!column) {
+    return;
+  }
+
+  return readVectorSlot(column, row, archetype.capacity);
+}
+
+/**
+ * Writes one row's vector field from an array and stamps the changed tick.
+ * Returns false without writing when the component or field is absent.
+ * @internal
+ */
+export function writeVectorField(
+  archetype: Archetype,
+  componentId: EntityId,
+  fieldName: string,
+  row: number,
+  value: number[],
+  revision: number
+): boolean {
+  const column = resolveColumn(archetype, componentId, fieldName);
+
+  if (!column) {
+    return false;
+  }
+
+  writeVectorSlot(column, row, archetype.capacity, value);
+  stampComponentChanged(archetype, componentId, row, revision);
+
+  return true;
+}
+
+/**
+ * Returns a zero-copy view of one row's vector field. Undefined when the
+ * component or field is absent or the field is not typed-array backed.
+ * @internal
+ */
+export function viewVectorField(
+  archetype: Archetype,
+  componentId: EntityId,
+  fieldName: string,
+  row: number
+): TypedArrayInstance | undefined {
+  const column = resolveColumn(archetype, componentId, fieldName);
+
+  if (!column || Array.isArray(column)) {
+    return;
+  }
+
+  return viewVectorSlot(column, row, archetype.capacity);
+}
+
+// ============================================================================
+// Component Data Writes
+// ============================================================================
+
+/**
+ * Writes a record of field values into a component's columns at one row and
+ * stamps the changed tick. Returns false without writing when the type stores
+ * nothing (tag, or columns not allocated); unknown fields are skipped.
+ * @internal
+ */
+export function writeComponentColumns(
+  archetype: Archetype,
+  row: number,
+  componentId: EntityId,
+  data: Record<string, unknown>,
+  revision: number
+): boolean {
+  const fieldColumns = archetype.columns.get(componentId);
+
+  if (!fieldColumns) {
+    return false;
+  }
+
+  for (const fieldName in data) {
+    const column = fieldColumns[fieldName];
+
+    if (!column) {
+      continue;
+    }
+
+    const value = data[fieldName];
+    const stride = getColumnStride(column, archetype.capacity);
+
+    if (stride === 1) {
+      column[row] = value;
+    } else {
+      writeVectorSlot(column, row, archetype.capacity, value as number[]);
+    }
+  }
+
+  stampComponentChanged(archetype, componentId, row, revision);
+
+  return true;
 }
 
 // ============================================================================
