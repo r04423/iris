@@ -68,7 +68,7 @@ describe("useQueryEntities", () => {
   it("returns matching entities after addComponent", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -80,11 +80,11 @@ describe("useQueryEntities", () => {
   it("returns matching entities for multi-component query", () => {
     const world = createWorld();
     const both = createEntity(world);
-    addComponent(world, both, [Position, { x: 0, y: 0 }]);
-    addComponent(world, both, [Health, { current: 100, max: 100 }]);
+    addComponent(world, both, Position, { x: 0, y: 0 });
+    addComponent(world, both, Health, { current: 100, max: 100 });
 
     const posOnly = createEntity(world);
-    addComponent(world, posOnly, [Position, { x: 1, y: 1 }]);
+    addComponent(world, posOnly, Position, { x: 1, y: 1 });
 
     const { result } = renderHook(() => useQueryEntities(Position, Health), {
       wrapper: createWrapper(world),
@@ -97,8 +97,8 @@ describe("useQueryEntities", () => {
     const world = createWorld();
     const positioned = createEntity(world);
     const healthy = createEntity(world);
-    addComponent(world, positioned, [Position, { x: 0, y: 0 }]);
-    addComponent(world, healthy, [Health, { current: 100, max: 100 }]);
+    addComponent(world, positioned, Position, { x: 0, y: 0 });
+    addComponent(world, healthy, Health, { current: 100, max: 100 });
 
     const { result, rerender } = renderHook(
       ({ term }: { term: typeof Position | typeof Health }) => useQueryEntities(term),
@@ -118,7 +118,7 @@ describe("useQueryEntities", () => {
   it("updates when entity gains matching component", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position, Health), {
       wrapper: createWrapper(world),
@@ -127,7 +127,7 @@ describe("useQueryEntities", () => {
     assert.deepStrictEqual(result.current, []);
 
     act(() => {
-      addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+      addComponent(world, entity, Health, { current: 100, max: 100 });
     });
 
     assert.deepStrictEqual(result.current, [entity]);
@@ -136,7 +136,7 @@ describe("useQueryEntities", () => {
   it("removes entities from result after removeComponent", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -154,7 +154,7 @@ describe("useQueryEntities", () => {
   it("removes entities from result after destroyEntity", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -172,10 +172,10 @@ describe("useQueryEntities", () => {
   it("not() modifier excludes correctly", () => {
     const world = createWorld();
     const alive = createEntity(world);
-    addComponent(world, alive, [Position, { x: 0, y: 0 }]);
+    addComponent(world, alive, Position, { x: 0, y: 0 });
 
     const dead = createEntity(world);
-    addComponent(world, dead, [Position, { x: 1, y: 1 }]);
+    addComponent(world, dead, Position, { x: 1, y: 1 });
     addComponent(world, dead, Dead);
 
     const { result } = renderHook(() => useQueryEntities(Position, not(Dead)), {
@@ -194,7 +194,7 @@ describe("useQueryEntities", () => {
   it("does not re-render on irrelevant component changes", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     let renderCount = 0;
 
@@ -209,7 +209,7 @@ describe("useQueryEntities", () => {
     const initialRenderCount = renderCount;
 
     act(() => {
-      addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+      addComponent(world, entity, Health, { current: 100, max: 100 });
     });
 
     assert.strictEqual(renderCount, initialRenderCount);
@@ -218,7 +218,7 @@ describe("useQueryEntities", () => {
   it("does not re-render on componentChanged", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     let renderCount = 0;
 
@@ -242,7 +242,7 @@ describe("useQueryEntities", () => {
   it("array reference is stable when contents have not changed", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const unrelated = createEntity(world);
 
@@ -262,7 +262,7 @@ describe("useQueryEntities", () => {
   it("array reference changes when contents change", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -320,7 +320,7 @@ describe("useQueryEntities", () => {
 
     const parent = createEntity(world);
     const child = createEntity(world);
-    addComponent(world, child, [Position, { x: 0, y: 0 }]);
+    addComponent(world, child, Position, { x: 0, y: 0 });
     addComponent(world, child, pair(CascadeChildOf, parent));
 
     const { result } = renderHook(() => useQueryEntities(Position), {
@@ -340,7 +340,7 @@ describe("useQueryEntities", () => {
   it("returns empty array after resetWorld", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -358,7 +358,7 @@ describe("useQueryEntities", () => {
   it("re-populates after resetWorld and new entity creation", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity, Position, { x: 0, y: 0 });
 
     const { result } = renderHook(() => useQueryEntities(Position), {
       wrapper: createWrapper(world),
@@ -374,7 +374,7 @@ describe("useQueryEntities", () => {
 
     act(() => {
       const newEntity = createEntity(world);
-      addComponent(world, newEntity, [Position, { x: 5, y: 5 }]);
+      addComponent(world, newEntity, Position, { x: 5, y: 5 });
     });
 
     assert.strictEqual(result.current.length, 1);

@@ -195,8 +195,8 @@ import {
 const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
 const Health = defineComponent("Health", { schema: { current: Type.i32(), max: Type.i32() } });
 
-addComponent(world, entity, [Position, { value: [0, 0] }]);
-addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+addComponent(world, entity, Position, { value: [0, 0] });
+addComponent(world, entity, Health, { current: 100, max: 100 });
 
 // Read or replace the complete record
 const health = getComponent(world, entity, Health);  // { current: 100, max: 100 }
@@ -238,8 +238,8 @@ Numeric types use TypedArrays for cache-friendly memory layout. Use the smallest
 Adding a component that already exists does nothing -- the existing data is preserved.
 
 ```typescript
-addComponent(world, entity, [Health, { current: 100, max: 100 }]);
-addComponent(world, entity, [Health, { current: 50, max: 50 }]);  // ignored
+addComponent(world, entity, Health, { current: 100, max: 100 });
+addComponent(world, entity, Health, { current: 50, max: 50 });  // ignored
 
 getComponentValue(world, entity, Health, "current");  // still 100
 ```
@@ -278,8 +278,8 @@ const Position = defineComponent("Position", { schema: { value: Type.f32(2) } })
 const Color = defineComponent("Color", { schema: { value: Type.u32(4) } });
 
 const entity = createEntity(world);
-addComponent(world, entity, [Position, { value: [10, 20] }]);
-addComponent(world, entity, [Color, { value: [255, 128, 0, 255] }]);
+addComponent(world, entity, Position, { value: [10, 20] });
+addComponent(world, entity, Color, { value: [255, 128, 0, 255] });
 ```
 
 The value functions copy vector fields as tuples:
@@ -309,7 +309,7 @@ const Particle = defineComponent("Particle", {
   },
 });
 
-addComponent(world, entity, [Particle, { position: [0, 0, 0], mass: 1.0 }]);
+addComponent(world, entity, Particle, { position: [0, 0, 0], mass: 1.0 });
 
 const mass = getComponentValue(world, entity, Particle, "mass");          // number
 const pos = getComponentValue(world, entity, Particle, "position");       // [number, number, number]
@@ -463,7 +463,7 @@ const Targets = defineRelation("Targets", {
   schema: { priority: Type.i8() },
 });
 
-addComponent(world, turret, [pair(Targets, enemy), { priority: 10 }]);
+addComponent(world, turret, pair(Targets, enemy), { priority: 10 });
 
 const p = pair(Targets, enemy);
 const priority = getComponentValue(world, turret, p, "priority");
@@ -477,7 +477,7 @@ const Offset = defineRelation("Offset", {
 });
 
 const p = pair(Offset, target);
-addComponent(world, entity, [p, { value: [10, 20] }]);
+addComponent(world, entity, p, { value: [10, 20] });
 const offset = getComponentView(world, entity, p, "value");
 ```
 

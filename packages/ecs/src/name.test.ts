@@ -98,7 +98,7 @@ describe("Name", () => {
       const entity = createEntity(world);
 
       setName(world, entity, "player");
-      addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+      addComponent(world, entity, Position, { x: 0, y: 0 });
 
       // Has Position but not Health
       assert.strictEqual(lookupByName(world, "player", [Position]), entity);
@@ -138,7 +138,7 @@ describe("Name", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
-      addComponent(world, entity, [Name, { value: "direct-add" }]);
+      addComponent(world, entity, Name, { value: "direct-add" });
 
       assert.strictEqual(getName(world, entity), "direct-add");
       assert.strictEqual(lookupByName(world, "direct-add"), entity);
@@ -148,7 +148,7 @@ describe("Name", () => {
       const world = createWorld();
       const entity = createEntity(world);
 
-      addComponent(world, entity, [Name, { value: "original" }]);
+      addComponent(world, entity, Name, { value: "original" });
       setComponentValue(world, entity, Name, "value", "updated");
 
       assert.strictEqual(getName(world, entity), "updated");

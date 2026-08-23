@@ -26,7 +26,7 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Entry for attaching a component.
+ * Entry for collection-based component attachment.
  *
  * Data-less components are bare IDs. Data-bearing components are
  * `[component, data]` tuples.
@@ -83,31 +83,36 @@ export type EntryComponent<E extends ComponentEntry> = E extends readonly [infer
  * @example
  * ```typescript
  * addComponent(world, entity, Player);
- * addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+ * addComponent(world, entity, Position, { x: 0, y: 0 });
  * addComponent(world, child, pair(ChildOf, parent));
  * ```
  */
 export function addComponent<C extends Entity | Tag | Pair<Relation<Record<string, never>>>>(
   world: World,
   entityId: EntityId,
-  entry: C
+  componentId: C
 ): asserts entityId is EntityWith<C>;
 
 export function addComponent<S extends SchemaRecord, N extends string>(
   world: World,
   entityId: EntityId,
-  entry: readonly [Component<S, N>, InferSchemaRecord<S>]
+  componentId: Component<S, N>,
+  data: InferSchemaRecord<S>
 ): asserts entityId is EntityWith<Component<S, N>>;
 
 export function addComponent<S extends SchemaRecord, N extends string, T>(
   world: World,
   entityId: EntityId,
-  entry: readonly [Pair<Relation<S, N>, T>, InferSchemaRecord<S>]
+  componentId: Pair<Relation<S, N>, T>,
+  data: InferSchemaRecord<S>
 ): asserts entityId is EntityWith<Pair<Relation<S, N>, T>>;
 
-export function addComponent(world: World, entityId: EntityId, entry: ComponentEntry): void {
-  const componentId = typeof entry === "number" ? entry : entry[0];
-  const data = typeof entry === "number" ? undefined : entry[1];
+export function addComponent<S extends SchemaRecord>(
+  world: World,
+  entityId: EntityId,
+  componentId: EntityId,
+  data?: InferSchemaRecord<S>
+): void {
   const meta = ensureEntity(world, entityId);
 
   // Idempotent: already has component
@@ -278,11 +283,7 @@ export function addComponents(world: World, entityId: EntityId, entries: readonl
       if (typeof entry === "number") {
         addComponent(world, entityId, entry as Pair<Relation<Record<string, never>>>);
       } else {
-        addComponent(
-          world,
-          entityId,
-          entry as readonly [Pair<Relation<SchemaRecord>>, InferSchemaRecord<SchemaRecord>]
-        );
+        addComponent(world, entityId, componentId, entry[1] as InferSchemaRecord<SchemaRecord>);
       }
 
       continue;

@@ -906,9 +906,9 @@ describe("Query", () => {
       const mover = createEntity(world);
       const accelerator = createEntity(world);
 
-      addComponent(world, mover, [Position, { x: 1 }]);
+      addComponent(world, mover, Position, { x: 1 });
       addComponent(world, mover, Velocity);
-      addComponent(world, accelerator, [Position, { x: 2 }]);
+      addComponent(world, accelerator, Position, { x: 2 });
       addComponent(world, accelerator, Acceleration);
 
       let sum = 0;
@@ -1528,7 +1528,7 @@ describe("Query", () => {
       const Position = defineComponent("PositionCD", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+      addComponent(world, entity, Position, { x: 0, y: 0 });
 
       const results: EntityId[] = [];
 
@@ -1588,7 +1588,7 @@ describe("Query", () => {
       const Marker = defineComponent("MarkerCDMove");
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0 }]);
+      addComponent(world, entity, Position, { x: 0 });
 
       const results: EntityId[] = [];
 
@@ -1616,9 +1616,9 @@ describe("Query", () => {
       const Position = defineComponent("PositionCDSwap", { schema: { x: Type.f32() } });
 
       const first = createEntity(world);
-      addComponent(world, first, [Position, { x: 0 }]);
+      addComponent(world, first, Position, { x: 0 });
       const second = createEntity(world);
-      addComponent(world, second, [Position, { x: 0 }]);
+      addComponent(world, second, Position, { x: 0 });
 
       const results: EntityId[] = [];
 
@@ -1646,7 +1646,7 @@ describe("Query", () => {
       const Position = defineComponent("PositionCD2", { schema: { x: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0 }]);
+      addComponent(world, entity, Position, { x: 0 });
       setComponentValue(world, entity, Position, "x", 5);
 
       const results: number[] = [];
@@ -1811,7 +1811,7 @@ describe("Query", () => {
       const relationChangedCounts: number[] = [];
       const targetChangedCounts: number[] = [];
 
-      addComponent(world, entity, [score, { value: 1 }]);
+      addComponent(world, entity, score, { value: 1 });
 
       addSystem(
         world,
@@ -1873,8 +1873,8 @@ describe("Query", () => {
       const entity1 = createEntity(world);
       const entity2 = createEntity(world);
 
-      addComponent(world, entity1, [Position, { x: 0 }]);
-      addComponent(world, entity2, [Position, { x: 0 }]);
+      addComponent(world, entity1, Position, { x: 0 });
+      addComponent(world, entity2, Position, { x: 0 });
       addComponent(world, entity2, Dead);
 
       const results: EntityId[][] = [];
@@ -1978,7 +1978,7 @@ describe("Query", () => {
       const NewState = createEntity(world);
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0 }]);
+      addComponent(world, entity, Position, { x: 0 });
 
       const results: EntityId[][] = [];
 
@@ -2015,9 +2015,9 @@ describe("Query", () => {
       const Velocity = defineComponent("OrderedViewTickVelocity", { schema: { vx: Type.f32() } });
       const Health = defineComponent("OrderedViewTickHealth", { schema: { value: Type.f32() } });
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 1 }]);
-      addComponent(world, entity, [Velocity, { vx: 2 }]);
-      addComponent(world, entity, [Health, { value: 3 }]);
+      addComponent(world, entity, Position, { x: 1 });
+      addComponent(world, entity, Velocity, { vx: 2 });
+      addComponent(world, entity, Health, { value: 3 });
       let positionFirst: EntityId | undefined;
       let velocityFirst: EntityId[] = [];
 
@@ -2080,7 +2080,7 @@ describe("Query", () => {
       const Health = defineComponent("HealthPSI", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, Health, { value: 100 });
 
       const systemAResults: EntityId[] = [];
       const systemBResults: EntityId[] = [];
@@ -2116,7 +2116,7 @@ describe("Query", () => {
       const Health = defineComponent("HealthPSI2", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, Health, { value: 100 });
 
       // Track results across multiple schedule runs
       const results: number[] = [];
@@ -2153,7 +2153,7 @@ describe("Query", () => {
 
       const systemA = defineSystem("systemA", (world) => {
         const entity = createEntity(world);
-        addComponent(world, entity, [Health, { value: 50 }]);
+        addComponent(world, entity, Health, { value: 50 });
       });
 
       addSystem(world, systemB);
@@ -2170,7 +2170,7 @@ describe("Query", () => {
       const Health = defineComponent("HealthOutside", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, Health, { value: 100 });
 
       // added() outside system context returns empty
       const addedResults = collectEntities(world, [added(Health)]);
@@ -2186,7 +2186,7 @@ describe("Query", () => {
       const Position = defineComponent("PositionPSI", { schema: { x: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0 }]);
+      addComponent(world, entity, Position, { x: 0 });
 
       const systemAResults: EntityId[] = [];
       const systemBResults: EntityId[] = [];
@@ -2276,7 +2276,7 @@ describe("Query", () => {
       const world = createWorld();
       const Position = defineComponent("NestedRevisionPosition", { schema: { x: Type.f32() } });
       const entity = createEntity(world);
-      addComponent(world, entity, [Position, { x: 0 }]);
+      addComponent(world, entity, Position, { x: 0 });
       const counts: number[] = [];
 
       addSystem(
@@ -2437,7 +2437,7 @@ describe("Query", () => {
 
       // Add component between frames (at post-bump tick)
       const entity = createEntity(world);
-      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, Health, { value: 100 });
 
       // Second frame: reader should see the between-frame addition
       await runOnce(world);
@@ -2459,8 +2459,8 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 10, y: 20 }]);
-        addComponent(world, e2, [Position, { x: 30, y: 40 }]);
+        addComponent(world, e1, Position, { x: 10, y: 20 });
+        addComponent(world, e2, Position, { x: 30, y: 40 });
 
         let callCount = 0;
 
@@ -2498,14 +2498,11 @@ describe("Query", () => {
         const entity = createEntity(world);
         const nearby = createEntity(world);
 
-        addComponent(world, entity, [
-          Buckets,
-          {
-            entities: [nearby],
-            cache: new Map([["score", 1]]),
-            weight: 2,
-          },
-        ]);
+        addComponent(world, entity, Buckets, {
+          entities: [nearby],
+          cache: new Map([["score", 1]]),
+          weight: 2,
+        });
 
         queryColumns(world, [Buckets], (_entities, [buckets]) => {
           const entityLists: EntityId[][] = buckets.entities;
@@ -2526,9 +2523,9 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 1 }]);
-        addComponent(world, e2, [Position, { x: 2 }]);
-        addComponent(world, e2, [Velocity, { vx: 5 }]);
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
 
         let callCount = 0;
         const xValues: number[] = [];
@@ -2553,9 +2550,9 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 1 }]);
+        addComponent(world, e1, Position, { x: 1 });
         addComponent(world, e1, IsEnemy);
-        addComponent(world, e2, [Position, { x: 2 }]);
+        addComponent(world, e2, Position, { x: 2 });
 
         let matchedCount = 0;
 
@@ -2577,8 +2574,8 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 1 }]);
-        addComponent(world, e2, [Position, { x: 2 }]);
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
         addComponent(world, e2, Dead);
 
         const xValues: number[] = [];
@@ -2626,8 +2623,8 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const likesTarget = pair(Likes, target);
 
-        addComponent(world, e1, [Position, { x: 10 }]);
-        addComponent(world, e1, [likesTarget, { strength: 0.8 }]);
+        addComponent(world, e1, Position, { x: 10 });
+        addComponent(world, e1, likesTarget, { strength: 0.8 });
 
         queryColumns(world, [Position, likesTarget], (entities, [pos, likes]) => {
           assert.strictEqual(entities.length, 1);
@@ -2644,7 +2641,7 @@ describe("Query", () => {
         const child = createEntity(world);
         const childOfParent = pair(ChildOf, parent);
 
-        addComponent(world, child, [Position, { x: 5 }]);
+        addComponent(world, child, Position, { x: 5 });
         addComponent(world, child, childOfParent);
 
         // Data-less pair does not produce a column parameter — only pos
@@ -2661,8 +2658,8 @@ describe("Query", () => {
         const Velocity = defineComponent("qc_cache_order_Velocity", { schema: { vx: Type.f32() } });
         const entity = createEntity(world);
 
-        addComponent(world, entity, [Position, { x: 10 }]);
-        addComponent(world, entity, [Velocity, { vx: 20 }]);
+        addComponent(world, entity, Position, { x: 10 });
+        addComponent(world, entity, Velocity, { vx: 20 });
 
         queryColumns(world, [Position, Velocity], (_entities, [position, velocity]) => {
           assert.strictEqual(position.x[0], 10);
@@ -2684,9 +2681,9 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 1 }]);
-        addComponent(world, e2, [Position, { x: 2 }]);
-        addComponent(world, e2, [Velocity, { vx: 5 }]);
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
 
         let callCount = 0;
 
@@ -2707,9 +2704,9 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { x: 1 }]);
-        addComponent(world, e2, [Position, { x: 2 }]);
-        addComponent(world, e2, [Velocity, { vx: 5 }]);
+        addComponent(world, e1, Position, { x: 1 });
+        addComponent(world, e2, Position, { x: 2 });
+        addComponent(world, e2, Velocity, { vx: 5 });
 
         destroyEntity(world, e2);
 
@@ -2732,7 +2729,7 @@ describe("Query", () => {
 
         for (let i = 0; i < 5; i++) {
           const e = createEntity(world);
-          addComponent(world, e, [Health, { hp: i < 3 ? 0 : 100 }]);
+          addComponent(world, e, Health, { hp: i < 3 ? 0 : 100 });
           entities.push(e);
         }
 
@@ -2760,8 +2757,8 @@ describe("Query", () => {
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
-        addComponent(world, e1, [Position, { value: [1, 2, 3] }]);
-        addComponent(world, e2, [Position, { value: [4, 5, 6] }]);
+        addComponent(world, e1, Position, { value: [1, 2, 3] });
+        addComponent(world, e2, Position, { value: [4, 5, 6] });
 
         queryColumns(world, [Position], (_entities, [pos]) => {
           assert.strictEqual(pos.value[0], 1);

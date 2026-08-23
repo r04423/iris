@@ -50,7 +50,7 @@ describe("useHasComponent", () => {
   it("returns true when entity has the component", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     const { result } = renderHook(() => useHasComponent(entity, Health), {
       wrapper: createWrapper(world),
@@ -73,7 +73,7 @@ describe("useHasComponent", () => {
   it("tracks an optional entity", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     const { result, rerender } = renderHook(
       ({ entityId }: { entityId: EntityId | undefined }) => useHasComponent(entityId, Health),
@@ -105,7 +105,7 @@ describe("useHasComponent", () => {
     assert.strictEqual(result.current, false);
 
     act(() => {
-      addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+      addComponent(world, entity, Health, { current: 100, max: 100 });
     });
 
     assert.strictEqual(result.current, true);
@@ -114,7 +114,7 @@ describe("useHasComponent", () => {
   it("updates to false on removeComponent", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     const { result } = renderHook(() => useHasComponent(entity, Health), {
       wrapper: createWrapper(world),
@@ -132,7 +132,7 @@ describe("useHasComponent", () => {
   it("does not re-render on componentChanged", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let renderCount = 0;
 
@@ -171,7 +171,7 @@ describe("useHasComponent", () => {
     const initialRenderCount = renderCount;
 
     act(() => {
-      addComponent(world, entity2, [Health, { current: 100, max: 100 }]);
+      addComponent(world, entity2, Health, { current: 100, max: 100 });
     });
 
     assert.strictEqual(renderCount, initialRenderCount);
@@ -194,7 +194,7 @@ describe("useHasComponent", () => {
     const initialRenderCount = renderCount;
 
     act(() => {
-      addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+      addComponent(world, entity, Position, { x: 0, y: 0 });
     });
 
     assert.strictEqual(renderCount, initialRenderCount);

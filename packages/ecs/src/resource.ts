@@ -42,7 +42,7 @@ export function addResource<S extends SchemaRecord, N extends string>(
   component: Component<S, N>,
   data: InferSchemaRecord<S>
 ): asserts component is Component<S, N> & EntityWith<Component<S, N>> {
-  addComponent(world, component, [component, data]);
+  addComponent(world, component, component, data);
 }
 
 /**

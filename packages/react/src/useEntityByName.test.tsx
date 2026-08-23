@@ -107,7 +107,7 @@ describe("useEntityByName", () => {
     assert.strictEqual(typed, undefined);
 
     act(() => {
-      addComponent(world, entity, [Position, { x: 0, y: 0 }]);
+      addComponent(world, entity, Position, { x: 0, y: 0 });
     });
 
     assert.strictEqual(result.current, entity);

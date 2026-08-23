@@ -38,14 +38,14 @@ const world = createWorld();
 
 const enemy = createEntity(world);
 addComponent(world, enemy, Enemy);
-addComponent(world, enemy, [Position, { x: 10, y: 20 }]);
+addComponent(world, enemy, Position, { x: 10, y: 20 });
 
 // Define reusable actions
 const spawnActions = defineActions((world) => ({
   spawnEnemy(x: number, y: number) {
     const e = createEntity(world);
     addComponent(world, e, Enemy);
-    addComponent(world, e, [Position, { x, y }]);
+    addComponent(world, e, Position, { x, y });
     return e;
   },
 }));
@@ -135,7 +135,7 @@ import { defineActions, createEntity, addComponent } from "iris-ecs";
 const spawnActions = defineActions((world) => ({
   spawnEnemy(x: number, y: number) {
     const e = createEntity(world);
-    addComponent(world, e, [Position, { x, y }]);
+    addComponent(world, e, Position, { x, y });
     return e;
   },
 }));

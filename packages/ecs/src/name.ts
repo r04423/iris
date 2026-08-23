@@ -180,7 +180,7 @@ export function setName(world: World, entityId: EntityId, name: string): void {
   }
 
   if (!hasComponent(world, entityId, Name)) {
-    addComponent(world, entityId, [Name, { value: name }]);
+    addComponent(world, entityId, Name, { value: name });
     return;
   }
 

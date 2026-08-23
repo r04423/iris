@@ -296,7 +296,7 @@ export function addEntityTypes(world: World, entity: Entity, assignment: Templat
     const type = assignment.modifiers[i]!;
     if (componentSet.has(type)) {
       // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
-      addComponent(world, entity, [type, { v: 0 }] as any);
+      addComponent(world, entity, type as any, { v: 0 });
     } else {
       addComponent(world, entity, type as Tag);
     }

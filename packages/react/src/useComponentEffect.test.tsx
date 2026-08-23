@@ -50,7 +50,7 @@ describe("useComponentEffect", () => {
   it("calls callback on componentChanged", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let callCount = 0;
     renderHook(
@@ -74,9 +74,9 @@ describe("useComponentEffect", () => {
     const world = createWorld();
     const entity1 = createEntity(world);
     const entity2 = createEntity(world);
-    addComponent(world, entity1, [Health, { current: 100, max: 100 }]);
-    addComponent(world, entity2, [Health, { current: 100, max: 100 }]);
-    addComponent(world, entity1, [Position, { x: 0, y: 0 }]);
+    addComponent(world, entity1, Health, { current: 100, max: 100 });
+    addComponent(world, entity2, Health, { current: 100, max: 100 });
+    addComponent(world, entity1, Position, { x: 0, y: 0 });
 
     let callCount = 0;
 
@@ -103,7 +103,7 @@ describe("useComponentEffect", () => {
   it("tracks an optional entity", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let callCount = 0;
     let cleanupCount = 0;
@@ -161,7 +161,7 @@ describe("useComponentEffect", () => {
     // addComponent fires componentAdded once, plus componentChanged per field
     // (2 fields on Health). Total: 3 invocations.
     act(() => {
-      addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+      addComponent(world, entity, Health, { current: 100, max: 100 });
     });
 
     assert.ok(callCount >= 1);
@@ -170,7 +170,7 @@ describe("useComponentEffect", () => {
   it("calls callback on componentRemoved", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let callCount = 0;
 
@@ -192,7 +192,7 @@ describe("useComponentEffect", () => {
   it("calls cleanup function before next invocation", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let cleanupCount = 0;
 
@@ -224,7 +224,7 @@ describe("useComponentEffect", () => {
   it("calls cleanup function on unmount", () => {
     const world = createWorld();
     const entity = createEntity(world);
-    addComponent(world, entity, [Health, { current: 100, max: 100 }]);
+    addComponent(world, entity, Health, { current: 100, max: 100 });
 
     let cleanupCount = 0;
 

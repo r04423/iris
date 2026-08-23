@@ -33,7 +33,7 @@ const Position = defineComponent("Position", {
 const spawnActions = defineActions((world) => ({
   spawn(x: number, y: number) {
     const e = createEntity(world);
-    addComponent(world, e, [Position, { x, y }]);
+    addComponent(world, e, Position, { x, y });
     return e;
   },
 }));

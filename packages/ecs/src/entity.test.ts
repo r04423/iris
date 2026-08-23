@@ -262,7 +262,7 @@ describe("Entity", () => {
       const Position = defineComponent("RecycledFreshPosition", { schema: { x: Type.f32() } });
 
       const entity1 = createEntity(world);
-      addComponent(world, entity1, [Position, { x: 1 }]);
+      addComponent(world, entity1, Position, { x: 1 });
       destroyEntity(world, entity1);
 
       const entity2 = createEntity(world);
@@ -333,7 +333,7 @@ describe("Entity", () => {
 
       // Trigger auto-registration
       const entity = createEntity(world);
-      addComponent(world, entity, [Velocity, { x: 1.0, y: 2.0 }]);
+      addComponent(world, entity, Velocity, { x: 1.0, y: 2.0 });
 
       // Schema should be in EntityMeta
       const meta = getEntityMeta(world, Velocity);
@@ -349,7 +349,7 @@ describe("Entity", () => {
       assert.strictEqual(isEntityAlive(world, Score), false);
 
       const entity = createEntity(world);
-      addComponent(world, entity, [Score, { value: 100 }]);
+      addComponent(world, entity, Score, { value: 100 });
 
       assert.strictEqual(isEntityAlive(world, Score), true);
     });

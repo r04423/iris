@@ -71,7 +71,7 @@ export function resetActionState(world: World): void {
  * const playerActions = defineActions((world) => ({
  *   spawn(x: number, y: number) {
  *     const entity = createEntity(world);
- *     addComponent(world, entity, [Position, { x, y }]);
+ *     addComponent(world, entity, Position, { x, y });
  *     return entity;
  *   },
  * }));
