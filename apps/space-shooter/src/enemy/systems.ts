@@ -1,4 +1,4 @@
-import type { Entity, World } from "iris-ecs";
+import type { Entity } from "iris-ecs";
 import {
   addResource,
   collectEntities,
@@ -24,10 +24,10 @@ import { AutoRotate, Avoidance, EnemyConfig, EnemySpawner, Explosion, IsEnemy, I
 // Startup
 // ============================================================================
 
-export function initEnemies(world: World): void {
+export const initEnemies = defineSystem("initEnemies", (world) => {
   addResource(world, EnemySpawner, { interval: 0.8, accumulatedTime: 0, max: 40 });
   addResource(world, EnemyConfig, { radius: 8, spawnRadiusMin: 400, spawnRadiusMax: 600 });
-}
+});
 
 // ============================================================================
 // Update
@@ -40,44 +40,42 @@ export const spawnEnemies = defineSystem("spawnEnemies", (world) => {
   const { getPlayer } = playerActions(world);
   const { getPosition } = transformActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
-    const interval = getResourceValue(world, EnemySpawner, "interval") ?? 1;
-    const max = getResourceValue(world, EnemySpawner, "max") ?? 50;
-    let accumulatedTime = getResourceValue(world, EnemySpawner, "accumulatedTime") ?? 0;
-    const spawnRadiusMin = getResourceValue(world, EnemyConfig, "spawnRadiusMin") ?? 400;
-    const spawnRadiusMax = getResourceValue(world, EnemyConfig, "spawnRadiusMax") ?? 600;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const interval = getResourceValue(world, EnemySpawner, "interval") ?? 1;
+  const max = getResourceValue(world, EnemySpawner, "max") ?? 50;
+  let accumulatedTime = getResourceValue(world, EnemySpawner, "accumulatedTime") ?? 0;
+  const spawnRadiusMin = getResourceValue(world, EnemyConfig, "spawnRadiusMin") ?? 400;
+  const spawnRadiusMax = getResourceValue(world, EnemyConfig, "spawnRadiusMax") ?? 600;
 
-    if (getEnemyCount() >= max) {
-      return;
-    }
+  if (getEnemyCount() >= max) {
+    return;
+  }
 
-    const player = getPlayer();
-    let playerX = 0;
-    let playerY = 0;
+  const player = getPlayer();
+  let playerX = 0;
+  let playerY = 0;
 
-    if (player !== undefined) {
-      [playerX, playerY] = getPosition(player);
-    }
+  if (player !== undefined) {
+    [playerX, playerY] = getPosition(player);
+  }
 
-    accumulatedTime += delta;
+  accumulatedTime += delta;
 
-    if (accumulatedTime >= interval) {
-      accumulatedTime -= interval;
+  if (accumulatedTime >= interval) {
+    accumulatedTime -= interval;
 
-      // Spawn at random angle on a ring around the player
-      const angle = Math.random() * Math.PI * 2;
-      const radius = between(spawnRadiusMin, spawnRadiusMax);
-      const spawnX = playerX + Math.cos(angle) * radius;
-      const spawnY = playerY + Math.sin(angle) * radius;
+    // Spawn at random angle on a ring around the player
+    const angle = Math.random() * Math.PI * 2;
+    const radius = between(spawnRadiusMin, spawnRadiusMax);
+    const spawnX = playerX + Math.cos(angle) * radius;
+    const spawnY = playerY + Math.sin(angle) * radius;
 
-      spawnEnemy(spawnX, spawnY, player as Entity);
+    spawnEnemy(spawnX, spawnY, player as Entity);
 
-      accumulatedTime -= between(-0.15, 0.15);
-    }
+    accumulatedTime -= between(-0.15, 0.15);
+  }
 
-    setResourceValue(world, EnemySpawner, "accumulatedTime", accumulatedTime);
-  };
+  setResourceValue(world, EnemySpawner, "accumulatedTime", accumulatedTime);
 });
 
 // Simple steering: dampen current velocity then accelerate toward the target.
@@ -86,39 +84,37 @@ export const followPlayer = defineSystem("followPlayer", (world) => {
   const { getPosition } = transformActions(world);
   const { getVelocity, setVelocity, getThrust, getDamping } = movementActions(world);
 
-  return () => {
-    for (const entity of collectEntities(world, [IsEnemy, Transform, Movement])) {
-      const targets = getRelationTargets(world, entity, Targeting);
-      const target = targets[0];
-      if (target === undefined) {
-        continue;
-      }
-      if (!hasComponent(world, target, Transform)) {
-        continue;
-      }
-
-      const [x, y] = getPosition(entity);
-      const [targetX, targetY] = getPosition(target);
-
-      const thrust = getThrust(entity);
-      const damping = getDamping(entity);
-      let [vx, vy] = getVelocity(entity);
-
-      vx *= damping;
-      vy *= damping;
-
-      const dx = targetX - x;
-      const dy = targetY - y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist > 0) {
-        vx += (dx / dist) * thrust;
-        vy += (dy / dist) * thrust;
-      }
-
-      setVelocity(entity, vx, vy);
+  for (const entity of collectEntities(world, [IsEnemy, Transform, Movement])) {
+    const targets = getRelationTargets(world, entity, Targeting);
+    const target = targets[0];
+    if (target === undefined) {
+      continue;
     }
-  };
+    if (!hasComponent(world, target, Transform)) {
+      continue;
+    }
+
+    const [x, y] = getPosition(entity);
+    const [targetX, targetY] = getPosition(target);
+
+    const thrust = getThrust(entity);
+    const damping = getDamping(entity);
+    let [vx, vy] = getVelocity(entity);
+
+    vx *= damping;
+    vy *= damping;
+
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > 0) {
+      vx += (dx / dist) * thrust;
+      vy += (dy / dist) * thrust;
+    }
+
+    setVelocity(entity, vx, vy);
+  }
 });
 
 // Flocking separation: each entity steers away from the average position of
@@ -128,105 +124,97 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
   const { getVelocity, setVelocity } = movementActions(world);
   const { getAvoidanceRange } = enemyActions(world);
 
-  return () => {
-    const map = getResourceValue(world, SpatialHash, "map")!;
-    const nearby = getResourceValue(world, ScratchEntities, "entities")!;
+  const map = getResourceValue(world, SpatialHash, "map")!;
+  const nearby = getResourceValue(world, ScratchEntities, "entities")!;
 
-    for (const entity of collectEntities(world, [Avoidance, Transform, Movement])) {
-      const range = getAvoidanceRange(entity);
-      const [x, y] = getPosition(entity);
+  for (const entity of collectEntities(world, [Avoidance, Transform, Movement])) {
+    const range = getAvoidanceRange(entity);
+    const [x, y] = getPosition(entity);
 
-      map.getNearbyEntities(x, y, range, nearby);
+    map.getNearbyEntities(x, y, range, nearby);
 
-      let avoidX = 0;
-      let avoidY = 0;
-      let count = 0;
+    let avoidX = 0;
+    let avoidY = 0;
+    let count = 0;
 
-      for (const neighbor of nearby) {
-        if (neighbor === entity) {
-          continue;
-        }
-
-        if (!isEntityAlive(world, neighbor)) {
-          continue;
-        }
-
-        if (!hasComponent(world, neighbor, Avoidance) || !hasComponent(world, neighbor, Transform)) {
-          continue;
-        }
-
-        const [nx, ny] = getPosition(neighbor);
-
-        const dx = nx - x;
-        const dy = ny - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist <= range && dist > 0) {
-          avoidX += dx;
-          avoidY += dy;
-          count++;
-        }
+    for (const neighbor of nearby) {
+      if (neighbor === entity) {
+        continue;
       }
 
-      if (count > 0) {
-        // Negate to steer away, normalize, and scale
-        avoidX = -avoidX / count;
-        avoidY = -avoidY / count;
+      if (!isEntityAlive(world, neighbor)) {
+        continue;
+      }
 
-        const len = Math.sqrt(avoidX * avoidX + avoidY * avoidY);
-        if (len > 0) {
-          avoidX = (avoidX / len) * 2;
-          avoidY = (avoidY / len) * 2;
-        }
+      if (!hasComponent(world, neighbor, Avoidance) || !hasComponent(world, neighbor, Transform)) {
+        continue;
+      }
 
-        const [vx, vy] = getVelocity(entity);
-        setVelocity(entity, vx + avoidX, vy + avoidY);
+      const [nx, ny] = getPosition(neighbor);
+
+      const dx = nx - x;
+      const dy = ny - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist <= range && dist > 0) {
+        avoidX += dx;
+        avoidY += dy;
+        count++;
       }
     }
-  };
+
+    if (count > 0) {
+      // Negate to steer away, normalize, and scale
+      avoidX = -avoidX / count;
+      avoidY = -avoidY / count;
+
+      const len = Math.sqrt(avoidX * avoidX + avoidY * avoidY);
+      if (len > 0) {
+        avoidX = (avoidX / len) * 2;
+        avoidY = (avoidY / len) * 2;
+      }
+
+      const [vx, vy] = getVelocity(entity);
+      setVelocity(entity, vx + avoidX, vy + avoidY);
+    }
+  }
 });
 
 export const updateAutoRotate = defineSystem("updateAutoRotate", (world) => {
   const { getRotation, setRotation } = transformActions(world);
   const { getAutoRotateSpeed } = enemyActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, [Transform, AutoRotate])) {
-      const speed = getAutoRotateSpeed(entity);
-      const rotation = getRotation(entity);
+  for (const entity of collectEntities(world, [Transform, AutoRotate])) {
+    const speed = getAutoRotateSpeed(entity);
+    const rotation = getRotation(entity);
 
-      setRotation(entity, rotation + delta * speed);
-    }
-  };
+    setRotation(entity, rotation + delta * speed);
+  }
 });
 
 export const handleEnemyKilled = defineSystem("handleEnemyKilled", (world) => {
   const { spawnExplosion } = enemyActions(world);
 
-  return () => {
-    readEvents(world, EnemyKilled, (data) => {
-      spawnExplosion(data.x, data.y);
-    });
-  };
+  readEvents(world, EnemyKilled, (data) => {
+    spawnExplosion(data.x, data.y);
+  });
 });
 
 export const tickExplosion = defineSystem("tickExplosion", (world) => {
   const { getExplosionProgress, setExplosionCurrent, despawnExplosion } = enemyActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, [IsExplosion, Explosion])) {
-      const [duration, prevCurrent] = getExplosionProgress(entity);
-      const current = prevCurrent + delta * 1000;
+  for (const entity of collectEntities(world, [IsExplosion, Explosion])) {
+    const [duration, prevCurrent] = getExplosionProgress(entity);
+    const current = prevCurrent + delta * 1000;
 
-      setExplosionCurrent(entity, current);
+    setExplosionCurrent(entity, current);
 
-      if (current >= duration) {
-        despawnExplosion(entity);
-      }
+    if (current >= duration) {
+      despawnExplosion(entity);
     }
-  };
+  }
 });

@@ -156,15 +156,11 @@ export function createExecutionState(): ExecutionState {
 }
 
 /**
- * Discards initialized factory runners so they initialize again before the
- * next execution. Registered systems survive world resets.
+ * Discards initialized condition runners. Registered systems survive world resets.
  * @internal
  */
 export function resetSystemState(world: World): void {
   for (const meta of world.systems.byId.values()) {
-    if (meta.factory !== null) {
-      meta.runner = null;
-    }
     if (meta.conditionFactory !== null) {
       meta.conditionRunner = null;
     }
@@ -328,10 +324,10 @@ export type SystemSetLabel = string & { [SYSTEM_SET_LABEL_BRAND]: true };
 /**
  * Reference to a system or system set in `before`/`after` constraints.
  *
- * Accepts the system function or factory itself, a set label, or a plain
+ * Accepts the system definition itself, a set label, or a plain
  * name string (needed for systems registered under a custom `name`).
  */
-export type SystemReference = SystemRunner | SystemFactory | SystemSetLabel | string;
+export type SystemReference = System | SystemSetLabel | string;
 
 /**
  * Options for system set registration.
@@ -369,47 +365,25 @@ export type SystemSetMeta = {
 // Scheduler Types
 // ============================================================================
 
-const SYSTEM_FACTORY_BRAND: unique symbol = Symbol("SystemFactory");
+declare const SYSTEM_BRAND: unique symbol;
 
 /**
- * System function signature.
- *
- * Takes the world, returns void, or a Promise the scheduler awaits before
- * running the next system.
+ * Named system definition created by {@link defineSystem}.
  */
-export type SystemRunner = (world: World) => void | Promise<void>;
-
-/**
- * System tick function returned by a SystemFactory's init.
- *
- * Runs every frame. The world is captured in the init closure scope,
- * not passed as a parameter.
- */
-export type SystemTick = () => void | Promise<void>;
-
-/**
- * System factory with init/tick separation, created by {@link defineSystem}.
- *
- * The init function runs before first execution and after a world reset.
- * The returned tick function runs every frame.
- */
-export type SystemFactory = {
-  /** @internal Runtime brand for discriminating SystemFactory from SystemRunner. */
-  readonly [SYSTEM_FACTORY_BRAND]: true;
+export type System = {
+  /** @internal Nominal brand for system definitions. */
+  readonly [SYSTEM_BRAND]: true;
   /** System name for scheduling constraints and execution context. */
   readonly name: string;
-  /**
-   * Init function. Runs before first execution and again after `resetWorld()`.
-   * It receives the world, returns a tick function, and must be safe to repeat.
-   */
-  readonly init: (world: World) => SystemTick;
+  /** Function executed by the scheduler. */
+  readonly tick: (world: World) => void | Promise<void>;
 };
 
 /**
  * Shared options for system registration.
  */
 type SystemOptionsBase = {
-  /** Custom name (overrides function.name). Required for anonymous functions. */
+  /** Custom registration name. Defaults to the system definition's name. */
   name?: string;
   /** Run before these systems or sets (within same schedule). */
   before?: SystemReference | SystemReference[];
@@ -461,13 +435,8 @@ export type SystemsOptions = Omit<SystemOptionsBase, "name"> & SystemTarget;
  * System metadata registered by `addSystem()`.
  */
 export type SystemMeta = {
-  /**
-   * Function the scheduler executes. Null for a factory system until the next
-   * frame or shutdown initializes it, and again after `resetWorld()`.
-   */
-  runner: SystemRunner | null;
-  /** Factory the runner is created from; null for plain function systems. */
-  factory: SystemFactory | null;
+  /** Function the scheduler executes. */
+  tick: (world: World) => void | Promise<void>;
   /** Condition factory attached to this system, if any. */
   conditionFactory: ConditionFactory | null;
   /** Initialized condition tick; null until the next frame or shutdown initializes it, and again after `resetWorld()`. */
@@ -582,14 +551,12 @@ function normalizeReferences(refs: SystemReference | SystemReference[] | undefin
 /**
  * Registers a system in the world for later scheduling.
  *
- * Accepts either a `SystemRunner` function or a `SystemFactory` created by
- * {@link defineSystem}. Factory initialization is deferred until the next
- * frame or `stop()` call, immediately before schedules execute. Constraint
- * and schedule validation is deferred the same way, so registration order
- * does not matter -- a system may reference one registered later.
+ * Constraint and schedule validation is deferred until the next frame or
+ * `stop()` call, so registration order does not matter -- a system may
+ * reference one registered later.
  *
- * @param system - System function or factory (must be named unless the name option is provided)
- * @throws {IrisInvalidSystemName} If no name is available (anonymous function without a name option)
+ * @param system - System created by {@link defineSystem}
+ * @throws {IrisInvalidSystemName} If the effective registration name is empty
  * @throws {IrisDuplicateSystem} If the effective name is already registered
  * @throws {IrisDuplicateSystemSet} If the effective name collides with a system set label
  * @throws {IrisSystemSetNotFound} If the `set` option names an unregistered set
@@ -602,15 +569,13 @@ function normalizeReferences(refs: SystemReference | SystemReference[] | undefin
  *   after: physicsSystem,
  *   condition: rendererIsReady,
  * });
- * addSystem(world, movementFactory); // SystemFactory from defineSystem()
+ * addSystem(world, movementSystem);
  * ```
  */
-export function addSystem(world: World, system: SystemRunner | SystemFactory, options?: SystemOptions): void {
-  const factory = isSystemFactory(system) ? system : null;
-  const runner = factory === null ? (system as SystemRunner) : null;
+export function addSystem(world: World, system: System, options?: SystemOptions): void {
   const name = options?.name ?? system.name;
 
-  if (!name || name === "anonymous") {
+  if (!name) {
     throw new IrisInvalidSystemName();
   }
 
@@ -630,8 +595,7 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
   }
 
   world.systems.byId.set(name, {
-    runner,
-    factory,
+    tick: system.tick,
     conditionFactory: options?.condition ?? null,
     conditionRunner: null,
     // A set's schedule wins over the schedule option, which the types forbid combining.
@@ -660,60 +624,44 @@ export function addSystem(world: World, system: SystemRunner | SystemFactory, op
  * addSystems(world, [broadphase, narrowphase, solver], { set: PhysicsSystems });
  * ```
  */
-export function addSystems(world: World, systems: (SystemRunner | SystemFactory)[], options?: SystemsOptions): void {
+export function addSystems(world: World, systems: System[], options?: SystemsOptions): void {
   for (let i = 0; i < systems.length; i++) {
     addSystem(world, systems[i]!, options);
   }
 }
 
 // ============================================================================
-// System Factory
+// System Definition
 // ============================================================================
 
 /**
- * Defines a system with separate init and tick phases.
+ * Defines a named system tick.
  *
- * The init function runs before the system's first execution and again after
- * `resetWorld()`. Initialization is deferred from `addSystem()` until the next
- * frame or `stop()` and must be safe to repeat. Use it to cache action getters
- * and other setup tied to the current world state.
- * The returned tick function runs every frame during schedule execution.
- *
- * Local state can be declared as variables in the init closure -- use it for
- * system-internal bookkeeping (frame counters, cooldowns, cached computations).
- * Use resources for state other systems need to read, components for per-entity state.
- *
- * @returns SystemFactory to pass to {@link addSystem}
+ * @returns System to pass to {@link addSystem}
+ * @throws {IrisInvalidSystemName} If name is empty
  *
  * @example
  * ```typescript
  * const movementSystem = defineSystem("movementSystem", (world) => {
- *   // Init: runs before the first execution and after each reset
- *   // Tick: runs every frame
- *   return () => {
- *     const dt = getResourceValue(world, Time, "delta") ?? 0;
- *     const entities = collectEntities(world, [Position, Velocity]);
- *     for (const entity of entities) {
- *       const x = getComponentValue(world, entity, Position, "x")!;
- *       const vx = getComponentValue(world, entity, Velocity, "vx")!;
- *       setComponentValue(world, entity, Position, "x", x + vx * dt);
- *     }
- *   };
+ *   const dt = getResourceValue(world, Time, "delta") ?? 0;
+ *   const entities = collectEntities(world, [Position, Velocity]);
+ *   for (const entity of entities) {
+ *     const x = getComponentValue(world, entity, Position, "x")!;
+ *     const vx = getComponentValue(world, entity, Velocity, "vx")!;
+ *     setComponentValue(world, entity, Position, "x", x + vx * dt);
+ *   }
  * });
  *
  * addSystem(world, movementSystem);
  * addSystem(world, movementSystem, { schedule: PostUpdate, name: "lateMovement" });
  * ```
  */
-export function defineSystem(name: string, init: (world: World) => SystemTick): SystemFactory {
-  return { [SYSTEM_FACTORY_BRAND]: true, name, init };
-}
+export function defineSystem(name: string, tick: (world: World) => void | Promise<void>): System {
+  if (!name) {
+    throw new IrisInvalidSystemName();
+  }
 
-/**
- * Discriminates a branded SystemFactory from a plain SystemRunner function.
- */
-function isSystemFactory(system: SystemRunner | SystemFactory): system is SystemFactory {
-  return typeof system === "object" && system !== null && SYSTEM_FACTORY_BRAND in system;
+  return { name, tick } as System;
 }
 
 // ============================================================================
@@ -949,21 +897,12 @@ function rebuildPipeline(world: World): void {
 }
 
 /**
- * Initializes pending factory systems, then rebuilds dirty schedules.
+ * Initializes pending conditions, then rebuilds dirty schedules.
  */
-function prepareSystems(world: World): void {
-  // Every path that leaves a runner or condition uninitialized also marks the
-  // schedules dirty, so this one flag gates both init and the rebuild.
+function prepareScheduler(world: World): void {
+  // Every path that leaves a condition uninitialized also marks schedules dirty.
   if (!world.schedules.dirty) {
     return;
-  }
-
-  // Complete system setup before condition setup so every condition observes
-  // a fully initialized system layer.
-  for (const meta of world.systems.byId.values()) {
-    if (meta.runner === null) {
-      meta.runner = meta.factory!.init(world);
-    }
   }
 
   for (const meta of world.systems.byId.values()) {
@@ -1036,7 +975,7 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
       const systemStart = performance.now();
       fireObserverEvent(world, "systemStarted", systemId, scheduleLabel);
 
-      const result = meta.runner!(world);
+      const result = meta.tick(world);
 
       // Await async systems, sync systems pass through unchanged
       if (result instanceof Promise) {
@@ -1130,7 +1069,7 @@ async function executeFrame(world: World): Promise<void> {
 
     world.execution.tick++;
 
-    prepareSystems(world);
+    prepareScheduler(world);
 
     // Run startup schedule on first call
     if (world.execution.lifecycle === "initial") {
@@ -1303,7 +1242,7 @@ async function runShutdown(world: World): Promise<void> {
   const [frame] = await Promise.allSettled([world.execution.framePromise]);
 
   try {
-    prepareSystems(world);
+    prepareScheduler(world);
     await executeSchedule(world, Shutdown);
   } catch (shutdownError) {
     // A failed shutdown leaves shutdownPromise set, so stop() keeps reporting it.

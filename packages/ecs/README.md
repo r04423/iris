@@ -69,20 +69,17 @@ const player = createEntity(world, [
   Player,
 ]);
 
-// Define a system -- init runs once, tick runs every frame
+// Define a system
 const movementSystem = defineSystem("movementSystem", (world) => {
-  return () => {
-    // Tick: runs every frame
-    const entities = collectEntities(world, [Position, Velocity]);
+  const entities = collectEntities(world, [Position, Velocity]);
 
-    for (const e of entities) {
-      const pos = getComponentVectorView(world, e, Position, "value");
-      const vel = getComponentVectorView(world, e, Velocity, "value");
+  for (const e of entities) {
+    const pos = getComponentVectorView(world, e, Position, "value");
+    const vel = getComponentVectorView(world, e, Velocity, "value");
 
-      pos[0] += vel[0];
-      pos[1] += vel[1];
-    }
-  };
+    pos[0] += vel[0];
+    pos[1] += vel[1];
+  }
 });
 
 // Register and run
@@ -559,9 +556,9 @@ Queries match archetypes where all required components are present and no exclud
 
 ### Systems
 
-A **System** is a function that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
+A **System** is a named tick that operates on the world. Systems query entities, read and write components, emit events, and implement game logic.
 
-Use `defineSystem()` to create systems with init / tick separation. The init function runs before the first execution and again after `resetWorld()` -- use each invocation to cache queries, cache action getters, and set up fresh local state for the current world contents. The returned tick function runs every frame.
+Use `defineSystem()` to create every system. Its tick receives the world each time the scheduler runs it.
 
 Systems are registered with `addSystem()` and executed automatically when the world runs.
 
@@ -578,22 +575,19 @@ import {
 } from "iris-ecs";
 
 const movementSystem = defineSystem("movementSystem", (world) => {
-  return () => {
-    // Tick: runs every frame
-    const dt = getResourceValue(world, Time, "delta") ?? 0;
+  const dt = getResourceValue(world, Time, "delta") ?? 0;
 
-    const entities = collectEntities(world, [Position, Velocity]);
+  const entities = collectEntities(world, [Position, Velocity]);
 
-    for (const e of entities) {
-      const pos = getComponentVectorView(world, e, Position, "value");
-      const vel = getComponentVectorView(world, e, Velocity, "value");
+  for (const e of entities) {
+    const pos = getComponentVectorView(world, e, Position, "value");
+    const vel = getComponentVectorView(world, e, Velocity, "value");
 
-      pos[0] += vel[0] * dt;
-      pos[1] += vel[1] * dt;
+    pos[0] += vel[0] * dt;
+    pos[1] += vel[1] * dt;
 
-      markComponentChanged(world, e, Position);
-    }
-  };
+    markComponentChanged(world, e, Position);
+  }
 });
 
 addSystem(world, movementSystem);
@@ -603,35 +597,19 @@ run(world);
 await stop(world);
 ```
 
-#### Plain Function Systems
-
-For simple systems that don't need separate initialization or local state, plain functions also work, and the function's name becomes the system identifier.
-
-```typescript
-function debugSystem(world) {
-  const entities = collectEntities(world, [Health]);
-
-  for (const e of entities) {
-    console.log(getComponentValue(world, e, Health, "current"));
-  }
-}
-
-addSystem(world, debugSystem);
-```
-
 #### Ordering Constraints
 
 Control execution order with `before` and `after` options:
 
 ```typescript
 const inputSystem = defineSystem("inputSystem", (world) => {
-  return () => { /* read input */ };
+  /* read input */
 });
 const physicsSystem = defineSystem("physicsSystem", (world) => {
-  return () => { /* simulate physics */ };
+  /* simulate physics */
 });
 const renderSystem = defineSystem("renderSystem", (world) => {
-  return () => { /* draw frame */ };
+  /* draw frame */
 });
 
 addSystem(world, inputSystem);
@@ -642,7 +620,7 @@ addSystem(world, renderSystem, { after: "physicsSystem" });
 
 Without constraints, systems run in registration order. Use arrays for multiple constraints: `{ after: ["inputSystem", "audioSystem"] }`.
 
-`defineSystem` factory can be registered multiple times with different names via the `name` option: `addSystem(world, movementSystem, { name: "lateMovement" })`.
+A system can be registered multiple times with different names via the `name` option: `addSystem(world, movementSystem, { name: "lateMovement" })`.
 
 #### System Sets
 
@@ -772,11 +750,9 @@ await runOnce(world); // one frame
 Systems can be async. Both `run()` and `runOnce()` handle sync and async systems transparently:
 
 ```typescript
-const loadAssetsSystem = defineSystem("loadAssetsSystem", (world) => {
-  return async () => {
-    const textures = await fetch("/assets/textures.json");
-    // ...
-  };
+const loadAssetsSystem = defineSystem("loadAssetsSystem", async (world) => {
+  const textures = await fetch("/assets/textures.json");
+  // ...
 });
 
 addSystem(world, loadAssetsSystem, { schedule: Startup });
@@ -804,17 +780,13 @@ const spawnActions = defineActions((world) => ({
   },
 }));
 
-// Cache the action getter in a system's init, then call in tick
 const waveSystem = defineSystem("waveSystem", (world) => {
   const spawn = spawnActions(world);
-
-  return () => {
-    spawn.enemy(Math.random() * 100, 0);
-  };
+  spawn.enemy(Math.random() * 100, 0);
 });
 ```
 
-Actions are initialized lazily and cached per world -- calling `spawnActions(world)` multiple times returns the same object. Cache the getter in your system's init to avoid repeated lookups in the tick function.
+Actions are initialized lazily and cached per world -- calling `spawnActions(world)` multiple times returns the same object.
 
 💡 **Tip:** Use actions to organize spawn helpers, update functions, or any reusable world operations.
 
@@ -915,36 +887,30 @@ import {
 } from "iris-ecs";
 
 const physicsSetupSystem = defineSystem("physicsSetupSystem", (world) => {
-  return () => {
-    // Entities where Position was added since this system last read this query
-    const entities = collectEntities(world, [added(Position)]);
+  // Entities where Position was added since this system last read this query
+  const entities = collectEntities(world, [added(Position)]);
 
-    for (const entity of entities) {
-      initializePhysicsBody(entity);
-    }
-  };
+  for (const entity of entities) {
+    initializePhysicsBody(entity);
+  }
 });
 
 const healthBarSystem = defineSystem("healthBarSystem", (world) => {
-  return () => {
-    // Entities where Health was modified (added OR value changed)
-    const entities = collectEntities(world, [changed(Health)]);
+  // Entities where Health was modified (added OR value changed)
+  const entities = collectEntities(world, [changed(Health)]);
 
-    for (const entity of entities) {
-      updateHealthBar(entity);
-    }
-  };
+  for (const entity of entities) {
+    updateHealthBar(entity);
+  }
 });
 
 const minimapSystem = defineSystem("minimapSystem", (world) => {
-  return () => {
-    // Combine change detection with regular filters
-    const entities = collectEntities(world, [Player, changed(Position), not(Dead)]);
+  // Combine change detection with regular filters
+  const entities = collectEntities(world, [Player, changed(Position), not(Dead)]);
 
-    for (const e of entities) {
-      updatePlayerOnMinimap(e);
-    }
-  };
+  for (const e of entities) {
+    updatePlayerOnMinimap(e);
+  }
 });
 ```
 

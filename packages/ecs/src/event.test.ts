@@ -73,9 +73,12 @@ describe("Event", () => {
       const GameStarted = defineEvent("EmitTagEvent");
       let seen = false;
 
-      addSystem(world, function checker() {
-        if (hasEvents(world, GameStarted)) seen = true;
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          if (hasEvents(world, GameStarted)) seen = true;
+        })
+      );
 
       emitEvent(world, GameStarted);
       await runOnce(world);
@@ -91,9 +94,12 @@ describe("Event", () => {
       });
       let seen = false;
 
-      addSystem(world, function checker() {
-        if (hasEvents(world, DamageDealt)) seen = true;
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          if (hasEvents(world, DamageDealt)) seen = true;
+        })
+      );
 
       emitEvent(world, DamageDealt, { target: 1, amount: 25.5 });
       await runOnce(world);
@@ -114,11 +120,14 @@ describe("Event", () => {
       });
       const results: 42[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, Event, (e) => {
-          results.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, Event, (e) => {
+            results.push(e.value);
+          });
+        })
+      );
 
       emitEvent(world, Event, { value: 42 });
       await runOnce(world);
@@ -134,11 +143,14 @@ describe("Event", () => {
       });
       const results: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, Event, (e) => {
-          results.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, Event, (e) => {
+            results.push(e.value);
+          });
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
@@ -155,16 +167,19 @@ describe("Event", () => {
       let firstCount = 0;
       let secondCount = 0;
 
-      addSystem(world, function reader() {
-        // First read sees events
-        readEvents(world, Event, () => {
-          firstCount++;
-        });
-        // Second read without an intervening emission sees nothing
-        readEvents(world, Event, () => {
-          secondCount++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          // First read sees events
+          readEvents(world, Event, () => {
+            firstCount++;
+          });
+          // Second read without an intervening emission sees nothing
+          readEvents(world, Event, () => {
+            secondCount++;
+          });
+        })
+      );
 
       emitEvent(world, Event);
       await runOnce(world);
@@ -178,11 +193,14 @@ describe("Event", () => {
       const TagEvent = defineEvent("ReadTag");
       const results: unknown[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, TagEvent, (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, TagEvent, (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       emitEvent(world, TagEvent);
       await runOnce(world);
@@ -202,9 +220,12 @@ describe("Event", () => {
       const Event = defineEvent("LastEmpty");
       let result: unknown = "sentinel";
 
-      addSystem(world, function reader() {
-        result = readLastEvent(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          result = readLastEvent(world, Event);
+        })
+      );
 
       await runOnce(world);
 
@@ -218,9 +239,12 @@ describe("Event", () => {
       });
       let result: { value: number } | undefined;
 
-      addSystem(world, function reader() {
-        result = readLastEvent(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          result = readLastEvent(world, Event);
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
@@ -237,10 +261,13 @@ describe("Event", () => {
       });
       let count = 0;
 
-      addSystem(world, function reader() {
-        readLastEvent(world, Event);
-        count = countEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readLastEvent(world, Event);
+          count = countEvents(world, Event);
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
@@ -260,9 +287,12 @@ describe("Event", () => {
       const Event = defineEvent("HasEmpty");
       let result = true;
 
-      addSystem(world, function checker() {
-        result = hasEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          result = hasEvents(world, Event);
+        })
+      );
 
       await runOnce(world);
 
@@ -274,9 +304,12 @@ describe("Event", () => {
       const Event = defineEvent("HasEvents");
       let result = false;
 
-      addSystem(world, function checker() {
-        result = hasEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          result = hasEvents(world, Event);
+        })
+      );
 
       emitEvent(world, Event);
       await runOnce(world);
@@ -289,9 +322,12 @@ describe("Event", () => {
       const Event = defineEvent("CountEmpty");
       let result = -1;
 
-      addSystem(world, function counter() {
-        result = countEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("counter", function counter() {
+          result = countEvents(world, Event);
+        })
+      );
 
       await runOnce(world);
 
@@ -303,9 +339,12 @@ describe("Event", () => {
       const Event = defineEvent("CountEvents");
       let result = 0;
 
-      addSystem(world, function counter() {
-        result = countEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("counter", function counter() {
+          result = countEvents(world, Event);
+        })
+      );
 
       emitEvent(world, Event);
       emitEvent(world, Event);
@@ -320,11 +359,14 @@ describe("Event", () => {
       const Event = defineEvent("HasNoMark");
       let count = 0;
 
-      addSystem(world, function checker() {
-        hasEvents(world, Event);
-        hasEvents(world, Event);
-        count = countEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          hasEvents(world, Event);
+          hasEvents(world, Event);
+          count = countEvents(world, Event);
+        })
+      );
 
       emitEvent(world, Event);
       await runOnce(world);
@@ -337,13 +379,16 @@ describe("Event", () => {
       const Event = defineEvent("CountNoMark");
       let readCount = 0;
 
-      addSystem(world, function checker() {
-        countEvents(world, Event);
-        countEvents(world, Event);
-        readEvents(world, Event, () => {
-          readCount++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          countEvents(world, Event);
+          countEvents(world, Event);
+          readEvents(world, Event, () => {
+            readCount++;
+          });
+        })
+      );
 
       emitEvent(world, Event);
       emitEvent(world, Event);
@@ -366,11 +411,14 @@ describe("Event", () => {
       let count = 0;
       let has = true;
 
-      addSystem(world, function clearer() {
-        clearEvents(world, Event);
-        count = countEvents(world, Event);
-        has = hasEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("clearer", function clearer() {
+          clearEvents(world, Event);
+          count = countEvents(world, Event);
+          has = hasEvents(world, Event);
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
@@ -395,17 +443,23 @@ describe("Event", () => {
       const system1Results: number[] = [];
       const system2Results: number[] = [];
 
-      addSystem(world, function system1() {
-        readEvents(world, Event, (e) => {
-          system1Results.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("system1", function system1() {
+          readEvents(world, Event, (e) => {
+            system1Results.push(e.value);
+          });
+        })
+      );
 
-      addSystem(world, function system2() {
-        readEvents(world, Event, (e) => {
-          system2Results.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("system2", function system2() {
+          readEvents(world, Event, (e) => {
+            system2Results.push(e.value);
+          });
+        })
+      );
 
       // Emit event before execution
       emitEvent(world, Event, { value: 42 });
@@ -433,7 +487,7 @@ describe("Event", () => {
       const readerSeen: number[] = [];
 
       // Emitter sees the original event but not the one it emits mid-iteration
-      const emitter = defineSystem("emitter", (world) => () => {
+      const emitter = defineSystem("emitter", (world) => {
         readEvents(world, Event, (e) => {
           emitterSeen.push(e.value);
           emitEvent(world, Event, { value: e.value + 10 });
@@ -445,11 +499,11 @@ describe("Event", () => {
       // Reader (later system) sees the mid-iteration event on the same schedule
       addSystem(
         world,
-        function reader() {
+        defineSystem("reader", function reader() {
           readEvents(world, Event, (e) => {
             readerSeen.push(e.value);
           });
-        },
+        }),
         { after: emitter }
       );
 
@@ -467,14 +521,17 @@ describe("Event", () => {
       const nested: number[] = [];
       let remaining: number[] | undefined;
 
-      addSystem(world, function reader() {
-        readEvents(world, Event, (event) => {
-          outer.push(event.value);
-          emitEvent(world, Event, { value: 2 });
-          readEvents(world, Event, (emitted) => nested.push(emitted.value));
-        });
-        remaining = collectEvents(world, Event).map((event) => event.value);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, Event, (event) => {
+            outer.push(event.value);
+            emitEvent(world, Event, { value: 2 });
+            readEvents(world, Event, (emitted) => nested.push(emitted.value));
+          });
+          remaining = collectEvents(world, Event).map((event) => event.value);
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       await runOnce(world);
@@ -490,16 +547,19 @@ describe("Event", () => {
       const afterThrow: number[] = [];
       const afterEmit: number[] = [];
 
-      addSystem(world, function reader() {
-        assert.throws(() =>
-          readEvents(world, Event, () => {
-            throw new Error("event callback");
-          })
-        );
-        readEvents(world, Event, (event) => afterThrow.push(event.value));
-        emitEvent(world, Event, { value: 3 });
-        readEvents(world, Event, (event) => afterEmit.push(event.value));
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          assert.throws(() =>
+            readEvents(world, Event, () => {
+              throw new Error("event callback");
+            })
+          );
+          readEvents(world, Event, (event) => afterThrow.push(event.value));
+          emitEvent(world, Event, { value: 3 });
+          readEvents(world, Event, (event) => afterEmit.push(event.value));
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       await runOnce(world);
@@ -511,14 +571,17 @@ describe("Event", () => {
     it("guards revision overflow without consuming events", async () => {
       const world = createWorld();
       const Event = defineEvent("EventRevisionOverflow");
-      addSystem(world, function reader() {
-        const queue = world.events.byId.get(Event.id)!;
-        const cursor = queue.lastRevision.get("reader");
-        world.revision = Number.MAX_SAFE_INTEGER;
-        assert.throws(() => readEvents(world, Event, () => {}), IrisLimitExceeded);
-        assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
-        assert.strictEqual(queue.lastRevision.get("reader"), cursor);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          const queue = world.events.byId.get(Event.id)!;
+          const cursor = queue.lastRevision.get("reader");
+          world.revision = Number.MAX_SAFE_INTEGER;
+          assert.throws(() => readEvents(world, Event, () => {}), IrisLimitExceeded);
+          assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
+          assert.strictEqual(queue.lastRevision.get("reader"), cursor);
+        })
+      );
       emitEvent(world, Event);
       await runOnce(world);
     });
@@ -560,10 +623,13 @@ describe("Event", () => {
       const Event = defineEvent("OutsideEmit", { value: Type.i32() });
       let result: number | undefined;
 
-      addSystem(world, function reader() {
-        const e = readLastEvent(world, Event);
-        if (e) result = e.value;
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          const e = readLastEvent(world, Event);
+          if (e) result = e.value;
+        })
+      );
 
       // Emit outside system, then read inside
       emitEvent(world, Event, { value: 99 });
@@ -585,18 +651,21 @@ describe("Event", () => {
       });
       let secondReadCount = 0;
 
-      addSystem(world, function reader() {
-        // Exit early after first event
-        readEvents(world, Event, (e) => {
-          if (e.value === 1) return false;
-          return;
-        });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          // Exit early after first event
+          readEvents(world, Event, (e) => {
+            if (e.value === 1) return false;
+            return;
+          });
 
-        // The captured revision window is consumed despite early exit
-        readEvents(world, Event, () => {
-          secondReadCount++;
-        });
-      });
+          // The captured revision window is consumed despite early exit
+          readEvents(world, Event, () => {
+            secondReadCount++;
+          });
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       emitEvent(world, Event, { value: 2 });
@@ -615,19 +684,22 @@ describe("Event", () => {
       let count1After = 0;
       let count2After = 0;
 
-      addSystem(world, function checker() {
-        count1 = countEvents(world, Event1);
-        count2 = countEvents(world, Event2);
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          count1 = countEvents(world, Event1);
+          count2 = countEvents(world, Event2);
 
-        // Read Event1 only
-        readEvents(world, Event1, () => {
-          // consume
-        });
+          // Read Event1 only
+          readEvents(world, Event1, () => {
+            // consume
+          });
 
-        // Event2 should still be available
-        count1After = countEvents(world, Event1);
-        count2After = countEvents(world, Event2);
-      });
+          // Event2 should still be available
+          count1After = countEvents(world, Event1);
+          count2After = countEvents(world, Event2);
+        })
+      );
 
       emitEvent(world, Event1);
       emitEvent(world, Event2);
@@ -652,11 +724,14 @@ describe("Event", () => {
       const seen: number[] = [];
       let frame = 0;
 
-      addSystem(world, function lateReader() {
-        frame++;
-        if (frame < 3) return;
-        readEvents(world, Event, (e) => seen.push(e.value));
-      });
+      addSystem(
+        world,
+        defineSystem("lateReader", function lateReader() {
+          frame++;
+          if (frame < 3) return;
+          readEvents(world, Event, (e) => seen.push(e.value));
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       await runOnce(world);
@@ -670,9 +745,12 @@ describe("Event", () => {
       const world = createWorld();
       const Event = defineEvent("FlushReadOnly");
 
-      addSystem(world, function reader() {
-        hasEvents(world, Event);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          hasEvents(world, Event);
+        })
+      );
 
       await runOnce(world);
 
@@ -685,11 +763,14 @@ describe("Event", () => {
       const Event = defineEvent("FlushReactivate", { value: Type.i32() });
       const seen: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, Event, (e) => {
-          seen.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, Event, (e) => {
+            seen.push(e.value);
+          });
+        })
+      );
 
       emitEvent(world, Event, { value: 1 });
       await runOnce(world);
@@ -715,11 +796,14 @@ describe("Event", () => {
       const MoveEvent = defineEvent("MoveVec", { position: Type.f32(3) });
       let result: [number, number, number] | undefined;
 
-      addSystem(world, function reader() {
-        readEvents(world, MoveEvent, (e) => {
-          result = e.position;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, MoveEvent, (e) => {
+            result = e.position;
+          });
+        })
+      );
 
       emitEvent(world, MoveEvent, { position: [1.5, 2.5, 3.5] });
       await runOnce(world);
@@ -736,11 +820,14 @@ describe("Event", () => {
       });
       const results: Array<{ position: [number, number, number]; damage: number; source: number }> = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, HitEvent, (e) => {
-          results.push({ position: e.position, damage: e.damage, source: e.source });
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, HitEvent, (e) => {
+            results.push({ position: e.position, damage: e.damage, source: e.source });
+          });
+        })
+      );
 
       emitEvent(world, HitEvent, { position: [1, 2, 3], damage: 50.5, source: 42 });
       emitEvent(world, HitEvent, { position: [4, 5, 6], damage: 25, source: 7 });
@@ -764,11 +851,14 @@ describe("Event", () => {
 
       const seen: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, Event, (e) => {
-          seen.push(e.value);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, Event, (e) => {
+            seen.push(e.value);
+          });
+        })
+      );
 
       // First frame: no events
       await runOnce(world);
@@ -789,7 +879,7 @@ describe("Event", () => {
       const readerSeen: number[] = [];
 
       // Reader runs first
-      const reader = defineSystem("reader", (world) => () => {
+      const reader = defineSystem("reader", (world) => {
         readEvents(world, Event, (e) => {
           readerSeen.push(e.value);
         });
@@ -801,12 +891,12 @@ describe("Event", () => {
       let writeRun = 0;
       addSystem(
         world,
-        function writer() {
+        defineSystem("writer", function writer() {
           writeRun++;
           if (writeRun === 1) {
             emitEvent(world, Event, { value: 99 });
           }
-        },
+        }),
         { after: reader }
       );
 

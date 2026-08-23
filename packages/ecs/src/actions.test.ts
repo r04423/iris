@@ -94,7 +94,7 @@ describe("Actions", () => {
   });
 
   describe("World Reset", () => {
-    it("reinitializes closure state retained by a system after reset", async () => {
+    it("direct systems resolve fresh actions after reset", async () => {
       const counterActions = defineActions(() => {
         let count = 0;
         return {
@@ -110,9 +110,8 @@ describe("Actions", () => {
         world,
         defineSystem("actionCounter", (systemWorld) => {
           const counter = counterActions(systemWorld);
-          return () => {
-            values.push(counter.next());
-          };
+
+          values.push(counter.next());
         })
       );
 

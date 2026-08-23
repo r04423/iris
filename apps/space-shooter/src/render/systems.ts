@@ -1,4 +1,3 @@
-import type { World } from "iris-ecs";
 import { addResource, collectEntities, defineSystem, getResourceValue } from "iris-ecs";
 import { combatActions } from "../combat/actions.js";
 import { Bullet, CombatConfig, IsBullet } from "../combat/components.js";
@@ -14,12 +13,12 @@ import { GameRenderer } from "./renderer.js";
 // Startup
 // ============================================================================
 
-export function initRenderer(world: World): void {
+export const initRenderer = defineSystem("initRenderer", (world) => {
   const canvas = document.getElementById("game") as HTMLCanvasElement;
   const instance = new GameRenderer(canvas);
 
   addResource(world, RendererResource, { instance });
-}
+});
 
 // ============================================================================
 // Last
@@ -34,55 +33,53 @@ export const render = defineSystem("render", (world) => {
   const { getBulletDirection, isShieldVisible } = combatActions(world);
   const { getExplosionProgress, getExplosionRotationOffset, getExplosionMaxRadius } = enemyActions(world);
 
-  return () => {
-    const renderer = getResourceValue(world, RendererResource, "instance")!;
-    const shieldRadius = getResourceValue(world, CombatConfig, "shieldRadius") ?? 28;
+  const renderer = getResourceValue(world, RendererResource, "instance")!;
+  const shieldRadius = getResourceValue(world, CombatConfig, "shieldRadius") ?? 28;
 
-    renderer.beginFrame();
+  renderer.beginFrame();
 
-    // Enemies
-    for (const entity of collectEntities(world, [IsEnemy, Transform, Visual])) {
-      const [x, y] = getPosition(entity);
-      const rotation = getRotation(entity);
-      const [hue, scale] = getVisual(entity);
+  // Enemies
+  for (const entity of collectEntities(world, [IsEnemy, Transform, Visual])) {
+    const [x, y] = getPosition(entity);
+    const rotation = getRotation(entity);
+    const [hue, scale] = getVisual(entity);
 
-      renderer.drawEnemy(x, y, rotation, hue, scale);
+    renderer.drawEnemy(x, y, rotation, hue, scale);
+  }
+
+  // Bullets
+  for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
+    const [x, y] = getPosition(entity);
+    const [dx, dy] = getBulletDirection(entity);
+
+    renderer.drawBullet(x, y, dx, dy);
+  }
+
+  // Explosions
+  for (const entity of collectEntities(world, [IsExplosion, Transform, Explosion])) {
+    const [x, y] = getPosition(entity);
+    const [duration, current] = getExplosionProgress(entity);
+    const rotationOffset = getExplosionRotationOffset(entity);
+    const maxRadius = getExplosionMaxRadius(entity);
+
+    const progress = current / duration;
+
+    renderer.drawExplosion(x, y, progress, rotationOffset, maxRadius);
+  }
+
+  // Player
+  for (const entity of collectEntities(world, [IsPlayer, Transform, Movement])) {
+    const [x, y] = getPosition(entity);
+    const rotation = getRotation(entity);
+    const [vx, vy] = getVelocity(entity);
+    const speed = Math.sqrt(vx * vx + vy * vy);
+
+    renderer.drawPlayer(x, y, rotation, speed);
+
+    if (isShieldVisible(entity)) {
+      renderer.drawShield(x, y, shieldRadius);
     }
+  }
 
-    // Bullets
-    for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
-      const [x, y] = getPosition(entity);
-      const [dx, dy] = getBulletDirection(entity);
-
-      renderer.drawBullet(x, y, dx, dy);
-    }
-
-    // Explosions
-    for (const entity of collectEntities(world, [IsExplosion, Transform, Explosion])) {
-      const [x, y] = getPosition(entity);
-      const [duration, current] = getExplosionProgress(entity);
-      const rotationOffset = getExplosionRotationOffset(entity);
-      const maxRadius = getExplosionMaxRadius(entity);
-
-      const progress = current / duration;
-
-      renderer.drawExplosion(x, y, progress, rotationOffset, maxRadius);
-    }
-
-    // Player
-    for (const entity of collectEntities(world, [IsPlayer, Transform, Movement])) {
-      const [x, y] = getPosition(entity);
-      const rotation = getRotation(entity);
-      const [vx, vy] = getVelocity(entity);
-      const speed = Math.sqrt(vx * vx + vy * vy);
-
-      renderer.drawPlayer(x, y, rotation, speed);
-
-      if (isShieldVisible(entity)) {
-        renderer.drawShield(x, y, shieldRadius);
-      }
-    }
-
-    renderer.endFrame();
-  };
+  renderer.endFrame();
 });

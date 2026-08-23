@@ -7,7 +7,7 @@ import { readEvents } from "./event.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { removed } from "./removal.js";
-import { addSystem, runOnce } from "./scheduler.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -22,11 +22,14 @@ describe("Removal", () => {
       const Health = defineComponent("RD_Health", { value: Type.f32() });
       const results: EntityId[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -43,11 +46,14 @@ describe("Removal", () => {
       const Player = defineTag("RD_Player");
       const results: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Player), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Player), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Player);
@@ -64,11 +70,14 @@ describe("Removal", () => {
       const Health = defineComponent("RD_MultiHealth", { value: Type.f32() });
       const results: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       const e1 = createEntity(world);
       const e2 = createEntity(world);
@@ -95,11 +104,14 @@ describe("Removal", () => {
       const Health = defineComponent("RD_NeverAdded", { value: Type.f32() });
       let count = 0;
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), () => {
+            count++;
+          });
+        })
+      );
 
       createEntity(world);
 
@@ -121,17 +133,23 @@ describe("Removal", () => {
       const sysAResults: number[] = [];
       const sysBResults: number[] = [];
 
-      addSystem(world, function sysA() {
-        readEvents(world, removed(Health), ({ entity }) => {
-          sysAResults.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("sysA", function sysA() {
+          readEvents(world, removed(Health), ({ entity }) => {
+            sysAResults.push(entity);
+          });
+        })
+      );
 
-      addSystem(world, function sysB() {
-        readEvents(world, removed(Health), ({ entity }) => {
-          sysBResults.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("sysB", function sysB() {
+          readEvents(world, removed(Health), ({ entity }) => {
+            sysBResults.push(entity);
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -151,13 +169,16 @@ describe("Removal", () => {
 
       const results: number[][] = [];
 
-      addSystem(world, function consumer() {
-        const tickResults: number[] = [];
-        readEvents(world, removed(Health), ({ entity }) => {
-          tickResults.push(entity);
-        });
-        results.push(tickResults);
-      });
+      addSystem(
+        world,
+        defineSystem("consumer", function consumer() {
+          const tickResults: number[] = [];
+          readEvents(world, removed(Health), ({ entity }) => {
+            tickResults.push(entity);
+          });
+          results.push(tickResults);
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -184,14 +205,17 @@ describe("Removal", () => {
       const healthRemovals: number[] = [];
       const positionRemovals: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), ({ entity }) => {
-          healthRemovals.push(entity);
-        });
-        readEvents(world, removed(Position), ({ entity }) => {
-          positionRemovals.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), ({ entity }) => {
+            healthRemovals.push(entity);
+          });
+          readEvents(world, removed(Position), ({ entity }) => {
+            positionRemovals.push(entity);
+          });
+        })
+      );
 
       const e1 = createEntity(world);
       const e2 = createEntity(world);
@@ -219,20 +243,23 @@ describe("Removal", () => {
       let armorCount = 0;
       let healthCount2 = 0;
 
-      addSystem(world, function reader() {
-        // Consume Health removals
-        readEvents(world, removed(Health), () => {
-          healthCount1++;
-        });
-        // Armor removals should still be available
-        readEvents(world, removed(Armor), () => {
-          armorCount++;
-        });
-        // Health should now be consumed
-        readEvents(world, removed(Health), () => {
-          healthCount2++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          // Consume Health removals
+          readEvents(world, removed(Health), () => {
+            healthCount1++;
+          });
+          // Armor removals should still be available
+          readEvents(world, removed(Armor), () => {
+            armorCount++;
+          });
+          // Health should now be consumed
+          readEvents(world, removed(Health), () => {
+            healthCount2++;
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -264,17 +291,20 @@ describe("Removal", () => {
       let positionCount = 0;
       let playerCount = 0;
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), () => {
-          healthCount++;
-        });
-        readEvents(world, removed(Position), () => {
-          positionCount++;
-        });
-        readEvents(world, removed(Player), () => {
-          playerCount++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), () => {
+            healthCount++;
+          });
+          readEvents(world, removed(Position), () => {
+            positionCount++;
+          });
+          readEvents(world, removed(Player), () => {
+            playerCount++;
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -295,11 +325,14 @@ describe("Removal", () => {
       const Health = defineComponent("RD_NoDouble", { value: Type.f32() });
       let count = 0;
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), () => {
+            count++;
+          });
+        })
+      );
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -319,11 +352,14 @@ describe("Removal", () => {
       const Health = defineComponent("RD_NoCompHealth", { value: Type.f32() });
       let count = 0;
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(Health), () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(Health), () => {
+            count++;
+          });
+        })
+      );
 
       const entity = createEntity(world);
       destroyEntity(world, entity);
@@ -344,11 +380,14 @@ describe("Removal", () => {
       const ChildOf = defineRelation("RD_ChildOf");
       const results: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(ChildOf, parent)), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(ChildOf, parent)), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       const parent = createEntity(world);
       const child = createEntity(world);
@@ -369,11 +408,14 @@ describe("Removal", () => {
 
       const parent = createEntity(world);
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(ChildOf, parent)), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(ChildOf, parent)), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       const child = createEntity(world);
 
@@ -395,14 +437,17 @@ describe("Removal", () => {
       const parent = createEntity(world);
       const child = createEntity(world);
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
-          relationResults.push(entity);
-        });
-        readEvents(world, removed(pair(Wildcard, parent)), ({ entity }) => {
-          targetResults.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
+            relationResults.push(entity);
+          });
+          readEvents(world, removed(pair(Wildcard, parent)), ({ entity }) => {
+            targetResults.push(entity);
+          });
+        })
+      );
 
       addComponent(world, child, pair(ChildOf, parent));
       destroyEntity(world, parent);
@@ -422,11 +467,14 @@ describe("Removal", () => {
       const viaRemove = createEntity(world);
       const viaDestroy = createEntity(world);
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(ChildOf, Wildcard)), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       addComponent(world, viaRemove, pair(ChildOf, parent));
       addComponent(world, viaDestroy, pair(ChildOf, parent));
@@ -449,14 +497,17 @@ describe("Removal", () => {
       const parent1Removals: number[] = [];
       const parent2Removals: number[] = [];
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(ChildOf, parent1)), ({ entity }) => {
-          parent1Removals.push(entity);
-        });
-        readEvents(world, removed(pair(ChildOf, parent2)), ({ entity }) => {
-          parent2Removals.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(ChildOf, parent1)), ({ entity }) => {
+            parent1Removals.push(entity);
+          });
+          readEvents(world, removed(pair(ChildOf, parent2)), ({ entity }) => {
+            parent2Removals.push(entity);
+          });
+        })
+      );
 
       const child1 = createEntity(world);
       const child2 = createEntity(world);
@@ -483,11 +534,14 @@ describe("Removal", () => {
       const player = createEntity(world);
       const item = createEntity(world);
 
-      addSystem(world, function reader() {
-        readEvents(world, removed(pair(Owns, item)), ({ entity }) => {
-          results.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          readEvents(world, removed(pair(Owns, item)), ({ entity }) => {
+            results.push(entity);
+          });
+        })
+      );
 
       addComponent(world, player, pair(Owns, item), { quantity: 5 });
       removeComponent(world, player, pair(Owns, item));
@@ -527,13 +581,16 @@ describe("Removal", () => {
 
       const results: number[][] = [];
 
-      addSystem(world, function reader() {
-        const batch: number[] = [];
-        readEvents(world, removed(Health), ({ entity }) => {
-          batch.push(entity);
-        });
-        results.push(batch);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          const batch: number[] = [];
+          readEvents(world, removed(Health), ({ entity }) => {
+            batch.push(entity);
+          });
+          results.push(batch);
+        })
+      );
 
       const entity = createEntity(world);
 

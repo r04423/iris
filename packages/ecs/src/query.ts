@@ -151,9 +151,10 @@ export function not<C extends EntityId>(componentId: C): NotModifier<C> {
  *
  * @example
  * ```typescript
- * addSystem(world, function spawnAlert() {
+ * const spawnAlert = defineSystem("spawnAlert", (world) => {
  *   const spawned = collectEntities(world, [added(Player)]);
  * });
+ * addSystem(world, spawnAlert);
  * ```
  */
 export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
@@ -170,9 +171,10 @@ export function added<C extends EntityId>(componentId: C): AddedModifier<C> {
  *
  * @example
  * ```typescript
- * addSystem(world, function healthReport() {
+ * const healthReport = defineSystem("healthReport", (world) => {
  *   const damaged = collectEntities(world, [changed(Health)]);
  * });
+ * addSystem(world, healthReport);
  * ```
  */
 export function changed<C extends EntityId>(componentId: C): ChangedModifier<C> {

@@ -882,11 +882,14 @@ describe("Query", () => {
 
       const seen: EntityId[] = [];
 
-      addSystem(world, function orChangeChecker() {
-        queryEntities(world, [added(Health), or(Velocity, Acceleration)], (entity) => {
-          seen.push(entity);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("orChangeChecker", function orChangeChecker() {
+          queryEntities(world, [added(Health), or(Velocity, Acceleration)], (entity) => {
+            seen.push(entity);
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1008,11 +1011,14 @@ describe("Query", () => {
       let first1: EntityId | undefined;
       let first2: EntityId | undefined;
 
-      addSystem(world, function checker() {
-        first1 = queryFirstEntity(world, [added(Health)]);
-        // Second call should return undefined (lastTick updated)
-        first2 = queryFirstEntity(world, [added(Health)]);
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          first1 = queryFirstEntity(world, [added(Health)]);
+          // Second call should return undefined (lastTick updated)
+          first2 = queryFirstEntity(world, [added(Health)]);
+        })
+      );
 
       await runOnce(world);
 
@@ -1437,16 +1443,19 @@ describe("Query", () => {
       let firstCount = 0;
       let secondCount = 0;
 
-      addSystem(world, function checker() {
-        // First query consumes the initial addition revision
-        queryEntities(world, [added(Health)], () => {
-          firstCount++;
-        });
-        // Second query has no intervening addition
-        queryEntities(world, [added(Health)], () => {
-          secondCount++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          // First query consumes the initial addition revision
+          queryEntities(world, [added(Health)], () => {
+            firstCount++;
+          });
+          // Second query has no intervening addition
+          queryEntities(world, [added(Health)], () => {
+            secondCount++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1463,11 +1472,14 @@ describe("Query", () => {
 
       const results: EntityId[] = [];
 
-      addSystem(world, function tracker() {
-        queryEntities(world, [added(Health)], (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          queryEntities(world, [added(Health)], (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       // First frame: sees entity1
       await runOnce(world);
@@ -1494,11 +1506,14 @@ describe("Query", () => {
 
       let count = 0;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(Health)], () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(Health)], () => {
+            count++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1517,11 +1532,14 @@ describe("Query", () => {
 
       const results: EntityId[] = [];
 
-      addSystem(world, function tracker() {
-        queryEntities(world, [changed(Position)], (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          queryEntities(world, [changed(Position)], (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       // First frame: sees initial add
       await runOnce(world);
@@ -1549,11 +1567,14 @@ describe("Query", () => {
 
       let count = 0;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [changed(Health)], () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [changed(Health)], () => {
+            count++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1571,11 +1592,14 @@ describe("Query", () => {
 
       const results: EntityId[] = [];
 
-      addSystem(world, function tracker() {
-        queryEntities(world, [changed(Position)], (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          queryEntities(world, [changed(Position)], (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       await runOnce(world); // consume the initial add
 
@@ -1598,11 +1622,14 @@ describe("Query", () => {
 
       const results: EntityId[] = [];
 
-      addSystem(world, function tracker() {
-        queryEntities(world, [changed(Position)], (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          queryEntities(world, [changed(Position)], (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       await runOnce(world); // consume the initial adds
 
@@ -1624,13 +1651,16 @@ describe("Query", () => {
 
       const results: number[] = [];
 
-      addSystem(world, function tracker() {
-        let count = 0;
-        queryEntities(world, [changed(Position)], () => {
-          count++;
-        });
-        results.push(count);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          let count = 0;
+          queryEntities(world, [changed(Position)], () => {
+            count++;
+          });
+          results.push(count);
+        })
+      );
 
       await runOnce(world); // sees the change
       await runOnce(world); // no change since last query
@@ -1654,11 +1684,14 @@ describe("Query", () => {
 
       addComponent(world, child, pair(ChildOf, parent1));
 
-      addSystem(world, function tracker() {
-        changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
-        addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
-        newPairAddedCounts.push(collectEntities(world, [added(newPair)]).length);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+          addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+          newPairAddedCounts.push(collectEntities(world, [added(newPair)]).length);
+        })
+      );
 
       await runOnce(world);
       addComponent(world, child, newPair);
@@ -1681,10 +1714,13 @@ describe("Query", () => {
 
       addComponent(world, entity, pair(Likes, target1));
 
-      addSystem(world, function tracker() {
-        changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
-        addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          changedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+          addedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+        })
+      );
 
       await runOnce(world);
       addComponent(world, entity, pair(Likes, target2));
@@ -1713,12 +1749,15 @@ describe("Query", () => {
       addComponent(world, entity, pair(Likes, target2));
       addComponent(world, entity, pair(Follows, target1));
 
-      addSystem(world, function tracker() {
-        relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
-        relationAddedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
-        targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
-        targetAddedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+          relationAddedCounts.push(collectEntities(world, [added(relationWildcard)]).length);
+          targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+          targetAddedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
+        })
+      );
 
       await runOnce(world);
       removeComponent(world, entity, removedPair);
@@ -1744,10 +1783,13 @@ describe("Query", () => {
       addComponent(world, child, pair(ChildOf, parent1));
       addComponent(world, child, pair(Likes, parent1));
 
-      addSystem(world, function tracker() {
-        changedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
-        addedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          changedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+          addedCounts.push(collectEntities(world, [added(targetWildcard)]).length);
+        })
+      );
 
       await runOnce(world);
       addComponent(world, child, pair(ChildOf, parent2));
@@ -1771,11 +1813,14 @@ describe("Query", () => {
 
       addComponent(world, entity, score, { value: 1 });
 
-      addSystem(world, function tracker() {
-        pairChangedCounts.push(collectEntities(world, [changed(score)]).length);
-        relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
-        targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          pairChangedCounts.push(collectEntities(world, [changed(score)]).length);
+          relationChangedCounts.push(collectEntities(world, [changed(relationWildcard)]).length);
+          targetChangedCounts.push(collectEntities(world, [changed(targetWildcard)]).length);
+        })
+      );
 
       await runOnce(world);
       setComponentValue(world, entity, score, "value", 2);
@@ -1803,12 +1848,15 @@ describe("Query", () => {
       let count = 0;
       let matched: EntityId | undefined;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(Position), Velocity], (e) => {
-          count++;
-          matched = e;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(Position), Velocity], (e) => {
+            count++;
+            matched = e;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1831,13 +1879,16 @@ describe("Query", () => {
 
       const results: EntityId[][] = [];
 
-      addSystem(world, function tracker() {
-        const batch: EntityId[] = [];
-        queryEntities(world, [changed(Position), not(Dead)], (e) => {
-          batch.push(e);
-        });
-        results.push(batch);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          const batch: EntityId[] = [];
+          queryEntities(world, [changed(Position), not(Dead)], (e) => {
+            batch.push(e);
+          });
+          results.push(batch);
+        })
+      );
 
       // First frame: consume initial adds
       await runOnce(world);
@@ -1870,12 +1921,15 @@ describe("Query", () => {
       let count = 0;
       let matched: EntityId | undefined;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(Health), added(Mana)], (e) => {
-          count++;
-          matched = e;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(Health), added(Mana)], (e) => {
+            count++;
+            matched = e;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1901,12 +1955,15 @@ describe("Query", () => {
       let count = 0;
       let matched: EntityId | undefined;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(pair(ChildOf, parent)), Active], (e) => {
-          count++;
-          matched = e;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(pair(ChildOf, parent)), Active], (e) => {
+            count++;
+            matched = e;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -1925,13 +1982,16 @@ describe("Query", () => {
 
       const results: EntityId[][] = [];
 
-      addSystem(world, function tracker() {
-        const batch: EntityId[] = [];
-        queryEntities(world, [added(NewState), changed(Position)], (e) => {
-          batch.push(e);
-        });
-        results.push(batch);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          const batch: EntityId[] = [];
+          queryEntities(world, [added(NewState), changed(Position)], (e) => {
+            batch.push(e);
+          });
+          results.push(batch);
+        })
+      );
 
       // First frame: consume initial state (entity doesn't have NewState yet)
       await runOnce(world);
@@ -1961,10 +2021,13 @@ describe("Query", () => {
       let positionFirst: EntityId | undefined;
       let velocityFirst: EntityId[] = [];
 
-      addSystem(world, function orderedViewTickReader() {
-        positionFirst = queryFirstEntity(world, [Position, Velocity, added(Health)]);
-        velocityFirst = collectEntities(world, [Velocity, Position, added(Health)]);
-      });
+      addSystem(
+        world,
+        defineSystem("orderedViewTickReader", function orderedViewTickReader() {
+          positionFirst = queryFirstEntity(world, [Position, Velocity, added(Health)]);
+          velocityFirst = collectEntities(world, [Velocity, Position, added(Health)]);
+        })
+      );
 
       await runOnce(world);
 
@@ -1985,20 +2048,23 @@ describe("Query", () => {
       let manaCount = 0;
       let healthCount2 = 0;
 
-      addSystem(world, function checker() {
-        // Query 1: added(Health)
-        queryEntities(world, [added(Health)], () => {
-          healthCount1++;
-        });
-        // Query 2: added(Mana) - independent, should still see the entity
-        queryEntities(world, [added(Mana)], () => {
-          manaCount++;
-        });
-        // Query 1 again: should be empty (its own cursor was updated)
-        queryEntities(world, [added(Health)], () => {
-          healthCount2++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          // Query 1: added(Health)
+          queryEntities(world, [added(Health)], () => {
+            healthCount1++;
+          });
+          // Query 2: added(Mana) - independent, should still see the entity
+          queryEntities(world, [added(Mana)], () => {
+            manaCount++;
+          });
+          // Query 1 again: should be empty (its own cursor was updated)
+          queryEntities(world, [added(Health)], () => {
+            healthCount2++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -2020,17 +2086,23 @@ describe("Query", () => {
       const systemBResults: EntityId[] = [];
 
       // Both systems use the same query (added(Health))
-      addSystem(world, function systemA() {
-        queryEntities(world, [added(Health)], (e) => {
-          systemAResults.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("systemA", function systemA() {
+          queryEntities(world, [added(Health)], (e) => {
+            systemAResults.push(e);
+          });
+        })
+      );
 
-      addSystem(world, function systemB() {
-        queryEntities(world, [added(Health)], (e) => {
-          systemBResults.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("systemB", function systemB() {
+          queryEntities(world, [added(Health)], (e) => {
+            systemBResults.push(e);
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -2049,13 +2121,16 @@ describe("Query", () => {
       // Track results across multiple schedule runs
       const results: number[] = [];
 
-      addSystem(world, function tracker() {
-        let count = 0;
-        queryEntities(world, [added(Health)], () => {
-          count++;
-        });
-        results.push(count);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          let count = 0;
+          queryEntities(world, [added(Health)], () => {
+            count++;
+          });
+          results.push(count);
+        })
+      );
 
       await runOnce(world); // sees the initial addition
       await runOnce(world); // sees 0 (cursor updated)
@@ -2070,17 +2145,15 @@ describe("Query", () => {
 
       let systemBSawEntity = false;
 
-      const systemB = defineSystem("systemB", (world) => () => {
+      const systemB = defineSystem("systemB", (world) => {
         queryEntities(world, [added(Health)], () => {
           systemBSawEntity = true;
         });
       });
 
       const systemA = defineSystem("systemA", (world) => {
-        return () => {
-          const entity = createEntity(world);
-          addComponent(world, entity, Health, { value: 50 });
-        };
+        const entity = createEntity(world);
+        addComponent(world, entity, Health, { value: 50 });
       });
 
       addSystem(world, systemB);
@@ -2118,20 +2191,18 @@ describe("Query", () => {
       const systemAResults: EntityId[] = [];
       const systemBResults: EntityId[] = [];
 
-      const systemB = defineSystem("systemB", (world) => () => {
+      const systemB = defineSystem("systemB", (world) => {
         queryEntities(world, [changed(Position)], (e) => {
           systemBResults.push(e);
         });
       });
 
       const systemA = defineSystem("systemA", (world) => {
-        return () => {
-          queryEntities(world, [changed(Position)], (e) => {
-            systemAResults.push(e);
-          });
-          // Modify after querying
-          setComponentValue(world, entity, Position, "x", systemAResults.length);
-        };
+        queryEntities(world, [changed(Position)], (e) => {
+          systemAResults.push(e);
+        });
+        // Modify after querying
+        setComponentValue(world, entity, Position, "x", systemAResults.length);
       });
 
       addSystem(world, systemB);
@@ -2161,20 +2232,23 @@ describe("Query", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Health);
 
-      addSystem(world, function reader() {
-        const initial = world.revision;
-        queryEntities(world, [Health], () => {});
-        queryFirstEntity(world, [Health]);
-        collectEntities(world, [Health]);
-        assert.strictEqual(world.revision, initial);
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          const initial = world.revision;
+          queryEntities(world, [Health], () => {});
+          queryFirstEntity(world, [Health]);
+          collectEntities(world, [Health]);
+          assert.strictEqual(world.revision, initial);
 
-        queryEntities(world, [added(Health)], () => {});
-        assert.strictEqual(world.revision, initial + 1);
-        queryFirstEntity(world, [added(Health)]);
-        assert.strictEqual(world.revision, initial + 2);
-        collectEntities(world, [added(Health)]);
-        assert.strictEqual(world.revision, initial + 3);
-      });
+          queryEntities(world, [added(Health)], () => {});
+          assert.strictEqual(world.revision, initial + 1);
+          queryFirstEntity(world, [added(Health)]);
+          assert.strictEqual(world.revision, initial + 2);
+          collectEntities(world, [added(Health)]);
+          assert.strictEqual(world.revision, initial + 3);
+        })
+      );
 
       await runOnce(world);
     });
@@ -2187,9 +2261,12 @@ describe("Query", () => {
       addComponent(world, entity, Health);
       let seen = false;
 
-      addSystem(world, function reader() {
-        seen = queryFirstEntity(world, [added(Health)]) === entity;
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          seen = queryFirstEntity(world, [added(Health)]) === entity;
+        })
+      );
 
       await runOnce(world);
       assert.strictEqual(seen, true);
@@ -2202,23 +2279,26 @@ describe("Query", () => {
       addComponent(world, entity, Position, { x: 0 });
       const counts: number[] = [];
 
-      addSystem(world, function reader() {
-        let outer = 0;
-        let nested = 0;
-        queryEntities(world, [changed(Position)], () => {
-          outer++;
-          setComponentValue(world, entity, Position, "x", 1);
-          queryEntities(world, [changed(Position)], () => nested++);
-        });
-        counts.push(outer, nested, collectEntities(world, [changed(Position)]).length);
-        setComponentValue(world, entity, Position, "x", 2);
-        assert.throws(() =>
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          let outer = 0;
+          let nested = 0;
           queryEntities(world, [changed(Position)], () => {
-            throw new Error("query callback");
-          })
-        );
-        counts.push(collectEntities(world, [changed(Position)]).length);
-      });
+            outer++;
+            setComponentValue(world, entity, Position, "x", 1);
+            queryEntities(world, [changed(Position)], () => nested++);
+          });
+          counts.push(outer, nested, collectEntities(world, [changed(Position)]).length);
+          setComponentValue(world, entity, Position, "x", 2);
+          assert.throws(() =>
+            queryEntities(world, [changed(Position)], () => {
+              throw new Error("query callback");
+            })
+          );
+          counts.push(collectEntities(world, [changed(Position)]).length);
+        })
+      );
 
       await runOnce(world);
       assert.deepStrictEqual(counts, [1, 1, 0, 0]);
@@ -2228,13 +2308,16 @@ describe("Query", () => {
       const world = createWorld();
       const Tracked = defineTag("QueryRevisionOverflow");
       const query = ensureQuery(world, [added(Tracked)]);
-      addSystem(world, function reader() {
-        const cursor = query.meta.lastRevision.get("reader");
-        world.revision = Number.MAX_SAFE_INTEGER;
-        assert.throws(() => collectEntities(world, [added(Tracked)]), IrisLimitExceeded);
-        assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
-        assert.strictEqual(query.meta.lastRevision.get("reader"), cursor);
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          const cursor = query.meta.lastRevision.get("reader");
+          world.revision = Number.MAX_SAFE_INTEGER;
+          assert.throws(() => collectEntities(world, [added(Tracked)]), IrisLimitExceeded);
+          assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
+          assert.strictEqual(query.meta.lastRevision.get("reader"), cursor);
+        })
+      );
       await runOnce(world);
     });
 
@@ -2253,18 +2336,21 @@ describe("Query", () => {
       let breakCount = 0;
       let secondCount = 0;
 
-      addSystem(world, function checker() {
-        // Return false after first entity - should still consume the window
-        queryEntities(world, [added(Health)], () => {
-          breakCount++;
-          return breakCount === 1 ? false : undefined;
-        });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          // Return false after first entity - should still consume the window
+          queryEntities(world, [added(Health)], () => {
+            breakCount++;
+            return breakCount === 1 ? false : undefined;
+          });
 
-        // Second query should see nothing (cursor was updated despite early exit)
-        queryEntities(world, [added(Health)], () => {
-          secondCount++;
-        });
-      });
+          // Second query should see nothing (cursor was updated despite early exit)
+          queryEntities(world, [added(Health)], () => {
+            secondCount++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -2283,11 +2369,14 @@ describe("Query", () => {
 
       let count = 0;
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(Shield)], () => {
-          count++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(Shield)], () => {
+            count++;
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -2309,11 +2398,14 @@ describe("Query", () => {
 
       const results: EntityId[] = [];
 
-      addSystem(world, function checker() {
-        queryEntities(world, [added(Health)], (e) => {
-          results.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("checker", function checker() {
+          queryEntities(world, [added(Health)], (e) => {
+            results.push(e);
+          });
+        })
+      );
 
       await runOnce(world);
 
@@ -2330,11 +2422,14 @@ describe("Query", () => {
 
       const seen: EntityId[] = [];
 
-      addSystem(world, function reader() {
-        queryEntities(world, [added(Health)], (e) => {
-          seen.push(e);
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("reader", function reader() {
+          queryEntities(world, [added(Health)], (e) => {
+            seen.push(e);
+          });
+        })
+      );
 
       // First frame: no entities with Health
       await runOnce(world);

@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { every, once } from "./conditions.js";
 import { IrisInvalidArgument } from "./error.js";
-import { addSystem, addSystemSet, defineSystemSet, runOnce, Startup, stop } from "./scheduler.js";
+import { addSystem, addSystemSet, defineSystem, defineSystemSet, runOnce, Startup, stop } from "./scheduler.js";
 import { createWorld, resetWorld } from "./world.js";
 
 describe("Conditions", () => {
@@ -11,9 +11,9 @@ describe("Conditions", () => {
     let runs = 0;
     addSystem(
       world,
-      () => {
+      defineSystem("runOnce", () => {
         runs++;
-      },
+      }),
       { name: "runOnce", condition: once() }
     );
 
@@ -33,9 +33,9 @@ describe("Conditions", () => {
     let tick = 0;
     addSystem(
       world,
-      () => {
+      defineSystem("runEveryThirdTick", () => {
         runs.push(tick);
-      },
+      }),
       { name: "runEveryThirdTick", condition: every(3) }
     );
 
@@ -60,23 +60,23 @@ describe("Conditions", () => {
     addSystemSet(world, Group, { condition: every(2) });
     addSystem(
       world,
-      () => {
+      defineSystem("first", () => {
         runs.push(`first:${tick}`);
-      },
+      }),
       { name: "first", set: Group, condition: every(2) }
     );
     addSystem(
       world,
-      () => {
+      defineSystem("second", () => {
         runs.push(`second:${tick}`);
-      },
+      }),
       { name: "second", set: Group, condition: every(3) }
     );
     addSystem(
       world,
-      () => {
+      defineSystem("standalone", () => {
         runs.push(`standalone:${tick}`);
-      },
+      }),
       { name: "standalone", condition: every(3) }
     );
 
@@ -108,21 +108,24 @@ describe("Conditions", () => {
     let everyRuns = 0;
     addSystem(
       world,
-      () => {
+      defineSystem("once", () => {
         onceRuns++;
-      },
+      }),
       { name: "once", condition: once() }
     );
     addSystem(
       world,
-      () => {
+      defineSystem("every", () => {
         everyRuns++;
-      },
+      }),
       { name: "every", condition: every(3) }
     );
 
     await runOnce(world);
-    addSystem(world, function addedLater() {});
+    addSystem(
+      world,
+      defineSystem("addedLater", function addedLater() {})
+    );
     await runOnce(world);
     await runOnce(world);
 
@@ -134,9 +137,9 @@ describe("Conditions", () => {
     let runs = 0;
     addSystem(
       world,
-      () => {
+      defineSystem("startupOnce", () => {
         runs++;
-      },
+      }),
       { name: "startupOnce", schedule: Startup, condition: once() }
     );
 

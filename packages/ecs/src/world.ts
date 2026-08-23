@@ -125,7 +125,7 @@ export function createWorld(): World {
  *
  * Registrations survive -- component, tag, and relation definitions, systems,
  * system sets, and the schedule pipeline all remain, so nothing needs
- * re-registering. System factories re-initialize on the next run.
+ * re-registering.
  *
  * Fires the `worldReset` observer event when done.
  *

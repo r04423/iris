@@ -21,7 +21,7 @@ import { registerObserverCallback } from "./observer.js";
 import { added, changed, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
-import { addSystem, runOnce } from "./scheduler.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -314,18 +314,21 @@ describe("Component", () => {
       const addedResults: EntityId[][] = [];
       const changedResults: EntityId[][] = [];
 
-      addSystem(world, function tracker() {
-        const addedBatch: EntityId[] = [];
-        const changedBatch: EntityId[] = [];
-        queryEntities(world, [added(Player)], (e) => {
-          addedBatch.push(e);
-        });
-        queryEntities(world, [changed(Position)], (e) => {
-          changedBatch.push(e);
-        });
-        addedResults.push(addedBatch);
-        changedResults.push(changedBatch);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          const addedBatch: EntityId[] = [];
+          const changedBatch: EntityId[] = [];
+          queryEntities(world, [added(Player)], (e) => {
+            addedBatch.push(e);
+          });
+          queryEntities(world, [changed(Position)], (e) => {
+            changedBatch.push(e);
+          });
+          addedResults.push(addedBatch);
+          changedResults.push(changedBatch);
+        })
+      );
 
       addComponents(world, entity, [[Position, { x: 1, y: 2 }], Player]);
 
@@ -1471,13 +1474,16 @@ describe("Component", () => {
 
       const results: EntityId[][] = [];
 
-      addSystem(world, function tracker() {
-        const batch: EntityId[] = [];
-        queryEntities(world, [changed(Position)], (e) => {
-          batch.push(e);
-        });
-        results.push(batch);
-      });
+      addSystem(
+        world,
+        defineSystem("tracker", function tracker() {
+          const batch: EntityId[] = [];
+          queryEntities(world, [changed(Position)], (e) => {
+            batch.push(e);
+          });
+          results.push(batch);
+        })
+      );
 
       // First frame: consume initial add
       await runOnce(world);
@@ -1673,11 +1679,14 @@ describe("Component", () => {
       addComponent(world, entity, Position, { value: [0, 0] });
 
       let changeCount = 0;
-      addSystem(world, function counter() {
-        queryEntities(world, [changed(Position)], () => {
-          changeCount++;
-        });
-      });
+      addSystem(
+        world,
+        defineSystem("counter", function counter() {
+          queryEntities(world, [changed(Position)], () => {
+            changeCount++;
+          });
+        })
+      );
 
       await runOnce(world);
       assert.strictEqual(changeCount, 1); // added counts as changed

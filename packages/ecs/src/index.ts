@@ -179,16 +179,12 @@ export type {
 export type {
   FrameDriver,
   ScheduleLabel,
-  SystemFactory,
-  SystemMeta,
+  System,
   SystemOptions,
   SystemReference,
-  SystemRunner,
   SystemSetLabel,
-  SystemSetMeta,
   SystemSetOptions,
   SystemsOptions,
-  SystemTick,
 } from "./scheduler.js";
 export type {
   InferSchema,

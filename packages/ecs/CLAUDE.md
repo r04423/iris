@@ -47,7 +47,7 @@ Core ECS library for Iris.
 
 **Removal detection** -- Observer-driven: `componentRemoved` and `entityDestroying` observers lazily emit removal events via `removed()`. Entity destruction emits removal for each component without calling `removeComponent` individually.
 
-**Scheduler** -- Topological sort via Kahn's algorithm with registration-order tiebreaker for determinism. Frame tick increments once per frame; the revision clock advances only on consuming reads (`revision.ts`). Default pipeline: `[First, PreUpdate, Update, PostUpdate, Last]`.
+**Scheduler** -- Systems are branded, named ticks that receive the world directly. Topological sort uses Kahn's algorithm with registration-order tiebreaking for determinism. Frame tick increments once per frame; the revision clock advances only on consuming reads (`revision.ts`). Default pipeline: `[First, PreUpdate, Update, PostUpdate, Last]`.
 
 ## Code Patterns
 

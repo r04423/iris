@@ -114,8 +114,7 @@ export class IrisDuplicate extends IrisError {
  *
  * @example
  * ```typescript
- * // Thrown when registering an anonymous system without a name
- * addSystem(world, () => {});
+ * defineSystem("", () => {}); // throws IrisInvalidArgument
  * ```
  */
 export class IrisInvalidArgument extends IrisError {
@@ -293,16 +292,11 @@ export class IrisDuplicateSystemSet extends IrisDuplicate {
 }
 
 /**
- * Thrown when registering an anonymous system without a name option.
- *
- * @example
- * ```typescript
- * addSystem(world, () => {}); // throws IrisInvalidSystemName
- * ```
+ * Thrown when defining or registering a system with an empty name.
  */
 export class IrisInvalidSystemName extends IrisInvalidArgument {
   constructor() {
-    super({ expected: "named system function or name option" });
+    super({ expected: "non-empty system name" });
   }
 }
 

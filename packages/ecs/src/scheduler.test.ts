@@ -1,10 +1,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { defineCondition } from "./conditions.js";
-import { IrisDuplicate, IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
+import { IrisDuplicate, IrisInvalidState, IrisInvalidSystemName, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { defineComponent } from "./registry.js";
-import { addResource, getResourceValue } from "./resource.js";
 import type { FrameDriver, ScheduleLabel } from "./scheduler.js";
 import {
   addSystem,
@@ -28,7 +26,6 @@ import {
   suspend,
   Update,
 } from "./scheduler.js";
-import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
 
 function mockAnimationFrame(): { hasFrame: () => boolean; runFrame: () => Promise<void>; restore: () => void } {
@@ -60,29 +57,26 @@ function mockAnimationFrame(): { hasFrame: () => boolean; runFrame: () => Promis
 
 describe("Scheduler", () => {
   describe("System Registration", () => {
-    it("uses function.name as system identifier", () => {
+    it("uses the system definition name as its identifier", () => {
       const world = createWorld();
-
-      function physicsSystem() {}
+      const physicsSystem = defineSystem("physicsSystem", () => {});
       addSystem(world, physicsSystem);
 
       assert.strictEqual(world.systems.byId.has("physicsSystem"), true);
     });
 
-    it("uses options.name over function.name", () => {
+    it("uses options.name over the definition name", () => {
       const world = createWorld();
-
-      function physicsSystem() {}
+      const physicsSystem = defineSystem("physicsSystem", () => {});
       addSystem(world, physicsSystem, { name: "customName" });
 
       assert.strictEqual(world.systems.byId.has("customName"), true);
       assert.strictEqual(world.systems.byId.has("physicsSystem"), false);
     });
 
-    it("allows same function registered with different names", () => {
+    it("allows the same system registered with different names", () => {
       const world = createWorld();
-
-      function physicsSystem() {}
+      const physicsSystem = defineSystem("physicsSystem", () => {});
       addSystem(world, physicsSystem, { name: "physics-objects" });
       addSystem(world, physicsSystem, { name: "physics-particles" });
 
@@ -91,19 +85,18 @@ describe("Scheduler", () => {
 
     it("defaults schedule to Update", () => {
       const world = createWorld();
-
-      function physicsSystem() {}
+      const physicsSystem = defineSystem("physicsSystem", () => {});
       addSystem(world, physicsSystem);
 
       assert.strictEqual(world.systems.byId.get("physicsSystem")?.schedule, Update);
     });
 
-    it("extracts name from single factory constraint", () => {
+    it("extracts name from a single system constraint", () => {
       const world = createWorld();
 
-      const other = defineSystem("other", () => () => {});
-      const another = defineSystem("another", () => () => {});
-      const system = defineSystem("system", () => () => {});
+      const other = defineSystem("other", () => {});
+      const another = defineSystem("another", () => {});
+      const system = defineSystem("system", () => {});
       addSystem(world, system, { before: other, after: another });
 
       const meta = world.systems.byId.get("system");
@@ -111,14 +104,14 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(meta?.after, ["another"]);
     });
 
-    it("extracts names from factory array constraints", () => {
+    it("extracts names from system array constraints", () => {
       const world = createWorld();
 
-      const a = defineSystem("a", () => () => {});
-      const b = defineSystem("b", () => () => {});
-      const c = defineSystem("c", () => () => {});
-      const d = defineSystem("d", () => () => {});
-      const system = defineSystem("system", () => () => {});
+      const a = defineSystem("a", () => {});
+      const b = defineSystem("b", () => {});
+      const c = defineSystem("c", () => {});
+      const d = defineSystem("d", () => {});
+      const system = defineSystem("system", () => {});
       addSystem(world, system, { before: [a, b], after: [c, d] });
 
       const meta = world.systems.byId.get("system");
@@ -129,7 +122,10 @@ describe("Scheduler", () => {
     it("registers a batch in order under shared options", async () => {
       const world = createWorld();
       const calls: string[] = [];
-      const track = (label: string) => defineSystem(label, () => () => void calls.push(label));
+      const track = (label: string) =>
+        defineSystem(label, () => {
+          void calls.push(label);
+        });
 
       addSystems(world, [track("a"), track("b"), track("c")], { schedule: PostUpdate });
 
@@ -142,8 +138,8 @@ describe("Scheduler", () => {
     it("applies batch constraints to every system", () => {
       const world = createWorld();
 
-      const anchor = defineSystem("anchor", () => () => {});
-      addSystems(world, [defineSystem("a", () => () => {}), defineSystem("b", () => () => {})], { after: anchor });
+      const anchor = defineSystem("anchor", () => {});
+      addSystems(world, [defineSystem("a", () => {}), defineSystem("b", () => {})], { after: anchor });
 
       assert.deepStrictEqual(world.systems.byId.get("a")?.after, ["anchor"]);
       assert.deepStrictEqual(world.systems.byId.get("b")?.after, ["anchor"]);
@@ -152,7 +148,7 @@ describe("Scheduler", () => {
     it("throws IrisDuplicate when a batch repeats a name", () => {
       const world = createWorld();
 
-      const sys = defineSystem("sys", () => () => {});
+      const sys = defineSystem("sys", () => {});
 
       assert.throws(() => addSystems(world, [sys, sys]), IrisDuplicate);
     });
@@ -160,7 +156,7 @@ describe("Scheduler", () => {
     it("stores before/after as string arrays from string references", () => {
       const world = createWorld();
 
-      const system = defineSystem("system", () => () => {});
+      const system = defineSystem("system", () => {});
       addSystem(world, system, { before: "target1", after: ["target2", "target3"] });
 
       const meta = world.systems.byId.get("system");
@@ -170,25 +166,9 @@ describe("Scheduler", () => {
   });
 
   describe("Registration Validation", () => {
-    it("throws IrisInvalidArgument for anonymous functions", () => {
-      const world = createWorld();
-
-      assert.throws(() => addSystem(world, () => {}), IrisInvalidArgument);
-    });
-
-    it("throws IrisInvalidArgument for anonymous function expression", () => {
-      const world = createWorld();
-
-      // biome-ignore lint/complexity/useArrowFunction: testing anonymous function expression specifically
-      const anonymous = function () {};
-
-      assert.throws(() => addSystem(world, anonymous), IrisInvalidArgument);
-    });
-
     it("throws IrisDuplicate for duplicate system name", () => {
       const world = createWorld();
-
-      function physicsSystem() {}
+      const physicsSystem = defineSystem("physicsSystem", () => {});
       addSystem(world, physicsSystem);
 
       assert.throws(() => addSystem(world, physicsSystem), IrisDuplicate);
@@ -200,18 +180,15 @@ describe("Scheduler", () => {
       addSystemSet(world, Shared, { schedule: PostUpdate });
 
       assert.throws(
-        () => addSystem(world, () => {}, { name: "shared" }),
+        () =>
+          addSystem(
+            world,
+            defineSystem("shared", () => {}),
+            { name: "shared" }
+          ),
         (error: unknown) => error instanceof IrisDuplicate && error.resource === "SystemSet" && error.id === "shared"
       );
       assert.strictEqual(world.systems.byId.has("shared"), false);
-    });
-
-    it("throws IrisInvalidArgument for factory with empty name", () => {
-      const world = createWorld();
-
-      const factory = defineSystem("", () => () => {});
-
-      assert.throws(() => addSystem(world, factory), IrisInvalidArgument);
     });
   });
 
@@ -220,10 +197,10 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const render = defineSystem("render", () => () => {
+      const render = defineSystem("render", () => {
         calls.push("render");
       });
-      const physics = defineSystem("physics", () => () => {
+      const physics = defineSystem("physics", () => {
         calls.push("physics");
       });
 
@@ -239,16 +216,19 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const physics = defineSystem("physics", () => () => {
+      const physics = defineSystem("physics", () => {
         calls.push("physics");
       });
 
       addSystem(world, physics);
-      addSystem(world, function input() {
-        calls.push("input");
-      });
+      addSystem(
+        world,
+        defineSystem("input", function input() {
+          calls.push("input");
+        })
+      );
 
-      const render = defineSystem("render", () => () => {
+      const render = defineSystem("render", () => {
         calls.push("render");
       });
       addSystem(world, render, { after: physics });
@@ -263,15 +243,24 @@ describe("Scheduler", () => {
       const calls: string[] = [];
 
       // No constraints - should preserve registration order
-      addSystem(world, function a() {
-        calls.push("a");
-      });
-      addSystem(world, function b() {
-        calls.push("b");
-      });
-      addSystem(world, function c() {
-        calls.push("c");
-      });
+      addSystem(
+        world,
+        defineSystem("a", function a() {
+          calls.push("a");
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("b", function b() {
+          calls.push("b");
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("c", function c() {
+          calls.push("c");
+        })
+      );
 
       await runOnce(world);
 
@@ -282,13 +271,13 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const a = defineSystem("a", () => () => {
+      const a = defineSystem("a", () => {
         calls.push("a");
       });
-      const b = defineSystem("b", () => () => {
+      const b = defineSystem("b", () => {
         calls.push("b");
       });
-      const c = defineSystem("c", () => () => {
+      const c = defineSystem("c", () => {
         calls.push("c");
       });
 
@@ -314,14 +303,17 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function startupSys() {
+        defineSystem("startupSys", function startupSys() {
           calls.push("startup");
-        },
+        }),
         { schedule: Startup }
       );
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", () => {
+          calls.push("update");
+        })
+      );
 
       await runOnce(world);
 
@@ -334,8 +326,8 @@ describe("Scheduler", () => {
     it("throws on circular dependency", async () => {
       const world = createWorld();
 
-      const a = defineSystem("a", () => () => {});
-      const b = defineSystem("b", () => () => {});
+      const a = defineSystem("a", () => {});
+      const b = defineSystem("b", () => {});
 
       addSystem(world, a, { before: b });
       addSystem(world, b, { before: a });
@@ -344,26 +336,30 @@ describe("Scheduler", () => {
     });
 
     it("throws on unknown system reference in before or after", async () => {
-      const nonexistent = defineSystem("nonexistent", () => () => {});
+      const nonexistent = defineSystem("nonexistent", () => {});
 
       const world1 = createWorld();
       function system1() {}
-      addSystem(world1, system1, { after: nonexistent });
+      addSystem(world1, defineSystem("system1", system1), { after: nonexistent });
       await assert.rejects(runOnce(world1), (err) => err instanceof IrisNotFound);
 
       const world2 = createWorld();
       function system2() {}
-      addSystem(world2, system2, { before: nonexistent });
+      addSystem(world2, defineSystem("system2", system2), { before: nonexistent });
       await assert.rejects(runOnce(world2), (err) => err instanceof IrisNotFound);
     });
 
     it("throws IrisNotFound for cross-schedule reference", async () => {
       const world = createWorld();
 
-      const postSys = defineSystem("postSys", () => () => {});
+      const postSys = defineSystem("postSys", () => {});
       addSystem(world, postSys, { schedule: PostUpdate });
 
-      addSystem(world, function updateSys() {}, { before: postSys });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {}),
+        { before: postSys }
+      );
 
       await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
     });
@@ -374,7 +370,7 @@ describe("Scheduler", () => {
       const world = createWorld();
 
       function noop() {}
-      addSystem(world, noop);
+      addSystem(world, defineSystem("noop", noop));
 
       assert.strictEqual(world.execution.tick, 0);
       await runOnce(world);
@@ -387,15 +383,24 @@ describe("Scheduler", () => {
       const world = createWorld();
       const ticks: number[] = [];
 
-      addSystem(world, function sys1() {
-        ticks.push(world.execution.tick);
-      });
-      addSystem(world, function sys2() {
-        ticks.push(world.execution.tick);
-      });
-      addSystem(world, function sys3() {
-        ticks.push(world.execution.tick);
-      });
+      addSystem(
+        world,
+        defineSystem("sys1", function sys1() {
+          ticks.push(world.execution.tick);
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("sys2", function sys2() {
+          ticks.push(world.execution.tick);
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("sys3", function sys3() {
+          ticks.push(world.execution.tick);
+        })
+      );
 
       await runOnce(world);
 
@@ -408,10 +413,13 @@ describe("Scheduler", () => {
       let capturedSchedule: string | null = null;
       let capturedSystem: string | null = null;
 
-      addSystem(world, function capture() {
-        capturedSchedule = world.execution.scheduleLabel;
-        capturedSystem = world.execution.systemId;
-      });
+      addSystem(
+        world,
+        defineSystem("capture", function capture() {
+          capturedSchedule = world.execution.scheduleLabel;
+          capturedSystem = world.execution.systemId;
+        })
+      );
 
       await runOnce(world);
 
@@ -423,7 +431,7 @@ describe("Scheduler", () => {
       const world = createWorld();
 
       function noop() {}
-      addSystem(world, noop);
+      addSystem(world, defineSystem("noop", noop));
 
       await runOnce(world);
 
@@ -435,12 +443,18 @@ describe("Scheduler", () => {
       const world = createWorld();
       const captured: string[] = [];
 
-      addSystem(world, function alpha() {
-        captured.push(world.execution.systemId!);
-      });
-      addSystem(world, function beta() {
-        captured.push(world.execution.systemId!);
-      });
+      addSystem(
+        world,
+        defineSystem("alpha", function alpha() {
+          captured.push(world.execution.systemId!);
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("beta", function beta() {
+          captured.push(world.execution.systemId!);
+        })
+      );
 
       await runOnce(world);
 
@@ -453,13 +467,19 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, async function asyncSystem() {
-        await Promise.resolve();
-        calls.push("async");
-      });
-      addSystem(world, function syncSystem() {
-        calls.push("sync");
-      });
+      addSystem(
+        world,
+        defineSystem("asyncSystem", async function asyncSystem() {
+          await Promise.resolve();
+          calls.push("async");
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("syncSystem", function syncSystem() {
+          calls.push("sync");
+        })
+      );
 
       await runOnce(world);
 
@@ -469,9 +489,12 @@ describe("Scheduler", () => {
     it("clears context after async completion", async () => {
       const world = createWorld();
 
-      addSystem(world, async function asyncSystem() {
-        await Promise.resolve();
-      });
+      addSystem(
+        world,
+        defineSystem("asyncSystem", async function asyncSystem() {
+          await Promise.resolve();
+        })
+      );
 
       await runOnce(world);
 
@@ -559,33 +582,36 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function firstSys() {
+        defineSystem("firstSys", function firstSys() {
           calls.push("first");
-        },
+        }),
         { schedule: First }
       );
       addSystem(
         world,
-        function preUpdateSys() {
+        defineSystem("preUpdateSys", function preUpdateSys() {
           calls.push("preUpdate");
-        },
+        }),
         { schedule: PreUpdate }
       );
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
       addSystem(
         world,
-        function postUpdateSys() {
+        defineSystem("updateSys", function updateSys() {
+          calls.push("update");
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("postUpdateSys", function postUpdateSys() {
           calls.push("postUpdate");
-        },
+        }),
         { schedule: PostUpdate }
       );
       addSystem(
         world,
-        function lastSys() {
+        defineSystem("lastSys", function lastSys() {
           calls.push("last");
-        },
+        }),
         { schedule: Last }
       );
 
@@ -603,14 +629,17 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function physicsSys() {
+        defineSystem("physicsSys", function physicsSys() {
           calls.push("physics");
-        },
+        }),
         { schedule: Physics }
       );
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          calls.push("update");
+        })
+      );
 
       await runOnce(world);
 
@@ -621,7 +650,11 @@ describe("Scheduler", () => {
       const world = createWorld();
       const Physics = defineSchedule("Physics");
 
-      addSystem(world, function physicsSys() {}, { schedule: Physics });
+      addSystem(
+        world,
+        defineSystem("physicsSys", function physicsSys() {}),
+        { schedule: Physics }
+      );
 
       await assert.rejects(() => runOnce(world), IrisNotFound);
     });
@@ -631,20 +664,23 @@ describe("Scheduler", () => {
       const calls: string[] = [];
       const Physics = defineSchedule("Physics");
 
-      addSystem(world, function updateSys() {
-        calls.push("update");
+      addSystem(
+        world,
+        defineSystem("updateSys", () => {
+          calls.push("update");
 
-        if (!world.schedules.pipeline.includes(Physics)) {
-          insertScheduleBefore(world, Physics, First);
-          addSystem(
-            world,
-            function physicsSys() {
-              calls.push("physics");
-            },
-            { schedule: Physics }
-          );
-        }
-      });
+          if (!world.schedules.pipeline.includes(Physics)) {
+            insertScheduleBefore(world, Physics, First);
+            addSystem(
+              world,
+              defineSystem("physicsSys", () => {
+                calls.push("physics");
+              }),
+              { schedule: Physics }
+            );
+          }
+        })
+      );
 
       await runOnce(world);
       await runOnce(world);
@@ -665,13 +701,16 @@ describe("Scheduler", () => {
         release = resolve;
       });
       let runs = 0;
-      addSystem(world, async function updateSys() {
-        runs++;
-        if (runs === 1) {
-          started();
-          await gate;
-        }
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", async function updateSys() {
+          runs++;
+          if (runs === 1) {
+            started();
+            await gate;
+          }
+        })
+      );
 
       const frame = runOnce(world);
       await start;
@@ -688,9 +727,12 @@ describe("Scheduler", () => {
 
     it("rejects reentrant frames without deadlocking", async () => {
       const world = createWorld();
-      addSystem(world, async function updateSys() {
-        await runOnce(world);
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", async function updateSys() {
+          await runOnce(world);
+        })
+      );
 
       await assert.rejects(runOnce(world), IrisInvalidState);
       assert.strictEqual(world.execution.framePromise, null);
@@ -699,9 +741,12 @@ describe("Scheduler", () => {
     it("rejects concurrent manual frames admitted in the same task", async () => {
       const world = createWorld();
       let runs = 0;
-      addSystem(world, function updateSys() {
-        runs++;
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          runs++;
+        })
+      );
 
       const first = runOnce(world);
       const second = runOnce(world);
@@ -736,10 +781,13 @@ describe("Scheduler", () => {
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      addSystem(world, async function updateSys() {
-        started();
-        await gate;
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", async function updateSys() {
+          started();
+          await gate;
+        })
+      );
 
       const frame = runOnce(world);
       await start;
@@ -764,13 +812,16 @@ describe("Scheduler", () => {
       try {
         const world = createWorld();
         let runs = 0;
-        addSystem(world, async function updateSys() {
-          runs++;
-          if (runs === 1) {
-            started();
-            await gate;
-          }
-        });
+        addSystem(
+          world,
+          defineSystem("updateSys", async function updateSys() {
+            runs++;
+            if (runs === 1) {
+              started();
+              await gate;
+            }
+          })
+        );
 
         const manualFrame = runOnce(world);
         await start;
@@ -802,23 +853,23 @@ describe("Scheduler", () => {
         let shutdownCount = 0;
         addSystem(
           world,
-          () => {
+          defineSystem("startup", () => {
             startupCount++;
-          },
+          }),
           { name: "startup", schedule: Startup }
         );
         addSystem(
           world,
-          () => {
+          defineSystem("update", () => {
             updateCount++;
-          },
+          }),
           { name: "update" }
         );
         addSystem(
           world,
-          () => {
+          defineSystem("shutdown", () => {
             shutdownCount++;
-          },
+          }),
           { name: "shutdown", schedule: Shutdown }
         );
 
@@ -859,13 +910,16 @@ describe("Scheduler", () => {
       try {
         const world = createWorld();
         let updateCount = 0;
-        addSystem(world, async function updateSys() {
-          updateCount++;
-          if (updateCount === 1) {
-            updateStarted();
-            await updateGate;
-          }
-        });
+        addSystem(
+          world,
+          defineSystem("updateSys", async function updateSys() {
+            updateCount++;
+            if (updateCount === 1) {
+              updateStarted();
+              await updateGate;
+            }
+          })
+        );
 
         run(world);
         const frame = animationFrame.runFrame();
@@ -896,9 +950,12 @@ describe("Scheduler", () => {
       try {
         const world = createWorld();
         const error = new Error("frame failed");
-        addSystem(world, function updateSys() {
-          throw error;
-        });
+        addSystem(
+          world,
+          defineSystem("updateSys", function updateSys() {
+            throw error;
+          })
+        );
 
         run(world);
         const frame = animationFrame.runFrame();
@@ -917,9 +974,12 @@ describe("Scheduler", () => {
     it("does not block manual frames", async () => {
       const world = createWorld();
       let updateCount = 0;
-      addSystem(world, function updateSys() {
-        updateCount++;
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          updateCount++;
+        })
+      );
 
       await suspend(world);
       await runOnce(world);
@@ -935,14 +995,17 @@ describe("Scheduler", () => {
         let updates = 0;
         addSystem(
           world,
-          function startupSys() {
+          defineSystem("startupSys", function startupSys() {
             suspend(world);
-          },
+          }),
           { schedule: Startup }
         );
-        addSystem(world, function updateSys() {
-          updates++;
-        });
+        addSystem(
+          world,
+          defineSystem("updateSys", function updateSys() {
+            updates++;
+          })
+        );
 
         run(world);
         await animationFrame.runFrame();
@@ -953,24 +1016,6 @@ describe("Scheduler", () => {
       } finally {
         animationFrame.restore();
       }
-    });
-
-    it("suspends from a factory init without failing the frame", async () => {
-      const world = createWorld();
-      let ticks = 0;
-      addSystem(
-        world,
-        defineSystem("initSuspender", (w) => {
-          suspend(w);
-          return () => {
-            ticks++;
-          };
-        })
-      );
-
-      await runOnce(world);
-
-      assert.strictEqual(ticks, 1);
     });
   });
 
@@ -1010,9 +1055,12 @@ describe("Scheduler", () => {
       const frames = mockFrameDriver();
       const world = createWorld();
       let runs = 0;
-      addSystem(world, function updateSys() {
-        runs++;
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          runs++;
+        })
+      );
 
       run(world, frames.driver);
       assert.strictEqual(frames.hasFrame(), true);
@@ -1026,7 +1074,10 @@ describe("Scheduler", () => {
     it("suspend cancels the pending frame through the driver", async () => {
       const frames = mockFrameDriver();
       const world = createWorld();
-      addSystem(world, function updateSys() {});
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {})
+      );
 
       run(world, frames.driver);
       await suspend(world);
@@ -1039,7 +1090,10 @@ describe("Scheduler", () => {
       const first = mockFrameDriver();
       const second = mockFrameDriver();
       const world = createWorld();
-      addSystem(world, function updateSys() {});
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {})
+      );
 
       run(world, first.driver);
       await suspend(world);
@@ -1053,9 +1107,12 @@ describe("Scheduler", () => {
     it("createTimeoutDriver schedules frames with setTimeout", async () => {
       const world = createWorld();
       const { promise, resolve } = Promise.withResolvers<void>();
-      addSystem(world, function updateSys() {
-        resolve();
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          resolve();
+        })
+      );
 
       run(world, createTimeoutDriver(1));
       await promise;
@@ -1073,9 +1130,12 @@ describe("Scheduler", () => {
         seen.push(err);
       });
 
-      addSystem(world, function failingSys() {
-        throw error;
-      });
+      addSystem(
+        world,
+        defineSystem("failingSys", function failingSys() {
+          throw error;
+        })
+      );
 
       await assert.rejects(runOnce(world), (actual) => actual === error);
       assert.deepStrictEqual(seen, [error]);
@@ -1093,9 +1153,12 @@ describe("Scheduler", () => {
           seen.push(err);
         });
 
-        addSystem(world, function failingSys() {
-          throw error;
-        });
+        addSystem(
+          world,
+          defineSystem("failingSys", function failingSys() {
+            throw error;
+          })
+        );
 
         run(world);
         await animationFrame.runFrame();
@@ -1115,9 +1178,12 @@ describe("Scheduler", () => {
         const world = createWorld();
         const error = new Error("frame failed");
 
-        addSystem(world, function failingSys() {
-          throw error;
-        });
+        addSystem(
+          world,
+          defineSystem("failingSys", function failingSys() {
+            throw error;
+          })
+        );
 
         run(world);
         await assert.rejects(animationFrame.runFrame(), (actual) => actual === error);
@@ -1137,13 +1203,16 @@ describe("Scheduler", () => {
           run(world);
         });
 
-        addSystem(world, function flakySys() {
-          ticks++;
+        addSystem(
+          world,
+          defineSystem("flakySys", function flakySys() {
+            ticks++;
 
-          if (ticks === 1) {
-            throw new Error("frame failed");
-          }
-        });
+            if (ticks === 1) {
+              throw new Error("frame failed");
+            }
+          })
+        );
 
         run(world);
         await animationFrame.runFrame();
@@ -1165,30 +1234,30 @@ describe("Scheduler", () => {
       const ticks: number[] = [];
       addSystem(
         world,
-        () => {
+        defineSystem("startupTick", () => {
           ticks.push(world.execution.tick);
-        },
+        }),
         { name: "startupTick", schedule: Startup }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("firstTick", () => {
           ticks.push(world.execution.tick);
-        },
+        }),
         { name: "firstTick", schedule: First }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("updateTick", () => {
           ticks.push(world.execution.tick);
-        },
+        }),
         { name: "updateTick" }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("shutdownTick", () => {
           ticks.push(world.execution.tick);
-        },
+        }),
         { name: "shutdownTick", schedule: Shutdown }
       );
       await runOnce(world);
@@ -1206,9 +1275,9 @@ describe("Scheduler", () => {
       const failed = createWorld();
       addSystem(
         failed,
-        () => {
+        defineSystem("failure", () => {
           throw new Error("failed attempt");
-        },
+        }),
         { name: "failure" }
       );
       await assert.rejects(runOnce(failed));
@@ -1226,14 +1295,17 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function startupSys() {
+        defineSystem("startupSys", function startupSys() {
           startupCount++;
-        },
+        }),
         { schedule: Startup }
       );
-      addSystem(world, function updateSys() {
-        updateCount++;
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          updateCount++;
+        })
+      );
 
       await runOnce(world);
       await runOnce(world);
@@ -1249,9 +1321,9 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("shutdownSys", function shutdownSys() {
           shutdownCount++;
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1269,16 +1341,16 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        function startupSys() {
+        defineSystem("startupSys", function startupSys() {
           startupCount++;
-        },
+        }),
         { schedule: Startup }
       );
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("shutdownSys", function shutdownSys() {
           shutdownCount++;
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1309,20 +1381,20 @@ describe("Scheduler", () => {
       let shutdownCount = 0;
       addSystem(
         world,
-        async function startupSys() {
+        defineSystem("startupSys", async function startupSys() {
           startupCount++;
           if (startupCount === 2) {
             startupStarted();
             await startupGate;
           }
-        },
+        }),
         { schedule: Startup }
       );
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("shutdownSys", function shutdownSys() {
           shutdownCount++;
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1342,22 +1414,25 @@ describe("Scheduler", () => {
     it("stop from a sync system runs Shutdown after the frame completes", async () => {
       const world = createWorld();
       const order: string[] = [];
-      addSystem(world, function updateSys() {
-        order.push("update");
-        stop(world);
-      });
       addSystem(
         world,
-        function lastSys() {
+        defineSystem("updateSys", function updateSys() {
+          order.push("update");
+          stop(world);
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("lastSys", function lastSys() {
           order.push("last");
-        },
+        }),
         { schedule: Last }
       );
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("shutdownSys", function shutdownSys() {
           order.push("shutdown");
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1367,27 +1442,22 @@ describe("Scheduler", () => {
       assert.deepStrictEqual(order, ["update", "last", "shutdown"]);
     });
 
-    it("stop without prior runOnce initializes and runs a shutdown factory", async () => {
+    it("stop without prior runOnce runs a shutdown system", async () => {
       const world = createWorld();
-      let initCount = 0;
       let shutdownCount = 0;
 
       addSystem(
         world,
         defineSystem("shutdownSys", () => {
-          initCount++;
-          return () => {
-            shutdownCount++;
-          };
+          shutdownCount++;
         }),
         { schedule: Shutdown }
       );
 
-      assert.strictEqual(initCount, 0);
+      assert.strictEqual(shutdownCount, 0);
       assert.strictEqual(world.execution.tick, 0);
       await stop(world);
 
-      assert.strictEqual(initCount, 1);
       assert.strictEqual(shutdownCount, 1);
       assert.strictEqual(world.execution.tick, 0);
     });
@@ -1403,17 +1473,20 @@ describe("Scheduler", () => {
         release = resolve;
       });
       const calls: string[] = [];
-      addSystem(world, async function updateSys() {
-        calls.push("update-start");
-        started();
-        await gate;
-        calls.push("update-end");
-      });
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("updateSys", async function updateSys() {
+          calls.push("update-start");
+          started();
+          await gate;
+          calls.push("update-end");
+        })
+      );
+      addSystem(
+        world,
+        defineSystem("shutdownSys", function shutdownSys() {
           calls.push("shutdown");
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1439,10 +1512,10 @@ describe("Scheduler", () => {
       });
       addSystem(
         world,
-        async function shutdownSys() {
+        defineSystem("shutdownSys", async function shutdownSys() {
           started();
           await gate;
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1478,20 +1551,23 @@ describe("Scheduler", () => {
       try {
         const world = createWorld();
         const calls: string[] = [];
-        addSystem(world, async function updateSys() {
-          calls.push("update-start");
-          updateStarted();
-          await updateGate;
-          calls.push("update-end");
-        });
         addSystem(
           world,
-          async function shutdownSys() {
+          defineSystem("updateSys", async function updateSys() {
+            calls.push("update-start");
+            updateStarted();
+            await updateGate;
+            calls.push("update-end");
+          })
+        );
+        addSystem(
+          world,
+          defineSystem("shutdownSys", async function shutdownSys() {
             calls.push("shutdown-start");
             shutdownStarted();
             await shutdownGate;
             calls.push("shutdown-end");
-          },
+          }),
           { schedule: Shutdown }
         );
 
@@ -1525,14 +1601,17 @@ describe("Scheduler", () => {
         const world = createWorld();
         const error = new Error("frame failed");
         let shutdownCount = 0;
-        addSystem(world, function updateSys() {
-          throw error;
-        });
         addSystem(
           world,
-          function shutdownSys() {
+          defineSystem("updateSys", function updateSys() {
+            throw error;
+          })
+        );
+        addSystem(
+          world,
+          defineSystem("shutdownSys", function shutdownSys() {
             shutdownCount++;
-          },
+          }),
           { schedule: Shutdown }
         );
 
@@ -1559,14 +1638,17 @@ describe("Scheduler", () => {
         const world = createWorld();
         const frameError = new Error("frame failed");
         const shutdownError = new Error("shutdown failed");
-        addSystem(world, function updateSys() {
-          throw frameError;
-        });
         addSystem(
           world,
-          function shutdownSys() {
+          defineSystem("updateSys", function updateSys() {
+            throw frameError;
+          })
+        );
+        addSystem(
+          world,
+          defineSystem("shutdownSys", function shutdownSys() {
             throw shutdownError;
-          },
+          }),
           { schedule: Shutdown }
         );
 
@@ -1599,9 +1681,9 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          async function shutdownSys() {
+          defineSystem("shutdownSys", async function shutdownSys() {
             await gate;
-          },
+          }),
           { schedule: Shutdown }
         );
 
@@ -1623,10 +1705,10 @@ describe("Scheduler", () => {
       let attempts = 0;
       addSystem(
         world,
-        function shutdownSys() {
+        defineSystem("shutdownSys", function shutdownSys() {
           attempts++;
           throw error;
-        },
+        }),
         { schedule: Shutdown }
       );
 
@@ -1652,17 +1734,23 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, function first() {
-        calls.push("first");
-      });
+      addSystem(
+        world,
+        defineSystem("first", function first() {
+          calls.push("first");
+        })
+      );
 
       await runOnce(world);
       assert.deepStrictEqual(calls, ["first"]);
 
       // Add new system after first run
-      addSystem(world, function second() {
-        calls.push("second");
-      });
+      addSystem(
+        world,
+        defineSystem("second", function second() {
+          calls.push("second");
+        })
+      );
 
       calls.length = 0;
       await runOnce(world);
@@ -1674,9 +1762,12 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
+      addSystem(
+        world,
+        defineSystem("updateSys", function updateSys() {
+          calls.push("update");
+        })
+      );
 
       await runOnce(world);
       assert.deepStrictEqual(calls, ["update"]);
@@ -1686,9 +1777,9 @@ describe("Scheduler", () => {
       insertScheduleBefore(world, Physics, Update);
       addSystem(
         world,
-        function physicsSys() {
+        defineSystem("physicsSys", function physicsSys() {
           calls.push("physics");
-        },
+        }),
         { schedule: Physics }
       );
 
@@ -1700,204 +1791,38 @@ describe("Scheduler", () => {
   });
 
   describe("defineSystem", () => {
-    it("defers init from addSystem until the first runOnce", async () => {
+    it("runs a direct tick with the current world", async () => {
       const world = createWorld();
-      let initCount = 0;
-
-      const factory = defineSystem("testSystem", () => {
-        initCount++;
-        return () => {};
+      let received: typeof world | undefined;
+      const system = defineSystem("direct", (systemWorld) => {
+        received = systemWorld;
       });
 
-      assert.strictEqual(initCount, 0);
-      addSystem(world, factory);
-      assert.strictEqual(initCount, 0);
-
+      addSystem(world, system);
       await runOnce(world);
 
-      assert.strictEqual(initCount, 1);
+      assert.strictEqual(received, world);
     });
 
-    it("initializes factories in registration order across schedules", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      addSystem(
-        world,
-        defineSystem("updateInit", () => {
-          calls.push("update");
-          return () => {};
-        })
-      );
-      addSystem(
-        world,
-        defineSystem("firstInit", () => {
-          calls.push("first");
-          return () => {};
-        }),
-        { schedule: First }
-      );
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["update", "first"]);
+    it("rejects empty names", () => {
+      assert.throws(() => defineSystem("", () => {}), IrisInvalidSystemName);
     });
 
-    it("init runs once, tick runs many", async () => {
-      const world = createWorld();
-      let initCount = 0;
-      let tickCount = 0;
-
-      const factory = defineSystem("testSystem", () => {
-        initCount++;
-        return () => {
-          tickCount++;
-        };
-      });
-
-      addSystem(world, factory);
-
-      await runOnce(world);
-      await runOnce(world);
-      await runOnce(world);
-
-      assert.strictEqual(initCount, 1);
-      assert.strictEqual(tickCount, 3);
-    });
-
-    it("captures world in closure for resource access", async () => {
-      const world = createWorld();
-      const Time = defineComponent("Time", { delta: Type.f32() });
-      addResource(world, Time, { delta: 16 });
-
-      let captured = 0;
-
-      const factory = defineSystem("testSystem", (w) => {
-        return () => {
-          captured = getResourceValue(w, Time, "delta")!;
-        };
-      });
-
-      addSystem(world, factory);
-      await runOnce(world);
-
-      assert.strictEqual(captured, 16);
-    });
-
-    it("schedule option works", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      addSystem(world, function updateSys() {
-        calls.push("update");
-      });
-
-      const factory = defineSystem("firstSys", () => {
-        return () => {
-          calls.push("first");
-        };
-      });
-
-      addSystem(world, factory, { schedule: First });
-
-      await runOnce(world);
-
-      assert.strictEqual(calls.indexOf("first") < calls.indexOf("update"), true);
-    });
-
-    it("plain SystemRunner and SystemFactory coexist in same schedule", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-
-      addSystem(world, function plain() {
-        calls.push("plain");
-      });
-
-      const factory = defineSystem("factory", () => {
-        return () => {
-          calls.push("factory");
-        };
-      });
-
-      addSystem(world, factory);
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["plain", "factory"]);
-    });
-
-    it("local state persists across ticks", async () => {
+    it("retains direct closure state after reset", async () => {
       const world = createWorld();
       const values: number[] = [];
-
-      const factory = defineSystem("counter", () => {
-        let count = 0;
-        return () => {
-          count++;
-          values.push(count);
-        };
+      let count = 0;
+      const counter = defineSystem("counter", () => {
+        values.push(++count);
       });
 
-      addSystem(world, factory);
-
-      await runOnce(world);
-      await runOnce(world);
-      await runOnce(world);
-
-      assert.deepStrictEqual(values, [1, 2, 3]);
-    });
-
-    it("reinitializes factory local state after reset", async () => {
-      const world = createWorld();
-      const values: number[] = [];
-      let initCount = 0;
-
-      addSystem(
-        world,
-        defineSystem("resetCounter", () => {
-          initCount++;
-          let count = 0;
-          return () => {
-            values.push(++count);
-          };
-        })
-      );
-
+      addSystem(world, counter);
       await runOnce(world);
       await runOnce(world);
       resetWorld(world);
-
-      assert.strictEqual(initCount, 1);
       await runOnce(world);
 
-      assert.strictEqual(initCount, 2);
-      assert.deepStrictEqual(values, [1, 2, 1]);
-    });
-
-    it("initializes a factory added by another initializer in the same frame", async () => {
-      const world = createWorld();
-      const calls: string[] = [];
-      const child = defineSystem("child", () => {
-        calls.push("child init");
-        return () => {
-          calls.push("child tick");
-        };
-      });
-
-      addSystem(
-        world,
-        defineSystem("parent", (systemWorld) => {
-          calls.push("parent init");
-          addSystem(systemWorld, child);
-          return () => {
-            calls.push("parent tick");
-          };
-        })
-      );
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(calls, ["parent init", "child init", "parent tick", "child tick"]);
+      assert.deepStrictEqual(values, [1, 2, 3]);
     });
   });
 
@@ -1910,7 +1835,10 @@ describe("Scheduler", () => {
         events.push(label);
       });
 
-      addSystem(world, function noop() {});
+      addSystem(
+        world,
+        defineSystem("noop", function noop() {})
+      );
 
       await runOnce(world);
 
@@ -1926,7 +1854,10 @@ describe("Scheduler", () => {
         events.push({ label, duration });
       });
 
-      addSystem(world, function noop() {});
+      addSystem(
+        world,
+        defineSystem("noop", function noop() {})
+      );
 
       await runOnce(world);
 
@@ -1949,8 +1880,14 @@ describe("Scheduler", () => {
         finished.push({ systemId, schedule, duration });
       });
 
-      addSystem(world, function alpha() {});
-      addSystem(world, function beta() {});
+      addSystem(
+        world,
+        defineSystem("alpha", function alpha() {})
+      );
+      addSystem(
+        world,
+        defineSystem("beta", function beta() {})
+      );
 
       await runOnce(world);
 
@@ -1985,12 +1922,15 @@ describe("Scheduler", () => {
         capturedDuration = duration;
       });
 
-      addSystem(world, function work() {
-        // Burn a tiny amount of time
-        let sum = 0;
-        for (let i = 0; i < 1000; i++) sum += i;
-        void sum;
-      });
+      addSystem(
+        world,
+        defineSystem("work", function work() {
+          // Burn a tiny amount of time
+          let sum = 0;
+          for (let i = 0; i < 1000; i++) sum += i;
+          void sum;
+        })
+      );
 
       await runOnce(world);
 
@@ -2014,9 +1954,12 @@ describe("Scheduler", () => {
         log.push("schedule-end");
       });
 
-      addSystem(world, function mySystem() {
-        log.push("run:mySystem");
-      });
+      addSystem(
+        world,
+        defineSystem("mySystem", function mySystem() {
+          log.push("run:mySystem");
+        })
+      );
 
       await runOnce(world);
 
@@ -2054,9 +1997,12 @@ describe("Scheduler", () => {
         capturedDuration = duration;
       });
 
-      addSystem(world, async function asyncWork() {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      });
+      addSystem(
+        world,
+        defineSystem("asyncWork", async function asyncWork() {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        })
+      );
 
       await runOnce(world);
 
@@ -2104,7 +2050,11 @@ describe("Scheduler", () => {
 
       it("throws IrisDuplicate when set label matches a system name", () => {
         const world = createWorld();
-        addSystem(world, function shared() {}, { schedule: PostUpdate });
+        addSystem(
+          world,
+          defineSystem("shared", function shared() {}),
+          { schedule: PostUpdate }
+        );
         const Shared = defineSystemSet("shared");
 
         assert.throws(
@@ -2129,7 +2079,7 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
 
-        const sys = defineSystem("sys", () => () => {});
+        const sys = defineSystem("sys", () => {});
         addSystem(world, sys, { set: PhysicsSet });
 
         assert.strictEqual(world.systems.byId.get("sys")?.set, PhysicsSet);
@@ -2141,7 +2091,7 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet, { schedule: PostUpdate });
 
-        const sys = defineSystem("sys", () => () => {});
+        const sys = defineSystem("sys", () => {});
         addSystem(world, sys, { set: PhysicsSet });
 
         assert.strictEqual(world.systems.byId.get("sys")?.schedule, PostUpdate);
@@ -2151,7 +2101,7 @@ describe("Scheduler", () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
 
-        const sys = defineSystem("sys", () => () => {});
+        const sys = defineSystem("sys", () => {});
         assert.throws(() => addSystem(world, sys, { set: PhysicsSet }), IrisNotFound);
       });
     });
@@ -2168,28 +2118,28 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {
+          defineSystem("p1", () => {
             calls.push("p1");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("p2", () => () => {
+          defineSystem("p2", () => {
             calls.push("p2");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("r1", () => () => {
+          defineSystem("r1", () => {
             calls.push("r1");
           }),
           { set: RenderSet }
         );
         addSystem(
           world,
-          defineSystem("r2", () => () => {
+          defineSystem("r2", () => {
             calls.push("r2");
           }),
           { set: RenderSet }
@@ -2214,28 +2164,28 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {
+          defineSystem("p1", () => {
             calls.push("p1");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("p2", () => () => {
+          defineSystem("p2", () => {
             calls.push("p2");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("r1", () => () => {
+          defineSystem("r1", () => {
             calls.push("r1");
           }),
           { set: RenderSet }
         );
         addSystem(
           world,
-          defineSystem("r2", () => () => {
+          defineSystem("r2", () => {
             calls.push("r2");
           }),
           { set: RenderSet }
@@ -2256,21 +2206,21 @@ describe("Scheduler", () => {
         const RenderSet = defineSystemSet("RenderSet");
         addSystemSet(world, RenderSet);
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         addSystem(world, standalone, { before: RenderSet });
 
         addSystem(
           world,
-          defineSystem("r1", () => () => {
+          defineSystem("r1", () => {
             calls.push("r1");
           }),
           { set: RenderSet }
         );
         addSystem(
           world,
-          defineSystem("r2", () => () => {
+          defineSystem("r2", () => {
             calls.push("r2");
           }),
           { set: RenderSet }
@@ -2291,20 +2241,20 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {
+          defineSystem("p1", () => {
             calls.push("p1");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("p2", () => () => {
+          defineSystem("p2", () => {
             calls.push("p2");
           }),
           { set: PhysicsSet }
         );
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         addSystem(world, standalone, { after: PhysicsSet });
@@ -2319,7 +2269,7 @@ describe("Scheduler", () => {
         const world = createWorld();
         const calls: string[] = [];
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         const PhysicsSet = defineSystemSet("PhysicsSet");
@@ -2327,7 +2277,7 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {
+          defineSystem("p1", () => {
             calls.push("p1");
           }),
           { set: PhysicsSet }
@@ -2343,7 +2293,7 @@ describe("Scheduler", () => {
         const world = createWorld();
         const calls: string[] = [];
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         const PhysicsSet = defineSystemSet("PhysicsSet");
@@ -2352,7 +2302,7 @@ describe("Scheduler", () => {
         addSystem(world, standalone);
         addSystem(
           world,
-          defineSystem("p1", () => () => {
+          defineSystem("p1", () => {
             calls.push("p1");
           }),
           { set: PhysicsSet }
@@ -2370,16 +2320,16 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
 
-        const p1 = defineSystem("p1", () => () => {
+        const p1 = defineSystem("p1", () => {
           calls.push("p1");
         });
-        const p2 = defineSystem("p2", () => () => {
+        const p2 = defineSystem("p2", () => {
           calls.push("p2");
         });
         addSystem(world, p1, { set: PhysicsSet });
         addSystem(world, p2, { set: PhysicsSet });
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         addSystem(world, standalone, { after: p1 });
@@ -2396,7 +2346,7 @@ describe("Scheduler", () => {
         const EmptySet = defineSystemSet("EmptySet");
         addSystemSet(world, EmptySet);
 
-        const standalone = defineSystem("standalone", () => () => {
+        const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
         addSystem(world, standalone, { after: EmptySet });
@@ -2413,10 +2363,10 @@ describe("Scheduler", () => {
         const EmptySet = defineSystemSet("EmptySet");
         addSystemSet(world, EmptySet);
 
-        const a = defineSystem("a", () => () => {
+        const a = defineSystem("a", () => {
           calls.push("a");
         });
-        const b = defineSystem("b", () => () => {
+        const b = defineSystem("b", () => {
           calls.push("b");
         });
 
@@ -2435,13 +2385,13 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
 
-        const detect = defineSystem("detect", () => () => {
+        const detect = defineSystem("detect", () => {
           calls.push("detect");
         });
-        const resolve = defineSystem("resolve", () => () => {
+        const resolve = defineSystem("resolve", () => {
           calls.push("resolve");
         });
-        const apply = defineSystem("apply", () => () => {
+        const apply = defineSystem("apply", () => {
           calls.push("apply");
         });
 
@@ -2464,12 +2414,12 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("a", () => () => {}),
+          defineSystem("a", () => {}),
           { set: SetA }
         );
         addSystem(
           world,
-          defineSystem("b", () => () => {}),
+          defineSystem("b", () => {}),
           { set: SetB }
         );
 
@@ -2480,7 +2430,11 @@ describe("Scheduler", () => {
         const world = createWorld();
         const UnknownSet = defineSystemSet("UnknownSet");
 
-        addSystem(world, function sys() {}, { before: UnknownSet });
+        addSystem(
+          world,
+          defineSystem("sys", function sys() {}),
+          { before: UnknownSet }
+        );
 
         await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
@@ -2489,7 +2443,11 @@ describe("Scheduler", () => {
         const world = createWorld();
         const UnknownSet = defineSystemSet("UnknownSet");
 
-        addSystem(world, function sys() {}, { after: UnknownSet });
+        addSystem(
+          world,
+          defineSystem("sys", function sys() {}),
+          { after: UnknownSet }
+        );
 
         await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
       });
@@ -2501,7 +2459,7 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {}),
+          defineSystem("p1", () => {}),
           { set: PhysicsSet }
         );
 
@@ -2515,7 +2473,7 @@ describe("Scheduler", () => {
 
         addSystem(
           world,
-          defineSystem("p1", () => () => {}),
+          defineSystem("p1", () => {}),
           { set: PhysicsSet }
         );
 
@@ -2529,28 +2487,31 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         addSystemSet(world, PhysicsSet);
 
-        addSystem(world, function input() {
-          calls.push("input");
-        });
         addSystem(
           world,
-          defineSystem("gravity", () => () => {
+          defineSystem("input", function input() {
+            calls.push("input");
+          })
+        );
+        addSystem(
+          world,
+          defineSystem("gravity", () => {
             calls.push("gravity");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          defineSystem("collision", () => () => {
+          defineSystem("collision", () => {
             calls.push("collision");
           }),
           { set: PhysicsSet }
         );
         addSystem(
           world,
-          function render() {
+          defineSystem("render", function render() {
             calls.push("render");
-          },
+          }),
           { after: PhysicsSet }
         );
 
@@ -2563,7 +2524,7 @@ describe("Scheduler", () => {
   });
 
   describe("Conditions", () => {
-    it("initializes all systems before system and set conditions", async () => {
+    it("initializes system and set conditions before direct ticks", async () => {
       const world = createWorld();
       const Group = defineSystemSet("Group");
       const calls: string[] = [];
@@ -2578,57 +2539,31 @@ describe("Scheduler", () => {
         world,
         defineSystem("first", () => {
           calls.push("first system");
-          return () => {};
         }),
-        { set: Group, condition: condition("first condition") }
+        {
+          set: Group,
+          condition: condition("first condition"),
+        }
       );
       addSystem(
         world,
         defineSystem("second", () => {
           calls.push("second system");
-          return () => {};
         }),
-        { condition: condition("second condition") }
+        {
+          condition: condition("second condition"),
+        }
       );
 
       await runOnce(world);
 
       assert.deepStrictEqual(calls, [
-        "first system",
-        "second system",
         "first condition",
         "second condition",
         "set condition",
+        "first system",
+        "second system",
       ]);
-    });
-
-    it("prepares conditioned registrations added by a system initializer", async () => {
-      const world = createWorld();
-      let conditionInits = 0;
-      let childRuns = 0;
-      const condition = defineCondition("addedCondition", () => {
-        conditionInits++;
-        return () => true;
-      });
-      addSystem(
-        world,
-        defineSystem("parent", () => {
-          const Added = defineSystemSet("Added");
-          addSystemSet(world, Added, { condition });
-          addSystem(
-            world,
-            () => {
-              childRuns++;
-            },
-            { name: "child", set: Added, condition }
-          );
-          return () => {};
-        })
-      );
-
-      await runOnce(world);
-
-      assert.deepStrictEqual({ conditionInits, childRuns }, { conditionInits: 2, childRuns: 1 });
     });
 
     it("evaluates a system condition on every invocation and skips false ticks", async () => {
@@ -2639,9 +2574,9 @@ describe("Scheduler", () => {
 
       addSystem(
         world,
-        () => {
+        defineSystem("conditioned", () => {
           runs++;
-        },
+        }),
         { name: "conditioned", condition: alternating }
       );
 
@@ -2661,23 +2596,23 @@ describe("Scheduler", () => {
       addSystemSet(world, Group, { condition: alternating });
       addSystem(
         world,
-        () => {
+        defineSystem("first", () => {
           calls.push("first");
-        },
+        }),
         { name: "first", set: Group }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("middle", () => {
           calls.push("middle");
-        },
+        }),
         { name: "middle" }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("last", () => {
           calls.push("last");
-        },
+        }),
         { name: "last", set: Group }
       );
 
@@ -2693,14 +2628,18 @@ describe("Scheduler", () => {
       const Group = defineSystemSet("Group");
       let memberChecks = 0;
       addSystemSet(world, Group, { condition: defineCondition("setFalse", () => () => false) });
-      addSystem(world, () => assert.fail("system ran"), {
-        name: "member",
-        set: Group,
-        condition: defineCondition("member", () => () => {
-          memberChecks++;
-          return true;
-        }),
-      });
+      addSystem(
+        world,
+        defineSystem("member", () => assert.fail("system ran")),
+        {
+          name: "member",
+          set: Group,
+          condition: defineCondition("member", () => () => {
+            memberChecks++;
+            return true;
+          }),
+        }
+      );
 
       await runOnce(world);
 
@@ -2724,16 +2663,16 @@ describe("Scheduler", () => {
       addSystemSet(world, Group, { condition: firstTickOnly });
       addSystem(
         world,
-        () => {
+        defineSystem("one", () => {
           runs++;
-        },
+        }),
         { name: "one", set: Group, condition: firstTickOnly }
       );
       addSystem(
         world,
-        () => {
+        defineSystem("two", () => {
           runs++;
-        },
+        }),
         { name: "two", condition: firstTickOnly }
       );
 
@@ -2751,13 +2690,17 @@ describe("Scheduler", () => {
       registerObserverCallback(world, "scheduleStarted", () => events.push("scheduleStarted"));
       registerObserverCallback(world, "scheduleFinished", () => events.push("scheduleFinished"));
       registerObserverCallback(world, "systemStarted", () => events.push("systemStarted"));
-      addSystem(world, () => assert.fail("system ran"), {
-        name: "throws",
-        condition: defineCondition("throws", (conditionWorld) => () => {
-          assert.strictEqual(conditionWorld.execution.systemId, null);
-          throw new Error("condition failed");
-        }),
-      });
+      addSystem(
+        world,
+        defineSystem("throws", () => assert.fail("system ran")),
+        {
+          name: "throws",
+          condition: defineCondition("throws", (conditionWorld) => () => {
+            assert.strictEqual(conditionWorld.execution.systemId, null);
+            throw new Error("condition failed");
+          }),
+        }
+      );
 
       await assert.rejects(runOnce(world), /condition failed/);
 
@@ -2773,10 +2716,14 @@ describe("Scheduler", () => {
       registerObserverCallback(world, "scheduleFinished", () => events.push("scheduleFinished"));
       registerObserverCallback(world, "systemStarted", () => events.push("systemStarted"));
       registerObserverCallback(world, "systemFinished", () => events.push("systemFinished"));
-      addSystem(world, () => assert.fail("system ran"), {
-        name: "skipped",
-        condition: defineCondition("false", () => () => false),
-      });
+      addSystem(
+        world,
+        defineSystem("skipped", () => assert.fail("system ran")),
+        {
+          name: "skipped",
+          condition: defineCondition("false", () => () => false),
+        }
+      );
 
       await runOnce(world);
 
@@ -2787,22 +2734,30 @@ describe("Scheduler", () => {
       const world = createWorld();
       let startupChecks = 0;
       let shutdownChecks = 0;
-      addSystem(world, () => assert.fail("startup ran"), {
-        name: "startup",
-        schedule: Startup,
-        condition: defineCondition("startupFalse", () => () => {
-          startupChecks++;
-          return false;
-        }),
-      });
-      addSystem(world, () => assert.fail("shutdown ran"), {
-        name: "shutdown",
-        schedule: Shutdown,
-        condition: defineCondition("shutdownFalse", () => () => {
-          shutdownChecks++;
-          return false;
-        }),
-      });
+      addSystem(
+        world,
+        defineSystem("startup", () => assert.fail("startup ran")),
+        {
+          name: "startup",
+          schedule: Startup,
+          condition: defineCondition("startupFalse", () => () => {
+            startupChecks++;
+            return false;
+          }),
+        }
+      );
+      addSystem(
+        world,
+        defineSystem("shutdown", () => assert.fail("shutdown ran")),
+        {
+          name: "shutdown",
+          schedule: Shutdown,
+          condition: defineCondition("shutdownFalse", () => () => {
+            shutdownChecks++;
+            return false;
+          }),
+        }
+      );
 
       await runOnce(world);
       await runOnce(world);
@@ -2813,14 +2768,18 @@ describe("Scheduler", () => {
 
       const stoppedBeforeFrame = createWorld();
       let immediateShutdownChecks = 0;
-      addSystem(stoppedBeforeFrame, () => assert.fail("shutdown ran"), {
-        name: "immediateShutdown",
-        schedule: Shutdown,
-        condition: defineCondition("immediateShutdownFalse", () => () => {
-          immediateShutdownChecks++;
-          return false;
-        }),
-      });
+      addSystem(
+        stoppedBeforeFrame,
+        defineSystem("immediateShutdown", () => assert.fail("shutdown ran")),
+        {
+          name: "immediateShutdown",
+          schedule: Shutdown,
+          condition: defineCondition("immediateShutdownFalse", () => () => {
+            immediateShutdownChecks++;
+            return false;
+          }),
+        }
+      );
 
       await stop(stoppedBeforeFrame);
 
@@ -2841,7 +2800,11 @@ describe("Scheduler", () => {
           };
         }),
       });
-      addSystem(world, () => {}, { name: "prepare" });
+      addSystem(
+        world,
+        defineSystem("prepare", () => {}),
+        { name: "prepare" }
+      );
 
       await runOnce(world);
 
@@ -2854,16 +2817,16 @@ describe("Scheduler", () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const sys = defineSystem("sys", () => () => {
+      const sys = defineSystem("sys", () => {
         calls.push("sys");
       });
       addSystem(world, sys, { name: "customName" });
 
       addSystem(
         world,
-        function leader() {
+        defineSystem("leader", function leader() {
           calls.push("leader");
-        },
+        }),
         { before: "customName" }
       );
 
@@ -2872,11 +2835,11 @@ describe("Scheduler", () => {
       assert.strictEqual(calls.indexOf("leader") < calls.indexOf("sys"), true);
     });
 
-    it("same factory registered twice with different names, both execute", async () => {
+    it("same system registered twice with different names executes twice", async () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const sys = defineSystem("sys", () => () => {
+      const sys = defineSystem("sys", () => {
         calls.push("sys");
       });
       addSystem(world, sys);
@@ -2887,17 +2850,17 @@ describe("Scheduler", () => {
       assert.strictEqual(calls.length, 2);
     });
 
-    it("factory reference resolves to original name, not custom duplicate", async () => {
+    it("system reference resolves to the default name, not a custom registration", async () => {
       const world = createWorld();
       const calls: string[] = [];
 
-      const sys = defineSystem("sys", () => () => {
+      const sys = defineSystem("sys", () => {
         calls.push("sys");
       });
       addSystem(world, sys);
       addSystem(world, sys, { name: "sysCopy" });
 
-      const follower = defineSystem("follower", () => () => {
+      const follower = defineSystem("follower", () => {
         calls.push("follower");
       });
       addSystem(world, follower, { after: sys });
@@ -2914,12 +2877,12 @@ describe("Scheduler", () => {
       const PhysicsSet = defineSystemSet("PhysicsSet");
       addSystemSet(world, PhysicsSet);
 
-      const sys = defineSystem("sys", () => () => {
+      const sys = defineSystem("sys", () => {
         calls.push("sys");
       });
       addSystem(world, sys, { set: PhysicsSet, name: "customPhysics" });
 
-      const follower = defineSystem("follower", () => () => {
+      const follower = defineSystem("follower", () => {
         calls.push("follower");
       });
       addSystem(world, follower, { after: PhysicsSet });

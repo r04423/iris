@@ -12,6 +12,7 @@ import { defineTag } from "./registry.js";
 import {
   addSystem,
   defineSchedule,
+  defineSystem,
   First,
   insertScheduleBefore,
   Last,
@@ -72,7 +73,7 @@ describe("World", () => {
         // no-op
       }
 
-      addSystem(world, testSystem);
+      addSystem(world, defineSystem("testSystem", testSystem));
 
       resetWorld(world);
 
@@ -171,9 +172,12 @@ describe("World", () => {
         release = resolve;
       });
 
-      addSystem(world, async function waitingSystem() {
-        await gate;
-      });
+      addSystem(
+        world,
+        defineSystem("waitingSystem", async function waitingSystem() {
+          await gate;
+        })
+      );
 
       const frame = runOnce(world);
 

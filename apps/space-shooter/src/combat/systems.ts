@@ -1,4 +1,4 @@
-import type { Entity, EntityWith, World } from "iris-ecs";
+import type { Entity, EntityWith } from "iris-ecs";
 import {
   addResource,
   collectEntities,
@@ -29,7 +29,7 @@ import { EnemyKilled, PlayerHit } from "./events.js";
 // Startup
 // ============================================================================
 
-export function initCombat(world: World): void {
+export const initCombat = defineSystem("initCombat", (world) => {
   addResource(world, CombatConfig, {
     shootCooldown: 0.08,
     bulletRadius: 4,
@@ -39,7 +39,7 @@ export function initCombat(world: World): void {
     shieldBlinkFrequency: 250,
     shieldRadius: 28,
   });
-}
+});
 
 // ============================================================================
 // Update
@@ -50,56 +50,54 @@ export const handleShooting = defineSystem("handleShooting", (world) => {
   const { canShoot: canShootAction, getShootCooldownState, setShootCooldownState, spawnBullet } = combatActions(world);
   const { getInputFire } = inputActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
-    const bulletSpawnOffset = getResourceValue(world, CombatConfig, "bulletSpawnOffset") ?? 15;
-    const bulletSpreadAngle = getResourceValue(world, CombatConfig, "bulletSpreadAngle") ?? 0.08;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const bulletSpawnOffset = getResourceValue(world, CombatConfig, "bulletSpawnOffset") ?? 15;
+  const bulletSpreadAngle = getResourceValue(world, CombatConfig, "bulletSpreadAngle") ?? 0.08;
 
-    const player = queryFirstEntity(world, [IsPlayer, Transform, ShootCooldown, Input]);
+  const player = queryFirstEntity(world, [IsPlayer, Transform, ShootCooldown, Input]);
 
-    if (player === undefined) {
-      return;
+  if (player === undefined) {
+    return;
+  }
+
+  let shootReady = canShootAction(player);
+  const [cooldown, cooldownTimer] = getShootCooldownState(player);
+  let timer = cooldownTimer;
+
+  if (!shootReady) {
+    timer += delta;
+
+    if (timer >= cooldown) {
+      shootReady = true;
+      timer = 0;
     }
 
-    let shootReady = canShootAction(player);
-    const [cooldown, cooldownTimer] = getShootCooldownState(player);
-    let timer = cooldownTimer;
+    setShootCooldownState(player, shootReady, timer);
+  }
 
-    if (!shootReady) {
-      timer += delta;
+  const fireInput = getInputFire(player);
 
-      if (timer >= cooldown) {
-        shootReady = true;
-        timer = 0;
-      }
+  if (fireInput > 0 && shootReady) {
+    const [x, y] = getPosition(player);
+    const rotation = getRotation(player);
 
-      setShootCooldownState(player, shootReady, timer);
-    }
+    const dirX = Math.sin(rotation);
+    const dirY = Math.cos(rotation);
 
-    const fireInput = getInputFire(player);
+    // Rotate direction by random spread angle for bullet inaccuracy
+    const spreadAngle = between(-bulletSpreadAngle, bulletSpreadAngle);
+    const cos = Math.cos(spreadAngle);
+    const sin = Math.sin(spreadAngle);
+    const spreadDirX = dirX * cos - dirY * sin;
+    const spreadDirY = dirX * sin + dirY * cos;
 
-    if (fireInput > 0 && shootReady) {
-      const [x, y] = getPosition(player);
-      const rotation = getRotation(player);
+    const spawnX = x + dirX * bulletSpawnOffset;
+    const spawnY = y + dirY * bulletSpawnOffset;
 
-      const dirX = Math.sin(rotation);
-      const dirY = Math.cos(rotation);
+    spawnBullet(spawnX, spawnY, spreadDirX, spreadDirY, player as Entity);
 
-      // Rotate direction by random spread angle for bullet inaccuracy
-      const spreadAngle = between(-bulletSpreadAngle, bulletSpreadAngle);
-      const cos = Math.cos(spreadAngle);
-      const sin = Math.sin(spreadAngle);
-      const spreadDirX = dirX * cos - dirY * sin;
-      const spreadDirY = dirX * sin + dirY * cos;
-
-      const spawnX = x + dirX * bulletSpawnOffset;
-      const spawnY = y + dirY * bulletSpawnOffset;
-
-      spawnBullet(spawnX, spawnY, spreadDirX, spreadDirY, player as Entity);
-
-      setShootCooldownState(player, false, 0);
-    }
-  };
+    setShootCooldownState(player, false, 0);
+  }
 });
 
 export const updateBullets = defineSystem("updateBullets", (world) => {
@@ -107,25 +105,23 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
   const { getBulletSpeed, getBulletDirection, getBulletLifetime, setBulletTimeAlive, despawnBullet } =
     combatActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
-      const speed = getBulletSpeed(entity);
-      const [dx, dy] = getBulletDirection(entity);
-      const [lifetime, timeAlive] = getBulletLifetime(entity);
+  for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
+    const speed = getBulletSpeed(entity);
+    const [dx, dy] = getBulletDirection(entity);
+    const [lifetime, timeAlive] = getBulletLifetime(entity);
 
-      const [x, y] = getPosition(entity);
-      setPosition(entity, x + dx * speed * delta, y + dy * speed * delta);
+    const [x, y] = getPosition(entity);
+    setPosition(entity, x + dx * speed * delta, y + dy * speed * delta);
 
-      const newTimeAlive = timeAlive + delta;
-      setBulletTimeAlive(entity, newTimeAlive);
+    const newTimeAlive = timeAlive + delta;
+    setBulletTimeAlive(entity, newTimeAlive);
 
-      if (newTimeAlive >= lifetime) {
-        despawnBullet(entity);
-      }
+    if (newTimeAlive >= lifetime) {
+      despawnBullet(entity);
     }
-  };
+  }
 });
 
 // Broad phase via spatial hash, narrow phase via circle-circle distance check.
@@ -135,51 +131,49 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
   const { despawnBullet } = combatActions(world);
   const { despawnEnemy } = enemyActions(world);
 
-  return () => {
-    const map = getResourceValue(world, SpatialHash, "map")!;
-    const nearby = getResourceValue(world, ScratchEntities, "entities")!;
-    const bulletRadius = getResourceValue(world, CombatConfig, "bulletRadius") ?? 4;
-    const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
-    const hitRadius = bulletRadius + enemyRadius;
+  const map = getResourceValue(world, SpatialHash, "map")!;
+  const nearby = getResourceValue(world, ScratchEntities, "entities")!;
+  const bulletRadius = getResourceValue(world, CombatConfig, "bulletRadius") ?? 4;
+  const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
+  const hitRadius = bulletRadius + enemyRadius;
 
-    for (const bullet of collectEntities(world, [IsBullet, Bullet, Transform])) {
-      const [bx, by] = getPosition(bullet);
+  for (const bullet of collectEntities(world, [IsBullet, Bullet, Transform])) {
+    const [bx, by] = getPosition(bullet);
 
-      map.getNearbyEntities(bx, by, hitRadius, nearby);
+    map.getNearbyEntities(bx, by, hitRadius, nearby);
 
-      let hitEnemy: EntityWith<typeof Transform> | undefined;
+    let hitEnemy: EntityWith<typeof Transform> | undefined;
 
-      for (const entity of nearby) {
-        if (!isEntityAlive(world, entity)) {
-          continue;
-        }
-
-        if (!hasComponent(world, entity, IsEnemy) || !hasComponent(world, entity, Transform)) {
-          continue;
-        }
-
-        const [ex, ey] = getPosition(entity);
-
-        const dx = ex - bx;
-        const dy = ey - by;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < hitRadius) {
-          hitEnemy = entity;
-          break;
-        }
+    for (const entity of nearby) {
+      if (!isEntityAlive(world, entity)) {
+        continue;
       }
 
-      if (hitEnemy !== undefined) {
-        const [ex, ey] = getPosition(hitEnemy);
+      if (!hasComponent(world, entity, IsEnemy) || !hasComponent(world, entity, Transform)) {
+        continue;
+      }
 
-        emitEvent(world, EnemyKilled, { x: ex, y: ey });
+      const [ex, ey] = getPosition(entity);
 
-        despawnEnemy(hitEnemy);
-        despawnBullet(bullet);
+      const dx = ex - bx;
+      const dy = ey - by;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < hitRadius) {
+        hitEnemy = entity;
+        break;
       }
     }
-  };
+
+    if (hitEnemy !== undefined) {
+      const [ex, ey] = getPosition(hitEnemy);
+
+      emitEvent(world, EnemyKilled, { x: ex, y: ey });
+
+      despawnEnemy(hitEnemy);
+      despawnBullet(bullet);
+    }
+  }
 });
 
 // Push enemies away from the player proportional to player speed.
@@ -189,76 +183,72 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
   const { getPosition } = transformActions(world);
   const { getVelocity } = movementActions(world);
 
-  return () => {
-    const map = getResourceValue(world, SpatialHash, "map")!;
-    const nearby = getResourceValue(world, ScratchEntities, "entities")!;
-    const playerRadius = getResourceValue(world, PlayerConfig, "radius") ?? 14;
-    const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
-    const pushStrength = getResourceValue(world, PlayerConfig, "pushStrength") ?? 0.5;
-    const collisionRadius = playerRadius + enemyRadius;
+  const map = getResourceValue(world, SpatialHash, "map")!;
+  const nearby = getResourceValue(world, ScratchEntities, "entities")!;
+  const playerRadius = getResourceValue(world, PlayerConfig, "radius") ?? 14;
+  const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
+  const pushStrength = getResourceValue(world, PlayerConfig, "pushStrength") ?? 0.5;
+  const collisionRadius = playerRadius + enemyRadius;
 
-    for (const player of collectEntities(world, [IsPlayer, Transform, Movement])) {
-      const [px, py] = getPosition(player);
-      const [pvx, pvy] = getVelocity(player);
-      const playerSpeed = Math.sqrt(pvx * pvx + pvy * pvy);
+  for (const player of collectEntities(world, [IsPlayer, Transform, Movement])) {
+    const [px, py] = getPosition(player);
+    const [pvx, pvy] = getVelocity(player);
+    const playerSpeed = Math.sqrt(pvx * pvx + pvy * pvy);
 
-      map.getNearbyEntities(px, py, collisionRadius, nearby);
+    map.getNearbyEntities(px, py, collisionRadius, nearby);
 
-      let hasCollision = false;
+    let hasCollision = false;
 
-      for (const entity of nearby) {
-        if (!isEntityAlive(world, entity)) {
-          continue;
-        }
-
-        if (
-          !hasComponent(world, entity, IsEnemy) ||
-          !hasComponent(world, entity, Transform) ||
-          !hasComponent(world, entity, Movement)
-        ) {
-          continue;
-        }
-
-        const [ex, ey] = getPosition(entity);
-
-        const dx = ex - px;
-        const dy = ey - py;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist <= collisionRadius && dist > 0) {
-          hasCollision = true;
-
-          const pushX = (dx / dist) * playerSpeed * pushStrength;
-          const pushY = (dy / dist) * playerSpeed * pushStrength;
-          applyForce(entity, pushX, pushY);
-        }
+    for (const entity of nearby) {
+      if (!isEntityAlive(world, entity)) {
+        continue;
       }
 
-      if (hasCollision) {
-        emitEvent(world, PlayerHit);
+      if (
+        !hasComponent(world, entity, IsEnemy) ||
+        !hasComponent(world, entity, Transform) ||
+        !hasComponent(world, entity, Movement)
+      ) {
+        continue;
+      }
+
+      const [ex, ey] = getPosition(entity);
+
+      const dx = ex - px;
+      const dy = ey - py;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist <= collisionRadius && dist > 0) {
+        hasCollision = true;
+
+        const pushX = (dx / dist) * playerSpeed * pushStrength;
+        const pushY = (dy / dist) * playerSpeed * pushStrength;
+        applyForce(entity, pushX, pushY);
       }
     }
-  };
+
+    if (hasCollision) {
+      emitEvent(world, PlayerHit);
+    }
+  }
 });
 
 export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
   const { activateShield } = combatActions(world);
 
-  return () => {
-    if (!hasEvents(world, PlayerHit)) {
-      return;
-    }
+  if (!hasEvents(world, PlayerHit)) {
+    return;
+  }
 
-    readEvents(world, PlayerHit, () => {});
+  readEvents(world, PlayerHit, () => {});
 
-    const player = queryFirstEntity(world, [IsPlayer]);
-    if (player === undefined) {
-      return;
-    }
+  const player = queryFirstEntity(world, [IsPlayer]);
+  if (player === undefined) {
+    return;
+  }
 
-    const shieldDuration = getResourceValue(world, CombatConfig, "shieldDuration") ?? 1400;
-    activateShield(player, shieldDuration);
-  };
+  const shieldDuration = getResourceValue(world, CombatConfig, "shieldDuration") ?? 1400;
+  activateShield(player, shieldDuration);
 });
 
 // Blinks the shield using a sine wave: visible when sin > 0, hidden otherwise.
@@ -267,26 +257,24 @@ export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world)
   const { getShieldProgress, setShieldCurrent, deactivateShield, isShieldVisible, showShield, hideShield } =
     combatActions(world);
 
-  return () => {
-    const delta = getResourceValue(world, Time, "delta") ?? 0;
-    const blinkFrequency = getResourceValue(world, CombatConfig, "shieldBlinkFrequency") ?? 250;
+  const delta = getResourceValue(world, Time, "delta") ?? 0;
+  const blinkFrequency = getResourceValue(world, CombatConfig, "shieldBlinkFrequency") ?? 250;
 
-    for (const entity of collectEntities(world, [ShieldVisibility])) {
-      const [duration, prevCurrent] = getShieldProgress(entity);
-      const current = prevCurrent + delta * 1000;
-      setShieldCurrent(entity, current);
+  for (const entity of collectEntities(world, [ShieldVisibility])) {
+    const [duration, prevCurrent] = getShieldProgress(entity);
+    const current = prevCurrent + delta * 1000;
+    setShieldCurrent(entity, current);
 
-      if (current >= duration) {
-        deactivateShield(entity);
-      } else {
-        const shouldBeVisible = Math.sin((current / blinkFrequency) * Math.PI * 2) > 0;
+    if (current >= duration) {
+      deactivateShield(entity);
+    } else {
+      const shouldBeVisible = Math.sin((current / blinkFrequency) * Math.PI * 2) > 0;
 
-        if (shouldBeVisible && !isShieldVisible(entity)) {
-          showShield(entity);
-        } else if (!shouldBeVisible && isShieldVisible(entity)) {
-          hideShield(entity);
-        }
+      if (shouldBeVisible && !isShieldVisible(entity)) {
+        showShield(entity);
+      } else if (!shouldBeVisible && isShieldVisible(entity)) {
+        hideShield(entity);
       }
     }
-  };
+  }
 });
