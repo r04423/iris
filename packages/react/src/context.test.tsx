@@ -2,7 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { act, renderHook } from "@testing-library/react";
 import type { World } from "iris-ecs";
-import { createWorld, resetWorld } from "iris-ecs";
+import { createWorld, getWorldInternals, resetWorld } from "iris-ecs";
 import { useResetGeneration, useWorld, WorldProvider } from "./context.js";
 
 // ============================================================================
@@ -31,6 +31,9 @@ describe("useWorld", () => {
     const world = createWorld();
     const { result } = renderHook(() => useWorld(), { wrapper: createWrapper(world) });
 
+    // @ts-expect-error Access world state through getWorldInternals.
+    void world.entities;
+    assert.strictEqual(getWorldInternals(world), world);
     assert.strictEqual(result.current, world);
   });
 
@@ -89,15 +92,16 @@ describe("WorldProvider reset generation", () => {
 
   it("unregisters worldReset observer on unmount", () => {
     const world = createWorld();
-    const baselineCount = world.observers.worldReset.callbacks.length;
+    const internals = getWorldInternals(world);
+    const baselineCount = internals.observers.worldReset.callbacks.length;
 
     const { unmount } = renderHook(() => useResetGeneration(), { wrapper: createWrapper(world) });
 
-    assert.strictEqual(world.observers.worldReset.callbacks.length, baselineCount + 1);
+    assert.strictEqual(internals.observers.worldReset.callbacks.length, baselineCount + 1);
 
     unmount();
 
-    assert.strictEqual(world.observers.worldReset.callbacks.length, baselineCount);
+    assert.strictEqual(internals.observers.worldReset.callbacks.length, baselineCount);
   });
 
   it("re-registers observer when world prop changes", () => {

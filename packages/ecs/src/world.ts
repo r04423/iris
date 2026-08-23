@@ -32,15 +32,21 @@ import {
 // World Type
 // ============================================================================
 
+declare const WORLD_BRAND: unique symbol;
+
 /**
- * Container for all ECS state: entities, components, archetypes, queries,
- * schedules, events, and resources.
- *
- * Created by {@link createWorld} and passed as the first argument to every API
- * call. Plain data with no methods -- inspectable in a debugger and safe to
- * hold several of for isolated simulations.
+ * An isolated ECS world.
+ * Create one with {@link createWorld} and pass it to ECS operations.
  */
-export type World = {
+export interface World {
+  readonly [WORLD_BRAND]: true;
+}
+
+/**
+ * State backing a {@link World}.
+ * Prefer ECS operations unless direct inspection is required.
+ */
+export type WorldInternals = {
   /** Entity registry (direct Map-based tracking). */
   entities: EntityState;
   /** Name indices maintained by the name system. */
@@ -89,7 +95,7 @@ export type World = {
  * ```
  */
 export function createWorld(): World {
-  const world: World = {
+  const world = {
     entities: createEntityState(),
     names: createNameState(),
     components: createComponentState(),
@@ -104,7 +110,7 @@ export function createWorld(): World {
     events: createEventState(),
     actions: createActionState(),
     revision: createRevision(),
-  };
+  } as World;
 
   // Filter dispatch must observe before the root archetype registers
   initFilterDispatch(world);
@@ -113,6 +119,19 @@ export function createWorld(): World {
   initNameSystem(world);
   initRemovalSystem(world);
 
+  return world;
+}
+
+/**
+ * Exposes the state backing a world.
+ *
+ * Intended for diagnostics and tooling. Treat the returned state as read-only;
+ * direct mutation can violate ECS invariants.
+ *
+ * @param world - World to inspect
+ * @returns The world's internal state
+ */
+export function getWorldInternals(world: World): WorldInternals {
   return world;
 }
 

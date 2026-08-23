@@ -114,11 +114,14 @@ Mount a single `WorldProvider` at the app root. All hooks below must be called w
 Returns the `World` instance from the nearest `WorldProvider`. Throws if called outside one.
 
 ```tsx
+import { defineEvent, emitEvent } from "iris-ecs";
 import { useWorld } from "iris-react";
 
-function DebugPanel() {
+const PauseRequested = defineEvent("PauseRequested");
+
+function PauseButton() {
   const world = useWorld();
-  return <pre>{world.entities.byId.size} entities</pre>;
+  return <button onClick={() => emitEvent(world, PauseRequested)}>Pause</button>;
 }
 ```
 

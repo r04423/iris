@@ -44,7 +44,7 @@ export { defineCondition, every, once } from "./conditions.js";
 // World Operations
 // ============================================================================
 
-export { createWorld, resetWorld } from "./world.js";
+export { createWorld, getWorldInternals, resetWorld } from "./world.js";
 
 // ============================================================================
 // Entity Operations
@@ -187,7 +187,7 @@ export type {
   VectorFields,
   VectorTuple,
 } from "./schema.js";
-export type { World } from "./world.js";
+export type { World, WorldInternals } from "./world.js";
 
 // ============================================================================
 // Event System

@@ -72,10 +72,13 @@ export function WorldProvider(props: { world: World; children: React.ReactNode }
  * @example
  * ```tsx
  * import { useWorld } from "iris-react";
+ * import { defineEvent, emitEvent } from "iris-ecs";
  *
- * function EntityCount() {
+ * const PauseRequested = defineEvent("PauseRequested");
+ *
+ * function PauseButton() {
  *   const world = useWorld();
- *   return <span>{world.entities.byId.size}</span>;
+ *   return <button onClick={() => emitEvent(world, PauseRequested)}>Pause</button>;
  * }
  * ```
  */
