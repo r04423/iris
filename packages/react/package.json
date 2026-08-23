@@ -1,6 +1,6 @@
 {
   "name": "iris-react",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "type": "module",
   "description": "React bindings for Iris ECS",
   "author": "Yury Tomilin (https://github.com/r04423)",
