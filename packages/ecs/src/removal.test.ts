@@ -4,7 +4,7 @@ import { addComponent, removeComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { createEntity, destroyEntity } from "./entity.js";
 import { readEvents } from "./event.js";
-import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+import { defineComponent, defineRelation, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { removed } from "./removal.js";
 import { addSystem, defineSystem, runOnce } from "./scheduler.js";
@@ -19,7 +19,7 @@ describe("Removal", () => {
   describe("Basic Removal Detection", () => {
     it("detects component removal via readEvents", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_Health", { value: Type.f32() });
+      const Health = defineComponent("RD_Health", { schema: { value: Type.f32() } });
       const results: EntityId[] = [];
 
       addSystem(
@@ -43,7 +43,7 @@ describe("Removal", () => {
 
     it("detects removal of tag component", async () => {
       const world = createWorld();
-      const Player = defineTag("RD_Player");
+      const Player = defineComponent("RD_Player");
       const results: number[] = [];
 
       addSystem(
@@ -67,7 +67,7 @@ describe("Removal", () => {
 
     it("detects multiple removals of same component type", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_MultiHealth", { value: Type.f32() });
+      const Health = defineComponent("RD_MultiHealth", { schema: { value: Type.f32() } });
       const results: number[] = [];
 
       addSystem(
@@ -101,7 +101,7 @@ describe("Removal", () => {
 
     it("does not emit removal for component never added", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_NeverAdded", { value: Type.f32() });
+      const Health = defineComponent("RD_NeverAdded", { schema: { value: Type.f32() } });
       let count = 0;
 
       addSystem(
@@ -128,7 +128,7 @@ describe("Removal", () => {
   describe("Per-System Isolation", () => {
     it("multiple systems see same removal independently", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_IsoHealth", { value: Type.f32() });
+      const Health = defineComponent("RD_IsoHealth", { schema: { value: Type.f32() } });
 
       const sysAResults: number[] = [];
       const sysBResults: number[] = [];
@@ -165,7 +165,7 @@ describe("Removal", () => {
 
     it("system sees removal only once after consuming", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_OnceHealth", { value: Type.f32() });
+      const Health = defineComponent("RD_OnceHealth", { schema: { value: Type.f32() } });
 
       const results: number[][] = [];
 
@@ -199,8 +199,8 @@ describe("Removal", () => {
   describe("Multiple Component Types", () => {
     it("tracks component types independently", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_Health2", { value: Type.f32() });
-      const Position = defineComponent("RD_Position", { x: Type.f32(), y: Type.f32() });
+      const Health = defineComponent("RD_Health2", { schema: { value: Type.f32() } });
+      const Position = defineComponent("RD_Position", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const healthRemovals: number[] = [];
       const positionRemovals: number[] = [];
@@ -236,8 +236,8 @@ describe("Removal", () => {
 
     it("reading one type does not affect another", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_Health3", { value: Type.f32() });
-      const Armor = defineComponent("RD_Armor", { value: Type.f32() });
+      const Health = defineComponent("RD_Health3", { schema: { value: Type.f32() } });
+      const Armor = defineComponent("RD_Armor", { schema: { value: Type.f32() } });
 
       let healthCount1 = 0;
       let armorCount = 0;
@@ -283,9 +283,9 @@ describe("Removal", () => {
   describe("Entity Destruction", () => {
     it("emits removals for all components on entity destruction", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_DestroyHealth", { value: Type.f32() });
-      const Position = defineComponent("RD_DestroyPos", { x: Type.f32(), y: Type.f32() });
-      const Player = defineTag("RD_DestroyPlayer");
+      const Health = defineComponent("RD_DestroyHealth", { schema: { value: Type.f32() } });
+      const Position = defineComponent("RD_DestroyPos", { schema: { x: Type.f32(), y: Type.f32() } });
+      const Player = defineComponent("RD_DestroyPlayer");
 
       let healthCount = 0;
       let positionCount = 0;
@@ -322,7 +322,7 @@ describe("Removal", () => {
 
     it("does not double-emit for explicit removal before destruction", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_NoDouble", { value: Type.f32() });
+      const Health = defineComponent("RD_NoDouble", { schema: { value: Type.f32() } });
       let count = 0;
 
       addSystem(
@@ -349,7 +349,7 @@ describe("Removal", () => {
 
     it("destruction of entity with no components emits no removals", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_NoCompHealth", { value: Type.f32() });
+      const Health = defineComponent("RD_NoCompHealth", { schema: { value: Type.f32() } });
       let count = 0;
 
       addSystem(
@@ -559,8 +559,8 @@ describe("Removal", () => {
 
   describe("Lazy Event Creation", () => {
     it("creates different events for different components", () => {
-      const Health = defineComponent("RD_Lazy2Health", { value: Type.f32() });
-      const Mana = defineComponent("RD_Lazy2Mana", { value: Type.f32() });
+      const Health = defineComponent("RD_Lazy2Health", { schema: { value: Type.f32() } });
+      const Mana = defineComponent("RD_Lazy2Mana", { schema: { value: Type.f32() } });
 
       const healthEvent = removed(Health);
       const manaEvent = removed(Mana);
@@ -577,7 +577,7 @@ describe("Removal", () => {
   describe("Edge Cases", () => {
     it("same entity can have component removed multiple times (add-remove-add-remove)", async () => {
       const world = createWorld();
-      const Health = defineComponent("RD_MultiRemove", { value: Type.f32() });
+      const Health = defineComponent("RD_MultiRemove", { schema: { value: Type.f32() } });
 
       const results: number[][] = [];
 

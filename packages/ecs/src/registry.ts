@@ -1,7 +1,8 @@
 import type { Component, Relation, Tag } from "./encoding.js";
 import { encodeComponent, encodeRelation, encodeTag, ID_MASK_8, ID_MASK_20 } from "./encoding.js";
 import { IrisDefinitionLimitExceeded, IrisDuplicateDefinition } from "./error.js";
-import type { SchemaRecord } from "./schema.js";
+import type { NonEmptySchema, SchemaRecord } from "./schema.js";
+import { assertNonEmptySchema } from "./schema.js";
 
 // ============================================================================
 // Component Metadata
@@ -33,7 +34,7 @@ export type ComponentMeta = {
  */
 export type RelationOptions<S extends SchemaRecord = Record<string, never>> = {
   /** Field schemas for pair data (optional). */
-  schema?: S;
+  schema?: NonEmptySchema<S>;
   /** If true, a subject holds at most one target for this relation at a time. */
   exclusive?: boolean;
   /** What happens to subjects when a pair target is destroyed. Default is "remove". */
@@ -112,27 +113,68 @@ function assertDefinitionNameAvailable(name: string): void {
 }
 
 // ============================================================================
-// Tag Definition
+// Component Definition
 // ============================================================================
 
 /**
- * Defines a tag: a zero-data marker component.
+ * Defines a tag or data component.
  *
  * Definitions are global -- shared by every world and stable across
- * `resetWorld`. Attach the tag to entities with {@link addComponent}.
+ * `resetWorld`. Omit the options to create a tag, or provide a non-empty
+ * schema to create a data component.
  *
  * @param name - Name, unique across all tags, components, and relations
+ * @param options - Data component options; omit for a tag
  * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
- * @throws {IrisDefinitionLimitExceeded} If the tag limit (1,048,576) is exceeded
+ * @throws {IrisInvalidArgument} If the schema is empty
+ * @throws {IrisDefinitionLimitExceeded} If the tag or component limit (1,048,576) is exceeded
  *
  * @example
  * ```typescript
- * const Player = defineTag("Player");
+ * const Player = defineComponent("Player");
+ * const Position = defineComponent("Position", {
+ *   schema: { x: Type.f32(), y: Type.f32() },
+ * });
  * addComponent(world, entity, Player);
+ * addComponent(world, entity, Position, { x: 10, y: 20 });
  * ```
  */
-export function defineTag<N extends string>(name: N): Tag<N> {
+export function defineComponent<N extends string>(name: N): Tag<N>;
+
+export function defineComponent<N extends string, S extends SchemaRecord>(
+  name: N,
+  options: { schema: NonEmptySchema<S> }
+): Component<S, N>;
+
+export function defineComponent<N extends string, S extends SchemaRecord>(
+  name: N,
+  options?: { schema: NonEmptySchema<S> }
+): Tag<N> | Component<S, N> {
+  if (options !== undefined) {
+    assertNonEmptySchema(options.schema);
+  }
+
   assertDefinitionNameAvailable(name);
+
+  if (options !== undefined) {
+    const rawId = COMPONENT_REGISTRY.nextComponentId;
+
+    if (rawId > ID_MASK_20) {
+      throw new IrisDefinitionLimitExceeded("Component");
+    }
+
+    const componentId = encodeComponent<S>(rawId);
+
+    COMPONENT_REGISTRY.byId.set(componentId, {
+      name,
+      schema: options.schema,
+    });
+    COMPONENT_REGISTRY.byName.set(name, componentId);
+
+    COMPONENT_REGISTRY.nextComponentId++;
+
+    return componentId as Component<S, N>;
+  }
 
   const rawId = COMPONENT_REGISTRY.nextTagId;
 
@@ -154,49 +196,6 @@ export function defineTag<N extends string>(name: N): Tag<N> {
 }
 
 // ============================================================================
-// Component Definition
-// ============================================================================
-
-/**
- * Defines a data component with a typed field schema.
- *
- * Definitions are global -- shared by every world and stable across
- * `resetWorld`. The schema drives typed storage and full type inference in
- * {@link addComponent} and the value accessors.
- *
- * @param name - Name, unique across all tags, components, and relations
- * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
- * @throws {IrisDefinitionLimitExceeded} If the component limit (1,048,576) is exceeded
- *
- * @example
- * ```typescript
- * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
- * addComponent(world, entity, Position, { x: 10, y: 20 });
- * ```
- */
-export function defineComponent<N extends string, S extends SchemaRecord>(name: N, schema: S): Component<S, N> {
-  assertDefinitionNameAvailable(name);
-
-  const rawId = COMPONENT_REGISTRY.nextComponentId;
-
-  if (rawId > ID_MASK_20) {
-    throw new IrisDefinitionLimitExceeded("Component");
-  }
-
-  const componentId = encodeComponent<S>(rawId);
-
-  COMPONENT_REGISTRY.byId.set(componentId, {
-    name,
-    schema,
-  });
-  COMPONENT_REGISTRY.byName.set(name, componentId);
-
-  COMPONENT_REGISTRY.nextComponentId++;
-
-  return componentId as Component<S, N>;
-}
-
-// ============================================================================
 // Relation Definition
 // ============================================================================
 
@@ -210,7 +209,9 @@ export function defineComponent<N extends string, S extends SchemaRecord>(name: 
  * build the IDs passed to `addComponent`.
  *
  * @param name - Name, unique across all tags, components, and relations
+ * @param options - Optional schema and relation traits
  * @throws {IrisDuplicateDefinition} If the name is already used by a tag, component, or relation
+ * @throws {IrisInvalidArgument} If the schema is empty
  * @throws {IrisDefinitionLimitExceeded} If the relation limit (256, including the built-in Wildcard) is exceeded
  *
  * @example
@@ -223,6 +224,10 @@ export function defineRelation<N extends string, S extends SchemaRecord = Record
   name: N,
   options?: RelationOptions<S>
 ): Relation<S, N> {
+  if (options?.schema !== undefined) {
+    assertNonEmptySchema(options.schema);
+  }
+
   assertDefinitionNameAvailable(name);
 
   const rawId = COMPONENT_REGISTRY.nextRelationId;
@@ -282,7 +287,7 @@ export const Wildcard = defineRelation("Wildcard");
  * hasComponent(world, ChildOf, Exclusive); // true
  * ```
  */
-export const Exclusive = defineTag("Exclusive");
+export const Exclusive = defineComponent("Exclusive");
 
 /**
  * Trait tag marking a relation whose subjects are destroyed with their target.
@@ -299,4 +304,4 @@ export const Exclusive = defineTag("Exclusive");
  * destroyEntity(world, parent); // child is destroyed too
  * ```
  */
-export const OnDeleteTarget = defineTag("OnDeleteTarget");
+export const OnDeleteTarget = defineComponent("OnDeleteTarget");

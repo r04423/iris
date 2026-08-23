@@ -20,7 +20,7 @@ describe("Resource", () => {
   describe("Global Resources", () => {
     it("adds and accesses global resource", () => {
       const world = createWorld();
-      const Time = defineComponent("Time", { delta: Type.f64(), elapsed: Type.f64() });
+      const Time = defineComponent("Time", { schema: { delta: Type.f64(), elapsed: Type.f64() } });
 
       addResource(world, Time, { delta: 0.016, elapsed: 100.0 });
 
@@ -31,7 +31,7 @@ describe("Resource", () => {
 
     it("narrows the resource for typed accessors", () => {
       const world = createWorld();
-      const Time = defineComponent("TimeNarrowsResource", { delta: Type.f64() });
+      const Time = defineComponent("TimeNarrowsResource", { schema: { delta: Type.f64() } });
 
       addResource(world, Time, { delta: 0.016 });
 
@@ -41,7 +41,7 @@ describe("Resource", () => {
 
     it("modifies global resource", () => {
       const world = createWorld();
-      const Config = defineComponent("Config", { mode: Type.string<"debug" | "release">() });
+      const Config = defineComponent("Config", { schema: { mode: Type.string<"debug" | "release">() } });
 
       addResource(world, Config, { mode: "debug" });
       assert.strictEqual(getResourceValue(world, Config, "mode"), "debug");
@@ -53,7 +53,7 @@ describe("Resource", () => {
 
     it("removes global resource", () => {
       const world = createWorld();
-      const Time = defineComponent("TimeRemovesGlobalResource", { delta: Type.f32() });
+      const Time = defineComponent("TimeRemovesGlobalResource", { schema: { delta: Type.f32() } });
 
       addResource(world, Time, { delta: 0.016 });
       assert.strictEqual(hasResource(world, Time), true);
@@ -65,7 +65,7 @@ describe("Resource", () => {
 
     it("uses Component-on-Self pattern", () => {
       const world = createWorld();
-      const Global = defineComponent("Global", { value: Type.i32() });
+      const Global = defineComponent("Global", { schema: { value: Type.i32() } });
 
       addResource(world, Global, { value: 123 });
 
@@ -76,7 +76,7 @@ describe("Resource", () => {
 
     it("appears in standard queries", () => {
       const world = createWorld();
-      const Physics = defineComponent("Physics", { gravity: Type.f32() });
+      const Physics = defineComponent("Physics", { schema: { gravity: Type.f32() } });
 
       addResource(world, Physics, { gravity: 9.81 });
 
@@ -91,7 +91,7 @@ describe("Resource", () => {
   describe("Vector Resources", () => {
     it("adds and reads vector resource", () => {
       const world = createWorld();
-      const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+      const Gravity = defineComponent("Gravity", { schema: { value: Type.f64(3) } });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
 
@@ -101,7 +101,7 @@ describe("Resource", () => {
 
     it("writes vector resource", () => {
       const world = createWorld();
-      const Gravity = defineComponent("GravityWritesVectorResource", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityWritesVectorResource", { schema: { value: Type.f64(3) } });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
       setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
@@ -112,7 +112,7 @@ describe("Resource", () => {
 
     it("returns zero-copy typed array view", () => {
       const world = createWorld();
-      const Gravity = defineComponent("GravityReturnsZeroCopyTypedArrayView", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityReturnsZeroCopyTypedArrayView", { schema: { value: Type.f64(3) } });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
 
@@ -130,7 +130,7 @@ describe("Resource", () => {
 
     it("returns undefined for missing resource", () => {
       const world = createWorld();
-      const Gravity = defineComponent("GravityReturnsUndefinedMissingResource", { value: Type.f64(3) });
+      const Gravity = defineComponent("GravityReturnsUndefinedMissingResource", { schema: { value: Type.f64(3) } });
 
       assert.strictEqual(getResourceVectorValue(world, Gravity, "value"), undefined);
       assert.strictEqual(getResourceVectorView(world, Gravity, "value"), undefined);

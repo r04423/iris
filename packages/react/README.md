@@ -23,7 +23,6 @@ import {
   createWorld,
   createEntity,
   defineComponent,
-  defineTag,
   defineActions,
   addComponent,
   Type,
@@ -31,8 +30,8 @@ import {
 import { WorldProvider, useQueryEntities, useComponentValue, useActions } from "iris-react";
 
 // Define components
-const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-const Enemy = defineTag("Enemy");
+const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
+const Enemy = defineComponent("Enemy");
 
 // Create world and initial entities
 const world = createWorld();

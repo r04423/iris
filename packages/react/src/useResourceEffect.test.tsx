@@ -11,11 +11,15 @@ import { useResourceEffect } from "./useResourceEffect.js";
 // ============================================================================
 
 const Time = defineComponent("Time", {
-  delta: Type.f32(),
+  schema: {
+    delta: Type.f32(),
+  },
 });
 
 const Config = defineComponent("Config", {
-  volume: Type.f32(),
+  schema: {
+    volume: Type.f32(),
+  },
 });
 
 // ============================================================================

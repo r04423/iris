@@ -11,7 +11,9 @@ import { useResourceValue } from "./useResourceValue.js";
 // ============================================================================
 
 const Time = defineComponent("Time", {
-  delta: Type.f32(),
+  schema: {
+    delta: Type.f32(),
+  },
 });
 
 // ============================================================================

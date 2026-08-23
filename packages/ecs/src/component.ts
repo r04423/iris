@@ -699,7 +699,7 @@ function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): 
  *
  * @example
  * ```typescript
- * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
  * const pos = getComponentVectorValue(world, entity, Position, "value"); // [number, number]
  * ```
  */
@@ -745,7 +745,7 @@ export function getComponentVectorValue<S extends SchemaRecord, K extends Vector
  *
  * @example
  * ```typescript
- * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
  * setComponentVectorValue(world, entity, Position, "value", [10, 20]);
  * ```
  */
@@ -799,7 +799,7 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
  *
  * @example
  * ```typescript
- * const Position = defineComponent("Position", { value: Type.f32(2) });
+ * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
  * const view = getComponentVectorView(world, entity, Position, "value"); // Float32Array
  * view[0] += 1.0; // direct mutation, no copy
  * ```

@@ -74,7 +74,7 @@ export {
 // Registry Operations
 // ============================================================================
 
-export { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
+export { defineComponent, defineRelation, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
 
 // ============================================================================
 // Relation Operations

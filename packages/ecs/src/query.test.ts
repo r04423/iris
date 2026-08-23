@@ -17,7 +17,7 @@ import {
   queryEntities,
   queryFirstEntity,
 } from "./query.js";
-import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+import { defineComponent, defineRelation, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
@@ -482,8 +482,8 @@ describe("Query", () => {
 
     it("rebuilds query metadata after reset", () => {
       const world = createWorld();
-      const Position = defineComponent("QueryViewResetPosition", { x: Type.f32() });
-      const Velocity = defineComponent("QueryViewResetVelocity", { vx: Type.f32() });
+      const Position = defineComponent("QueryViewResetPosition", { schema: { x: Type.f32() } });
+      const Velocity = defineComponent("QueryViewResetVelocity", { schema: { vx: Type.f32() } });
       const beforePositionFirst = ensureQuery(world, [Position, Velocity]);
 
       resetWorld(world);
@@ -899,7 +899,7 @@ describe("Query", () => {
 
     it("provides aligned columns across branches in queryColumns", () => {
       const world = createWorld();
-      const Position = defineComponent("or_qc_Position", { x: Type.f32() });
+      const Position = defineComponent("or_qc_Position", { schema: { x: Type.f32() } });
       const Velocity = createEntity(world);
       const Acceleration = createEntity(world);
 
@@ -1191,7 +1191,7 @@ describe("Query", () => {
       it("works with tag targets", () => {
         const world = createWorld();
         const Has = defineRelation("Has");
-        const Weapon = defineTag("Weapon");
+        const Weapon = defineComponent("Weapon");
         const entity1 = createEntity(world);
         createEntity(world); // entity without pair
 
@@ -1208,7 +1208,7 @@ describe("Query", () => {
       it("combines pair with regular component", () => {
         const world = createWorld();
         const ChildOf = defineRelation("ChildOfCombinesPairRegularComponent");
-        const Active = defineTag("Active");
+        const Active = defineComponent("Active");
         const parent = createEntity(world);
         const child1 = createEntity(world);
         const child2 = createEntity(world);
@@ -1228,7 +1228,7 @@ describe("Query", () => {
       it("combines pair with exclusion", () => {
         const world = createWorld();
         const ChildOf = defineRelation("ChildOfCombinesPairExclusion");
-        const Dead = defineTag("Dead");
+        const Dead = defineComponent("Dead");
         const parent = createEntity(world);
         const child1 = createEntity(world);
         const child2 = createEntity(world);
@@ -1525,7 +1525,7 @@ describe("Query", () => {
   describe("Change Detection - changed()", () => {
     it("matches entities with component changed since last query execution", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionCD", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionCD", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0, y: 0 });
@@ -1584,8 +1584,8 @@ describe("Query", () => {
 
     it("matches an entity that moved archetype after the change", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionCDMove", { x: Type.f32() });
-      const Marker = defineTag("MarkerCDMove");
+      const Position = defineComponent("PositionCDMove", { schema: { x: Type.f32() } });
+      const Marker = defineComponent("MarkerCDMove");
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
@@ -1613,7 +1613,7 @@ describe("Query", () => {
 
     it("matches a changed entity after a swap-remove reordered its row", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionCDSwap", { x: Type.f32() });
+      const Position = defineComponent("PositionCDSwap", { schema: { x: Type.f32() } });
 
       const first = createEntity(world);
       addComponent(world, first, Position, { x: 0 });
@@ -1643,7 +1643,7 @@ describe("Query", () => {
 
     it("does not match without modification after lastTick update", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionCD2", { x: Type.f32() });
+      const Position = defineComponent("PositionCD2", { schema: { x: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
@@ -1867,7 +1867,7 @@ describe("Query", () => {
 
     it("combines changed() with not() exclusions", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionCM", { x: Type.f32() });
+      const Position = defineComponent("PositionCM", { schema: { x: Type.f32() } });
       const Dead = createEntity(world);
 
       const entity1 = createEntity(world);
@@ -1941,7 +1941,7 @@ describe("Query", () => {
     it("combines added() with pair relations", async () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfCM");
-      const Active = defineTag("ActiveCM");
+      const Active = defineComponent("ActiveCM");
 
       const parent = createEntity(world);
       const child1 = createEntity(world);
@@ -1974,7 +1974,7 @@ describe("Query", () => {
 
     it("combines added() with changed() in single query", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionComb", { x: Type.f32() });
+      const Position = defineComponent("PositionComb", { schema: { x: Type.f32() } });
       const NewState = createEntity(world);
 
       const entity = createEntity(world);
@@ -2011,9 +2011,9 @@ describe("Query", () => {
   describe("Change Detection - Query Revision Isolation", () => {
     it("shares a cursor across operations and differently ordered queries", async () => {
       const world = createWorld();
-      const Position = defineComponent("OrderedViewTickPosition", { x: Type.f32() });
-      const Velocity = defineComponent("OrderedViewTickVelocity", { vx: Type.f32() });
-      const Health = defineComponent("OrderedViewTickHealth", { value: Type.f32() });
+      const Position = defineComponent("OrderedViewTickPosition", { schema: { x: Type.f32() } });
+      const Velocity = defineComponent("OrderedViewTickVelocity", { schema: { vx: Type.f32() } });
+      const Health = defineComponent("OrderedViewTickHealth", { schema: { value: Type.f32() } });
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 1 });
       addComponent(world, entity, Velocity, { vx: 2 });
@@ -2077,7 +2077,7 @@ describe("Query", () => {
   describe("Change Detection - Per-System Isolation", () => {
     it("same query in different systems maintains independent cursors", async () => {
       const world = createWorld();
-      const Health = defineComponent("HealthPSI", { value: Type.f32() });
+      const Health = defineComponent("HealthPSI", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -2113,7 +2113,7 @@ describe("Query", () => {
 
     it("systems do not see changes from consumed revisions", async () => {
       const world = createWorld();
-      const Health = defineComponent("HealthPSI2", { value: Type.f32() });
+      const Health = defineComponent("HealthPSI2", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -2141,7 +2141,7 @@ describe("Query", () => {
 
     it("system sees changes made by an earlier system in the same frame", async () => {
       const world = createWorld();
-      const Health = defineComponent("HealthSameTickVis", { value: Type.f32() });
+      const Health = defineComponent("HealthSameTickVis", { schema: { value: Type.f32() } });
 
       let systemBSawEntity = false;
 
@@ -2167,7 +2167,7 @@ describe("Query", () => {
 
     it("outside-system change detection returns empty for added() and changed()", () => {
       const world = createWorld();
-      const Health = defineComponent("HealthOutside", { value: Type.f32() });
+      const Health = defineComponent("HealthOutside", { schema: { value: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Health, { value: 100 });
@@ -2183,7 +2183,7 @@ describe("Query", () => {
 
     it("changed() modifier respects per-system isolation", async () => {
       const world = createWorld();
-      const Position = defineComponent("PositionPSI", { x: Type.f32() });
+      const Position = defineComponent("PositionPSI", { schema: { x: Type.f32() } });
 
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
@@ -2274,7 +2274,7 @@ describe("Query", () => {
 
     it("nested reads see callback writes and throwing reads consume their window", async () => {
       const world = createWorld();
-      const Position = defineComponent("NestedRevisionPosition", { x: Type.f32() });
+      const Position = defineComponent("NestedRevisionPosition", { schema: { x: Type.f32() } });
       const entity = createEntity(world);
       addComponent(world, entity, Position, { x: 0 });
       const counts: number[] = [];
@@ -2306,7 +2306,7 @@ describe("Query", () => {
 
     it("guards revision overflow without changing the query cursor", async () => {
       const world = createWorld();
-      const Tracked = defineTag("QueryRevisionOverflow");
+      const Tracked = defineComponent("QueryRevisionOverflow");
       const query = ensureQuery(world, [added(Tracked)]);
       addSystem(
         world,
@@ -2418,7 +2418,7 @@ describe("Query", () => {
   describe("Between-Tick Change Detection", () => {
     it("between-frame component addition visible to systems on next frame", async () => {
       const world = createWorld();
-      const Health = defineComponent("HealthBetweenTick", { value: Type.f32() });
+      const Health = defineComponent("HealthBetweenTick", { schema: { value: Type.f32() } });
 
       const seen: EntityId[] = [];
 
@@ -2451,8 +2451,10 @@ describe("Query", () => {
       it("iterates single archetype with correct column data", () => {
         const world = createWorld();
         const Position = defineComponent("qc_Position", {
-          x: Type.f32<10 | 30>(),
-          y: Type.f32(),
+          schema: {
+            x: Type.f32<10 | 30>(),
+            y: Type.f32(),
+          },
         });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
@@ -2487,9 +2489,11 @@ describe("Query", () => {
       it("types reference fields as arrays of stored references", () => {
         const world = createWorld();
         const Buckets = defineComponent("qc_ref_Buckets", {
-          entities: Type.ref<EntityId[]>(),
-          cache: Type.ref<Map<string, number>>(),
-          weight: Type.f32(),
+          schema: {
+            entities: Type.ref<EntityId[]>(),
+            cache: Type.ref<Map<string, number>>(),
+            weight: Type.f32(),
+          },
         });
         const entity = createEntity(world);
         const nearby = createEntity(world);
@@ -2514,8 +2518,8 @@ describe("Query", () => {
     describe("Multi-Archetype", () => {
       it("fires callback for each matching archetype", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_ma_Position", { x: Type.f32() });
-        const Velocity = defineComponent("qc_ma_Velocity", { vx: Type.f32() });
+        const Position = defineComponent("qc_ma_Position", { schema: { x: Type.f32() } });
+        const Velocity = defineComponent("qc_ma_Velocity", { schema: { vx: Type.f32() } });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -2541,8 +2545,8 @@ describe("Query", () => {
     describe("Tags", () => {
       it("uses tags for filtering but excludes them from column parameters", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_tag_Position", { x: Type.f32() });
-        const IsEnemy = defineTag("qc_IsEnemy");
+        const Position = defineComponent("qc_tag_Position", { schema: { x: Type.f32() } });
+        const IsEnemy = defineComponent("qc_IsEnemy");
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -2565,8 +2569,8 @@ describe("Query", () => {
     describe("not() Modifier", () => {
       it("excludes matching archetypes", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_not_Position", { x: Type.f32() });
-        const Dead = defineTag("qc_Dead");
+        const Position = defineComponent("qc_not_Position", { schema: { x: Type.f32() } });
+        const Dead = defineComponent("qc_Dead");
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -2589,7 +2593,7 @@ describe("Query", () => {
     describe("Modifier Restrictions", () => {
       it("rejects added() modifier", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_rej_Position", { x: Type.f32() });
+        const Position = defineComponent("qc_rej_Position", { schema: { x: Type.f32() } });
 
         assert.throws(
           // @ts-expect-error added() is intentionally rejected by the type system
@@ -2600,7 +2604,7 @@ describe("Query", () => {
 
       it("rejects changed() modifier", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_rejc_Position", { x: Type.f32() });
+        const Position = defineComponent("qc_rejc_Position", { schema: { x: Type.f32() } });
 
         assert.throws(
           // @ts-expect-error changed() is intentionally rejected by the type system
@@ -2613,7 +2617,7 @@ describe("Query", () => {
     describe("Pairs", () => {
       it("provides column parameters for pairs with data", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_pair_Position", { x: Type.f32() });
+        const Position = defineComponent("qc_pair_Position", { schema: { x: Type.f32() } });
         const Likes = defineRelation("qc_Likes", { schema: { strength: Type.f32() } });
         const target = createEntity(world);
         const e1 = createEntity(world);
@@ -2631,7 +2635,7 @@ describe("Query", () => {
 
       it("excludes data-less pairs from column parameters", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_dlp_Position", { x: Type.f32() });
+        const Position = defineComponent("qc_dlp_Position", { schema: { x: Type.f32() } });
         const ChildOf = defineRelation("qc_ChildOf");
         const parent = createEntity(world);
         const child = createEntity(world);
@@ -2650,8 +2654,8 @@ describe("Query", () => {
     describe("Term Order", () => {
       it("preserves the requested column order for equivalent term queries", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_cache_order_Position", { x: Type.f32() });
-        const Velocity = defineComponent("qc_cache_order_Velocity", { vx: Type.f32() });
+        const Position = defineComponent("qc_cache_order_Position", { schema: { x: Type.f32() } });
+        const Velocity = defineComponent("qc_cache_order_Velocity", { schema: { vx: Type.f32() } });
         const entity = createEntity(world);
 
         addComponent(world, entity, Position, { x: 10 });
@@ -2672,8 +2676,8 @@ describe("Query", () => {
     describe("Early Exit", () => {
       it("stops iteration when callback returns false", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_exit_Position", { x: Type.f32() });
-        const Velocity = defineComponent("qc_exit_Velocity", { vx: Type.f32() });
+        const Position = defineComponent("qc_exit_Position", { schema: { x: Type.f32() } });
+        const Velocity = defineComponent("qc_exit_Velocity", { schema: { vx: Type.f32() } });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -2695,8 +2699,8 @@ describe("Query", () => {
     describe("Empty Archetypes", () => {
       it("skips archetypes with no entities", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_empty_Position", { x: Type.f32() });
-        const Velocity = defineComponent("qc_empty_Velocity", { vx: Type.f32() });
+        const Position = defineComponent("qc_empty_Position", { schema: { x: Type.f32() } });
+        const Velocity = defineComponent("qc_empty_Velocity", { schema: { vx: Type.f32() } });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 
@@ -2720,7 +2724,7 @@ describe("Query", () => {
     describe("Mutation Safety", () => {
       it("supports safe backward iteration with entity destruction", () => {
         const world = createWorld();
-        const Health = defineComponent("qc_mut_Health", { hp: Type.i32() });
+        const Health = defineComponent("qc_mut_Health", { schema: { hp: Type.i32() } });
         const entities: Entity[] = [];
 
         for (let i = 0; i < 5; i++) {
@@ -2749,7 +2753,7 @@ describe("Query", () => {
     describe("Vector Columns", () => {
       it("provides stride-based access through column references", () => {
         const world = createWorld();
-        const Position = defineComponent("qc_vec_Position", { value: Type.f32(3) });
+        const Position = defineComponent("qc_vec_Position", { schema: { value: Type.f32(3) } });
         const e1 = createEntity(world);
         const e2 = createEntity(world);
 

@@ -19,17 +19,23 @@ import { useComponentValue } from "./useComponentValue.js";
 // ============================================================================
 
 const Health = defineComponent("Health", {
-  current: Type.f32(),
-  max: Type.f32(),
+  schema: {
+    current: Type.f32(),
+    max: Type.f32(),
+  },
 });
 
 const Position = defineComponent("Position", {
-  x: Type.f32(),
-  y: Type.f32(),
+  schema: {
+    x: Type.f32(),
+    y: Type.f32(),
+  },
 });
 
 const Label = defineComponent("Label", {
-  name: Type.string<"hello">(),
+  schema: {
+    name: Type.string<"hello">(),
+  },
 });
 
 // ============================================================================

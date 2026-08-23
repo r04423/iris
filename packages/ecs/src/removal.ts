@@ -48,7 +48,7 @@ export function removed(componentId: EntityId): Event<typeof RemovalEventSchema>
   let event = removalEvents.get(componentId);
 
   if (!event) {
-    event = defineEvent(`Removed<${componentId}>`, RemovalEventSchema);
+    event = defineEvent(`Removed<${componentId}>`, { schema: RemovalEventSchema });
     removalEvents.set(componentId, event);
   }
 

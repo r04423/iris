@@ -46,7 +46,6 @@ import {
   createEntity,
   defineComponent,
   defineSystem,
-  defineTag,
   collectEntities,
   getComponentVectorView,
   markComponentChanged,
@@ -56,9 +55,9 @@ import {
 } from "iris-ecs";
 
 // Define components -- vector fields store x,y interleaved in one TypedArray
-const Position = defineComponent("Position", { value: Type.f32(2) });
-const Velocity = defineComponent("Velocity", { value: Type.f32(2) });
-const Player = defineTag("Player");
+const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
+const Velocity = defineComponent("Velocity", { schema: { value: Type.f32(2) } });
+const Player = defineComponent("Player");
 
 // Create world and entities
 const world = createWorld();
@@ -129,7 +128,7 @@ Create entities with `createEntity()`, optionally passing an array of component 
 
 #### Everything is an Entity
 
-Components, tags, and relations are also entities internally. When you call `defineComponent()` or `defineTag()`, you're creating a special entity that can be attached to other entities. This unified model means components can have components, enabling patterns like adding metadata to component types.
+Components, tags, and relations are also entities internally. `defineComponent()` creates a special entity that can be attached to other entities. This unified model means components can have components, enabling patterns like adding metadata to component types.
 
 All IDs are 32-bit encoded values with type bits distinguishing entities (0x1), tags (0x2), components (0x3), and relations (0x4). Entity IDs include an 8-bit generation counter for stale reference detection -- when an ID is recycled, its generation increments, invalidating old references.
 
@@ -160,11 +159,11 @@ Names are automatically cleaned up when entities are destroyed. Use names for in
 A **Tag** is a marker component with no data.
 
 ```typescript
-import { defineTag, addComponent, hasComponent, removeComponent } from "iris-ecs";
+import { defineComponent, addComponent, hasComponent, removeComponent } from "iris-ecs";
 
-const Player = defineTag("Player");
-const Enemy = defineTag("Enemy");
-const Poisoned = defineTag("Poisoned");
+const Player = defineComponent("Player");
+const Enemy = defineComponent("Enemy");
+const Poisoned = defineComponent("Poisoned");
 
 addComponent(world, entity, Player);
 hasComponent(world, entity, Player);  // true
@@ -192,8 +191,8 @@ import {
   getComponentVectorView,
 } from "iris-ecs";
 
-const Position = defineComponent("Position", { value: Type.f32(2) });
-const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
+const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
+const Health = defineComponent("Health", { schema: { current: Type.i32(), max: Type.i32() } });
 
 addComponent(world, entity, Position, { value: [0, 0] });
 addComponent(world, entity, Health, { current: 100, max: 100 });
@@ -267,8 +266,8 @@ import {
   Type,
 } from "iris-ecs";
 
-const Position = defineComponent("Position", { value: Type.f32(2) });
-const Color = defineComponent("Color", { value: Type.u32(4) });
+const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
+const Color = defineComponent("Color", { schema: { value: Type.u32(4) } });
 
 const entity = createEntity(world);
 addComponent(world, entity, Position, { value: [10, 20] });
@@ -295,8 +294,10 @@ Components can mix scalar and vector fields:
 
 ```typescript
 const Particle = defineComponent("Particle", {
-  position: Type.f32(3),
-  mass: Type.f32(),
+  schema: {
+    position: Type.f32(3),
+    mass: Type.f32(),
+  },
 });
 
 addComponent(world, entity, Particle, { position: [0, 0, 0], mass: 1.0 });
@@ -322,7 +323,7 @@ import {
   Type,
 } from "iris-ecs";
 
-const Time = defineComponent("Time", { delta: Type.f32(), elapsed: Type.f32() });
+const Time = defineComponent("Time", { schema: { delta: Type.f32(), elapsed: Type.f32() } });
 
 addResource(world, Time, { delta: 0.016, elapsed: 0 });
 
@@ -357,7 +358,7 @@ import {
   Type,
 } from "iris-ecs";
 
-const Gravity = defineComponent("Gravity", { value: Type.f64(3) });
+const Gravity = defineComponent("Gravity", { schema: { value: Type.f64(3) } });
 addResource(world, Gravity, { value: [0, -9.81, 0] });
 
 // Copy-based read
@@ -802,8 +803,10 @@ const GameStarted = defineEvent("GameStarted");
 
 // Data event
 const DamageDealt = defineEvent("DamageDealt", {
-  target: Type.u32(),
-  amount: Type.f32(),
+  schema: {
+    target: Type.u32(),
+    amount: Type.f32(),
+  },
 });
 
 // Emit events

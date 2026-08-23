@@ -199,8 +199,8 @@ export class IrisEntityNotFound extends IrisNotFound {
  *
  * @example
  * ```typescript
- * defineTag("Player");
- * defineTag("Player"); // throws IrisDuplicateDefinition
+ * defineComponent("Player");
+ * defineComponent("Player"); // throws IrisDuplicateDefinition
  * ```
  */
 export class IrisDuplicateDefinition extends IrisDuplicate {
@@ -215,7 +215,7 @@ export class IrisDuplicateDefinition extends IrisDuplicate {
  *
  * @example
  * ```typescript
- * const Player = defineTag("Player"); // throws when tag IDs run out
+ * const Player = defineComponent("Player"); // throws when tag IDs run out
  * ```
  */
 export class IrisDefinitionLimitExceeded extends IrisLimitExceeded {

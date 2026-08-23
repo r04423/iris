@@ -10,7 +10,7 @@ Core ECS library for Iris.
 | `entity.ts` | Entity lifecycle (create, destroy, aliveness check, ID recycling) |
 | `component.ts` | Component add/remove/get/set operations, archetype transitions |
 | `archetype.ts` | Columnar storage, capacity management, graph traversal |
-| `registry.ts` | Component/Tag/Relation definitions (defineComponent, defineTag, defineRelation) |
+| `registry.ts` | Component/Tag/Relation definitions (defineComponent, defineRelation) |
 | `relation.ts` | Pair encoding/decoding, relation target queries |
 | `query.ts` | Entity queries with filters (added, changed, not), change detection |
 | `filters.ts` | Query filter matching against archetypes |

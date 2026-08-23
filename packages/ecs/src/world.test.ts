@@ -8,7 +8,7 @@ import { defineEvent, emitEvent } from "./event.js";
 import { lookupByName, setName } from "./name.js";
 import { registerObserverCallback } from "./observer.js";
 import { collectEntities } from "./query.js";
-import { defineTag } from "./registry.js";
+import { defineComponent } from "./registry.js";
 import {
   addSystem,
   defineSchedule,
@@ -28,7 +28,7 @@ describe("World", () => {
   describe("World Creation", () => {
     it("creates an empty world ready for use", () => {
       const world = createWorld();
-      const Tag = defineTag("CreationReady");
+      const Tag = defineComponent("CreationReady");
 
       assert.deepStrictEqual(collectEntities(world, [Tag]), []);
 
@@ -52,7 +52,7 @@ describe("World", () => {
   describe("World Reset", () => {
     it("clears all entities", () => {
       const world = createWorld();
-      const Tag = defineTag("ResetTest1");
+      const Tag = defineComponent("ResetTest1");
 
       const entity = createEntity(world);
       addComponent(world, entity, Tag);
@@ -104,7 +104,7 @@ describe("World", () => {
 
     it("clears queries and filters", () => {
       const world = createWorld();
-      const Tag = defineTag("ResetTest2");
+      const Tag = defineComponent("ResetTest2");
 
       const entity = createEntity(world);
       addComponent(world, entity, Tag);
@@ -135,7 +135,7 @@ describe("World", () => {
 
     it("clears event queues", () => {
       const world = createWorld();
-      const TestEvent = defineEvent("ResetTestEvent", { value: Type.f32() });
+      const TestEvent = defineEvent("ResetTestEvent", { schema: { value: Type.f32() } });
 
       emitEvent(world, TestEvent, { value: 42 });
       assert.ok(world.events.byId.size > 0);
@@ -211,7 +211,7 @@ describe("World", () => {
 
     it("can create entities after reset", () => {
       const world = createWorld();
-      const Tag = defineTag("ResetTest3");
+      const Tag = defineComponent("ResetTest3");
 
       createEntity(world);
       resetWorld(world);
@@ -224,7 +224,7 @@ describe("World", () => {
 
     it("supports multiple resets", () => {
       const world = createWorld();
-      const Tag = defineTag("ResetTest4");
+      const Tag = defineComponent("ResetTest4");
 
       for (let i = 0; i < 10; i++) {
         // Create entities

@@ -4,7 +4,7 @@ import { addComponent, hasComponent, setComponentValue } from "./component.js";
 import { createEntity, destroyEntity } from "./entity.js";
 import { IrisDuplicate, IrisInvalidArgument } from "./error.js";
 import { getName, lookupByName, Name, removeName, setName } from "./name.js";
-import { defineComponent, defineTag } from "./registry.js";
+import { defineComponent } from "./registry.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -93,8 +93,8 @@ describe("Name", () => {
 
     it("looks up entity with component validation", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-      const Health = defineTag("Health");
+      const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
+      const Health = defineComponent("Health");
       const entity = createEntity(world);
 
       setName(world, entity, "player");

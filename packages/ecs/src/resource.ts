@@ -35,7 +35,7 @@ import type { World } from "./world.js";
  *
  * @example
  * ```typescript
- * const Time = defineComponent("Time", { delta: Type.f32() });
+ * const Time = defineComponent("Time", { schema: { delta: Type.f32() } });
  * addResource(world, Time, { delta: 0.016 });
  * ```
  */
@@ -152,7 +152,7 @@ export function setResourceValue<S extends SchemaRecord, K extends ScalarFields<
  *
  * @example
  * ```typescript
- * const Gravity = defineComponent("Gravity", { value: Type.f32(3) });
+ * const Gravity = defineComponent("Gravity", { schema: { value: Type.f32(3) } });
  * addResource(world, Gravity, { value: [0, -9.81, 0] });
  * const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
  * ```
@@ -222,7 +222,7 @@ export function setResourceVectorValue<S extends SchemaRecord, K extends VectorF
  *
  * @example
  * ```typescript
- * const Gravity = defineComponent("Gravity", { value: Type.f32(3) });
+ * const Gravity = defineComponent("Gravity", { schema: { value: Type.f32(3) } });
  * const view = getResourceVectorView(world, Gravity, "value"); // Float32Array
  * view[1] = -20; // direct mutation, no copy
  * ```

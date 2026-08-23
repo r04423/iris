@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { IrisDuplicate, IrisLimitExceeded } from "./error.js";
+import { IrisDuplicate, IrisInvalidArgument, IrisLimitExceeded } from "./error.js";
 import {
   clearEvents,
   collectEvents,
@@ -31,8 +31,10 @@ describe("Event", () => {
 
     it("defines data event with schema", () => {
       const DamageDealt = defineEvent("DamageDealt", {
-        target: Type.u32(),
-        amount: Type.f32(),
+        schema: {
+          target: Type.u32(),
+          amount: Type.f32(),
+        },
       });
 
       assert.strictEqual(DamageDealt.name, "DamageDealt");
@@ -60,6 +62,16 @@ describe("Event", () => {
 
       const Next = defineEvent("AfterDuplicateEvent");
       assert.strictEqual(Next.id, First.id + 1);
+    });
+
+    it("rejects an empty schema without registering an event", () => {
+      const Previous = defineEvent("BeforeEmptyEventSchema");
+
+      // @ts-expect-error -- testing runtime validation of an empty schema
+      assert.throws(() => defineEvent("EmptyEventSchema", { schema: {} }), IrisInvalidArgument);
+
+      const Next = defineEvent("EmptyEventSchema");
+      assert.strictEqual(Next.id, Previous.id + 1);
     });
   });
 
@@ -89,8 +101,10 @@ describe("Event", () => {
     it("emits data event with data argument", async () => {
       const world = createWorld();
       const DamageDealt = defineEvent("EmitDamageEvent", {
-        target: Type.u32(),
-        amount: Type.f32(),
+        schema: {
+          target: Type.u32(),
+          amount: Type.f32(),
+        },
       });
       let seen = false;
 
@@ -116,7 +130,9 @@ describe("Event", () => {
     it("reads emitted events in system context", async () => {
       const world = createWorld();
       const Event = defineEvent("ReadBasic", {
-        value: Type.i32<42>(),
+        schema: {
+          value: Type.i32<42>(),
+        },
       });
       const results: 42[] = [];
 
@@ -139,7 +155,9 @@ describe("Event", () => {
     it("reads multiple events in order", async () => {
       const world = createWorld();
       const Event = defineEvent("ReadMultiple", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
       const results: number[] = [];
 
@@ -235,7 +253,9 @@ describe("Event", () => {
     it("returns most recent event only", async () => {
       const world = createWorld();
       const Event = defineEvent("LastRecent", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
       let result: { value: number } | undefined;
 
@@ -257,7 +277,9 @@ describe("Event", () => {
     it("marks all events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("LastMarksRead", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
       let count = 0;
 
@@ -406,7 +428,9 @@ describe("Event", () => {
     it("marks events as read without processing", async () => {
       const world = createWorld();
       const Event = defineEvent("ClearEvents", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
       let count = 0;
       let has = true;
@@ -437,7 +461,9 @@ describe("Event", () => {
     it("multiple systems see same events independently", async () => {
       const world = createWorld();
       const Event = defineEvent("IsolationTest", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
 
       const system1Results: number[] = [];
@@ -480,7 +506,9 @@ describe("Event", () => {
     it("events emitted during iteration are not visible in the same pass", async () => {
       const world = createWorld();
       const Event = defineEvent("EmitDuringIter", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
 
       const emitterSeen: number[] = [];
@@ -516,7 +544,7 @@ describe("Event", () => {
 
     it("nested reads see callback emissions deferred from the outer pass", async () => {
       const world = createWorld();
-      const Event = defineEvent("NestedRevisionEvent", { value: Type.i32() });
+      const Event = defineEvent("NestedRevisionEvent", { schema: { value: Type.i32() } });
       const outer: number[] = [];
       const nested: number[] = [];
       let remaining: number[] | undefined;
@@ -543,7 +571,7 @@ describe("Event", () => {
 
     it("throwing read consumes its window", async () => {
       const world = createWorld();
-      const Event = defineEvent("ThrowingReadEvent", { value: Type.i32() });
+      const Event = defineEvent("ThrowingReadEvent", { schema: { value: Type.i32() } });
       const afterThrow: number[] = [];
       const afterEmit: number[] = [];
 
@@ -594,7 +622,7 @@ describe("Event", () => {
   describe("Outside System Context", () => {
     it("all read functions return empty outside system context", () => {
       const world = createWorld();
-      const Event = defineEvent("OutsideAll", { value: Type.i32() });
+      const Event = defineEvent("OutsideAll", { schema: { value: Type.i32() } });
 
       emitEvent(world, Event, { value: 42 });
       const revision = world.revision;
@@ -620,7 +648,7 @@ describe("Event", () => {
 
     it("emitEvent works outside system context", async () => {
       const world = createWorld();
-      const Event = defineEvent("OutsideEmit", { value: Type.i32() });
+      const Event = defineEvent("OutsideEmit", { schema: { value: Type.i32() } });
       let result: number | undefined;
 
       addSystem(
@@ -647,7 +675,9 @@ describe("Event", () => {
     it("early exit marks events as read", async () => {
       const world = createWorld();
       const Event = defineEvent("EarlyExit", {
-        value: Type.i32(),
+        schema: {
+          value: Type.i32(),
+        },
       });
       let secondReadCount = 0;
 
@@ -720,7 +750,7 @@ describe("Event", () => {
   describe("Flush Bookkeeping", () => {
     it("expires unread events after two flushes", async () => {
       const world = createWorld();
-      const Event = defineEvent("FlushExpiry", { value: Type.i32() });
+      const Event = defineEvent("FlushExpiry", { schema: { value: Type.i32() } });
       const seen: number[] = [];
       let frame = 0;
 
@@ -760,7 +790,7 @@ describe("Event", () => {
 
     it("re-emitting re-activates a drained queue and delivers its events", async () => {
       const world = createWorld();
-      const Event = defineEvent("FlushReactivate", { value: Type.i32() });
+      const Event = defineEvent("FlushReactivate", { schema: { value: Type.i32() } });
       const seen: number[] = [];
 
       addSystem(
@@ -793,7 +823,7 @@ describe("Event", () => {
   describe("Vector Schema Events", () => {
     it("round-trips vector field data through emit and read", async () => {
       const world = createWorld();
-      const MoveEvent = defineEvent("MoveVec", { position: Type.f32(3) });
+      const MoveEvent = defineEvent("MoveVec", { schema: { position: Type.f32(3) } });
       let result: [number, number, number] | undefined;
 
       addSystem(
@@ -814,9 +844,11 @@ describe("Event", () => {
     it("handles mixed scalar and vector fields", async () => {
       const world = createWorld();
       const HitEvent = defineEvent("HitMixed", {
-        position: Type.f32(3),
-        damage: Type.f32(),
-        source: Type.u32(),
+        schema: {
+          position: Type.f32(3),
+          damage: Type.f32(),
+          source: Type.u32(),
+        },
       });
       const results: Array<{ position: [number, number, number]; damage: number; source: number }> = [];
 
@@ -847,7 +879,7 @@ describe("Event", () => {
   describe("Cross-Schedule Event Visibility", () => {
     it("between-frame events visible to systems on next frame", async () => {
       const world = createWorld();
-      const Event = defineEvent("BetweenFrame", { value: Type.i32() });
+      const Event = defineEvent("BetweenFrame", { schema: { value: Type.i32() } });
 
       const seen: number[] = [];
 
@@ -874,7 +906,7 @@ describe("Event", () => {
 
     it("later system's events visible to earlier system on next frame", async () => {
       const world = createWorld();
-      const Event = defineEvent("LaterToEarlier", { value: Type.i32() });
+      const Event = defineEvent("LaterToEarlier", { schema: { value: Type.i32() } });
 
       const readerSeen: number[] = [];
 

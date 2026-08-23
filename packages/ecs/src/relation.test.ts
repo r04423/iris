@@ -6,7 +6,7 @@ import { PAIR_FLAG_SHIFT, TYPE_SHIFT } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisInvalidState } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+import { defineComponent, defineRelation, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget, getRelationTargets, pair } from "./relation.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -75,7 +75,7 @@ describe("Relation", () => {
 
     it("extracts relation from pair with tag target", () => {
       const Has = defineRelation("HasExtractsRelationPairTagTarget");
-      const Weapon = defineTag("WeaponExtractsRelationPairTagTarget");
+      const Weapon = defineComponent("WeaponExtractsRelationPairTagTarget");
       const pairId = pair(Has, Weapon);
 
       const relation = getPairRelation(pairId);
@@ -85,7 +85,9 @@ describe("Relation", () => {
 
     it("extracts relation from pair with component target", () => {
       const Requires = defineRelation("RequiresExtractsRelationPairComponentTarget");
-      const Position = defineComponent("PositionExtractsRelationPairComponentTarget", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionExtractsRelationPairComponentTarget", {
+        schema: { x: Type.f32(), y: Type.f32() },
+      });
       const pairId = pair(Requires, Position);
 
       const relation = getPairRelation(pairId);
@@ -129,7 +131,7 @@ describe("Relation", () => {
     it("extracts tag target from pair", () => {
       const world = createWorld();
       const Has = defineRelation("HasExtractsTagTargetPair");
-      const Weapon = defineTag("WeaponExtractsTagTargetPair");
+      const Weapon = defineComponent("WeaponExtractsTagTargetPair");
       const pairId = pair(Has, Weapon);
 
       const target = getPairTarget(world, pairId);
@@ -140,7 +142,9 @@ describe("Relation", () => {
     it("extracts component target from pair", () => {
       const world = createWorld();
       const Requires = defineRelation("RequiresExtractsComponentTargetPair");
-      const Position = defineComponent("PositionExtractsComponentTargetPair", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionExtractsComponentTargetPair", {
+        schema: { x: Type.f32(), y: Type.f32() },
+      });
       const pairId = pair(Requires, Position);
 
       const target = getPairTarget(world, pairId);
@@ -266,8 +270,8 @@ describe("Relation", () => {
     it("works with tag targets", () => {
       const world = createWorld();
       const Has = defineRelation("HasWorksTagTargets");
-      const Weapon = defineTag("WeaponWorksTagTargets");
-      const Armor = defineTag("Armor");
+      const Weapon = defineComponent("WeaponWorksTagTargets");
+      const Armor = defineComponent("Armor");
       const entity = createEntity(world);
 
       addComponent(world, entity, pair(Has, Weapon));
@@ -283,8 +287,8 @@ describe("Relation", () => {
     it("works with component targets", () => {
       const world = createWorld();
       const Requires = defineRelation("RequiresWorksComponentTargets");
-      const Position = defineComponent("PositionWorksComponentTargets", { x: Type.f32(), y: Type.f32() });
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("PositionWorksComponentTargets", { schema: { x: Type.f32(), y: Type.f32() } });
+      const Velocity = defineComponent("Velocity", { schema: { x: Type.f32(), y: Type.f32() } });
       const entity = createEntity(world);
 
       addComponent(world, entity, pair(Requires, Position));
@@ -318,7 +322,7 @@ describe("Relation", () => {
     it("skips non-pair types in archetype", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfSkipNonPair");
-      const Position = defineComponent("PositionSkipNonPair", { x: Type.f32() });
+      const Position = defineComponent("PositionSkipNonPair", { schema: { x: Type.f32() } });
       const entity = createEntity(world);
       const parent = createEntity(world);
 
@@ -355,7 +359,7 @@ describe("Relation", () => {
     it("removes pair from subject when tag target is destroyed", () => {
       const world = createWorld();
       const Likes = defineRelation("LikesRemovesPairTagTargetDestroyed");
-      const Food = defineTag("FoodRemovesPairTagTargetDestroyed");
+      const Food = defineComponent("FoodRemovesPairTagTargetDestroyed");
       const entity = createEntity(world);
 
       addComponent(world, entity, pair(Likes, Food));
@@ -368,7 +372,7 @@ describe("Relation", () => {
     it("removes pair from subject when component target is destroyed", () => {
       const world = createWorld();
       const Likes = defineRelation("LikesRemovesPairComponentTargetDestroyed");
-      const Position = defineComponent("PositionRemovesPairComponentTargetDestroyed", { x: Type.f32() });
+      const Position = defineComponent("PositionRemovesPairComponentTargetDestroyed", { schema: { x: Type.f32() } });
       const entity = createEntity(world);
 
       addComponent(world, entity, pair(Likes, Position));
@@ -392,7 +396,7 @@ describe("Relation", () => {
     it("cleans up target wildcard when tag target is destroyed", () => {
       const world = createWorld();
       const Likes = defineRelation("LikesCleansWildcardTagTargetDestroyed");
-      const Food = defineTag("FoodCleansWildcardTagTargetDestroyed");
+      const Food = defineComponent("FoodCleansWildcardTagTargetDestroyed");
       const entity = createEntity(world);
 
       addComponent(world, entity, pair(Likes, Food));
@@ -405,7 +409,7 @@ describe("Relation", () => {
     it("cascades to subjects when tag target is destroyed", () => {
       const world = createWorld();
       const StoredIn = defineRelation("StoredInCascadesTagTargetDestroyed", { onDeleteTarget: "delete" });
-      const Chest = defineTag("ChestCascadesTagTargetDestroyed");
+      const Chest = defineComponent("ChestCascadesTagTargetDestroyed");
       const item = createEntity(world);
 
       addComponent(world, item, pair(StoredIn, Chest));

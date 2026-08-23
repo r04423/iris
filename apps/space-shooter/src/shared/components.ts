@@ -5,9 +5,11 @@ import { defineComponent, Type } from "iris-ecs";
 // ============================================================================
 
 export const Transform = defineComponent("Transform", {
-  x: Type.f32(),
-  y: Type.f32(),
-  rotation: Type.f32(),
+  schema: {
+    x: Type.f32(),
+    y: Type.f32(),
+    rotation: Type.f32(),
+  },
 });
 
 // ============================================================================
@@ -15,14 +17,16 @@ export const Transform = defineComponent("Transform", {
 // ============================================================================
 
 export const Movement = defineComponent("Movement", {
-  vx: Type.f32(),
-  vy: Type.f32(),
-  fx: Type.f32(),
-  fy: Type.f32(),
-  thrust: Type.f32(),
-  maxSpeed: Type.f32(),
-  damping: Type.f32(),
-  rotationSpeed: Type.f32(),
+  schema: {
+    vx: Type.f32(),
+    vy: Type.f32(),
+    fx: Type.f32(),
+    fy: Type.f32(),
+    thrust: Type.f32(),
+    maxSpeed: Type.f32(),
+    damping: Type.f32(),
+    rotationSpeed: Type.f32(),
+  },
 });
 
 // ============================================================================
@@ -30,8 +34,10 @@ export const Movement = defineComponent("Movement", {
 // ============================================================================
 
 export const Visual = defineComponent("Visual", {
-  hue: Type.f32(),
-  scale: Type.f32(),
+  schema: {
+    hue: Type.f32(),
+    scale: Type.f32(),
+  },
 });
 
 // ============================================================================
@@ -39,6 +45,8 @@ export const Visual = defineComponent("Visual", {
 // ============================================================================
 
 export const Time = defineComponent("Time", {
-  delta: Type.f32(),
-  last: Type.f32(),
+  schema: {
+    delta: Type.f32(),
+    last: Type.f32(),
+  },
 });

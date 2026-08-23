@@ -11,7 +11,7 @@ import type { Schema, SchemaRecord } from "./schema.js";
 export const ENTITY_TYPE = 0x1;
 
 /**
- * ID type constant for tags defined with `defineTag`.
+ * ID type constant for tags defined with schema-less `defineComponent`.
  * @internal
  */
 export const TAG_TYPE = 0x2;
@@ -110,7 +110,7 @@ export type Entity = number & { [ENTITY_BRAND]: true };
 /**
  * Tag ID (branded type).
  *
- * Nominal type for component tags defined via defineTag().
+ * Nominal type for schema-less components.
  */
 export type Tag<N extends string = string> = number & { [TAG_BRAND]: true; [NAME_BRAND]: N };
 
@@ -237,7 +237,7 @@ export function encodeComponent<S extends Record<string, Schema> = Record<string
 }
 
 /**
- * Encodes a raw ID into a tag ID. `defineTag` owns allocation.
+ * Encodes a raw ID into a tag ID. `defineComponent` owns allocation.
  * @internal
  */
 export function encodeTag(rawId: number): Tag {

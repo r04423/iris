@@ -22,8 +22,10 @@ import { useEntityByName } from "./useEntityByName.js";
 // ============================================================================
 
 const Position = defineComponent("Position", {
-  x: Type.f32(),
-  y: Type.f32(),
+  schema: {
+    x: Type.f32(),
+    y: Type.f32(),
+  },
 });
 
 // ============================================================================

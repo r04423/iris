@@ -32,7 +32,9 @@ export type Condition = {
 // ============================================================================
 
 const ConditionState = defineComponent("IrisConditionState", {
-  counts: Type.ref<Map<Condition, number>>(),
+  schema: {
+    counts: Type.ref<Map<Condition, number>>(),
+  },
 });
 
 /** Lazy resource storage lets world reset discard counters without condition hooks. */

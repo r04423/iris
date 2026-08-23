@@ -1,6 +1,7 @@
 import { IrisDuplicateEvent } from "./error.js";
 import { consumeRevisionWindow, inRevisionWindow } from "./revision.js";
-import type { Schema, SchemaRecord } from "./schema.js";
+import type { NonEmptySchema, Schema, SchemaRecord } from "./schema.js";
+import { assertNonEmptySchema } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -175,7 +176,7 @@ const EVENT_REGISTRY: EventRegistry = {
 // ============================================================================
 
 /**
- * Defines an event type with an optional schema for type-safe event data.
+ * Defines a tag event or a data event with a typed schema.
  *
  * The name must be unique across the whole process: definitions are global and
  * shared by all worlds, so define events once at module scope. Tag events
@@ -183,8 +184,9 @@ const EVENT_REGISTRY: EventRegistry = {
  * data matching the schema.
  *
  * @param name - Globally unique event name used for type identity and debugging
- * @param schema - Optional field schema record (omit for tag events)
+ * @param options - Data event options; omit for a tag event
  * @throws {IrisDuplicateEvent} If the event name is already defined
+ * @throws {IrisInvalidArgument} If the schema is empty
  *
  * @example
  * ```typescript
@@ -194,26 +196,40 @@ const EVENT_REGISTRY: EventRegistry = {
  *
  * // Data event
  * const DamageDealt = defineEvent("DamageDealt", {
- *   target: Type.u32(),
- *   amount: Type.f32(),
+ *   schema: {
+ *     target: Type.u32(),
+ *     amount: Type.f32(),
+ *   },
  * });
  * emitEvent(world, DamageDealt, { target: enemy, amount: 25 });
  * ```
  */
-export function defineEvent<N extends string, S extends EventSchema = Record<never, never>>(
+export function defineEvent<N extends string>(name: N): Event<Record<never, never>, N>;
+
+export function defineEvent<N extends string, S extends EventSchema>(
   name: N,
-  schema?: S
-): Event<S, N> {
+  options: { schema: NonEmptySchema<S> }
+): Event<S, N>;
+
+export function defineEvent<N extends string, S extends EventSchema>(
+  name: N,
+  options?: { schema: NonEmptySchema<S> }
+): Event<S, N> | Event<Record<never, never>, N> {
+  if (options !== undefined) {
+    assertNonEmptySchema(options.schema);
+  }
+
   if (EVENT_REGISTRY.names.has(name)) {
     throw new IrisDuplicateEvent(name);
   }
 
   const id = EVENT_REGISTRY.nextId as EventId<S, N>;
+  const schema = options?.schema ?? ({} as S);
 
   const event: Event<S, N> = {
     id,
     name,
-    schema: schema ?? ({} as S),
+    schema,
   };
 
   EVENT_REGISTRY.byId.set(id, event as Event);

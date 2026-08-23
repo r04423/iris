@@ -6,7 +6,7 @@ import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
 import { IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { defineComponent, defineRelation, defineTag, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
+import { defineComponent, defineRelation, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
@@ -38,8 +38,8 @@ describe("Entity", () => {
   describe("Entity Creation with Components", () => {
     it("creates entity with components in one call", () => {
       const world = createWorld();
-      const Player = defineTag("ce_Player");
-      const Position = defineComponent("ce_Position", { x: Type.f32<10>(), y: Type.f32() });
+      const Player = defineComponent("ce_Player");
+      const Position = defineComponent("ce_Position", { schema: { x: Type.f32<10>(), y: Type.f32() } });
 
       const entity = createEntity(world, [Player, [Position, { x: 10, y: 20 }]]);
 
@@ -53,8 +53,8 @@ describe("Entity", () => {
 
     it("narrows the returned entity for every entry", () => {
       const world = createWorld();
-      const Player = defineTag("ce_narrow_Player");
-      const Position = defineComponent("ce_narrow_Position", { x: Type.f32(), y: Type.f32() });
+      const Player = defineComponent("ce_narrow_Player");
+      const Position = defineComponent("ce_narrow_Position", { schema: { x: Type.f32(), y: Type.f32() } });
       const Amount = defineRelation("ce_narrow_Amount", { schema: { value: Type.f32() } });
       const target = createEntity(world);
 
@@ -151,7 +151,7 @@ describe("Entity", () => {
 
     it("fires entityDestroying while the entity's component data is still readable", () => {
       const world = createWorld();
-      const Position = defineComponent("DestroyingPosition", { x: Type.f32() });
+      const Position = defineComponent("DestroyingPosition", { schema: { x: Type.f32() } });
 
       const dying = createEntity(world, [[Position, { x: 1 }]]);
       createEntity(world, [[Position, { x: 2 }]]);
@@ -168,7 +168,7 @@ describe("Entity", () => {
 
     it("fires entityDestroyed once the entity is gone", () => {
       const world = createWorld();
-      const Position = defineComponent("DestroyedPosition", { x: Type.f32() });
+      const Position = defineComponent("DestroyedPosition", { schema: { x: Type.f32() } });
 
       const dying = createEntity(world, [[Position, { x: 1 }]]);
       createEntity(world, [[Position, { x: 2 }]]);
@@ -259,7 +259,7 @@ describe("Entity", () => {
 
     it("starts recycled entities with fresh state", () => {
       const world = createWorld();
-      const Position = defineComponent("RecycledFreshPosition", { x: Type.f32() });
+      const Position = defineComponent("RecycledFreshPosition", { schema: { x: Type.f32() } });
 
       const entity1 = createEntity(world);
       addComponent(world, entity1, Position, { x: 1 });
@@ -308,7 +308,7 @@ describe("Entity", () => {
   describe("Component Schema Registration", () => {
     it("stores schema in EntityMeta on auto-registration", () => {
       const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
 
       // Component not yet registered in world
       assert.strictEqual(isEntityAlive(world, Position), false);
@@ -325,8 +325,10 @@ describe("Entity", () => {
     it("retrieves schema from EntityMeta after registration", () => {
       const world = createWorld();
       const Velocity = defineComponent("Velocity", {
-        x: Type.f32(),
-        y: Type.f32(),
+        schema: {
+          x: Type.f32(),
+          y: Type.f32(),
+        },
       });
 
       // Trigger auto-registration
@@ -342,7 +344,7 @@ describe("Entity", () => {
 
     it("auto-registers component on first use", () => {
       const world = createWorld();
-      const Score = defineComponent("Score", { value: Type.i32() });
+      const Score = defineComponent("Score", { schema: { value: Type.i32() } });
 
       assert.strictEqual(isEntityAlive(world, Score), false);
 
@@ -354,8 +356,10 @@ describe("Entity", () => {
 
     it("stores schema for multiple component types", () => {
       const world = createWorld();
-      const Position = defineComponent("PositionStoresSchemaMultipleComponentTypes", { x: Type.f32(), y: Type.f32() });
-      const Health = defineComponent("Health", { current: Type.i32(), max: Type.i32() });
+      const Position = defineComponent("PositionStoresSchemaMultipleComponentTypes", {
+        schema: { x: Type.f32(), y: Type.f32() },
+      });
+      const Health = defineComponent("Health", { schema: { current: Type.i32(), max: Type.i32() } });
 
       ensureEntity(world, Position);
       ensureEntity(world, Health);
@@ -380,7 +384,7 @@ describe("Entity", () => {
 
     it("tag component entities have no schema", () => {
       const world = createWorld();
-      const Enemy = defineTag("Enemy");
+      const Enemy = defineComponent("Enemy");
 
       const meta = ensureEntity(world, Enemy);
 
@@ -461,7 +465,7 @@ describe("Entity", () => {
     it("auto-registers definition target when pair is registered", () => {
       const world = createWorld();
       const ChildOf = defineRelation("ChildOfAutoRegistersDefinitionTarget");
-      const target = defineTag("TargetAutoRegistersDefinitionTarget");
+      const target = defineComponent("TargetAutoRegistersDefinitionTarget");
 
       ensureEntity(world, pair(ChildOf, target));
 

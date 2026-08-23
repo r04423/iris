@@ -23,7 +23,7 @@ import type { World } from "./world.js";
  * const name = getName(world, entity);
  * ```
  */
-export const Name = defineComponent("Name", { value: Type.string() });
+export const Name = defineComponent("Name", { schema: { value: Type.string() } });
 
 // ============================================================================
 // Name State

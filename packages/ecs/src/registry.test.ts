@@ -10,8 +10,8 @@ import {
   RELATIONSHIP_TYPE,
   TAG_TYPE,
 } from "./encoding.js";
-import { IrisDuplicate, IrisLimitExceeded } from "./error.js";
-import { COMPONENT_REGISTRY, defineComponent, defineRelation, defineTag, Wildcard } from "./registry.js";
+import { IrisDuplicate, IrisInvalidArgument, IrisLimitExceeded } from "./error.js";
+import { COMPONENT_REGISTRY, defineComponent, defineRelation, Wildcard } from "./registry.js";
 import { Type } from "./schema.js";
 
 describe("Registry", () => {
@@ -23,15 +23,15 @@ describe("Registry", () => {
     it("allocates sequential tag IDs", () => {
       const startId = COMPONENT_REGISTRY.nextTagId;
 
-      const Tag1 = defineTag("Tag1");
-      const Tag2 = defineTag("Tag2");
+      const Tag1 = defineComponent("Tag1");
+      const Tag2 = defineComponent("Tag2");
 
       assert.strictEqual(extractId(Tag1), startId);
       assert.strictEqual(extractId(Tag2), startId + 1);
     });
 
     it("stores metadata in global registry", () => {
-      const Player = defineTag("Player");
+      const Player = defineComponent("Player");
 
       const meta = COMPONENT_REGISTRY.byId.get(Player);
       assert.ok(meta);
@@ -40,7 +40,7 @@ describe("Registry", () => {
     });
 
     it("encodes tags with TAG_TYPE", () => {
-      const Enemy = defineTag("Enemy");
+      const Enemy = defineComponent("Enemy");
 
       assert.strictEqual(extractType(Enemy), TAG_TYPE);
       assert.strictEqual(extractMeta(Enemy), 0);
@@ -53,7 +53,7 @@ describe("Registry", () => {
       COMPONENT_REGISTRY.nextTagId = ID_MASK_20 + 1;
 
       assert.throws(() => {
-        defineTag("OverLimit");
+        defineComponent("OverLimit");
       }, IrisLimitExceeded);
 
       // Restore
@@ -69,8 +69,8 @@ describe("Registry", () => {
     it("allocates sequential component IDs", () => {
       const startId = COMPONENT_REGISTRY.nextComponentId;
 
-      const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
-      const Velocity = defineComponent("Velocity", { x: Type.f32(), y: Type.f32() });
+      const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
+      const Velocity = defineComponent("Velocity", { schema: { x: Type.f32(), y: Type.f32() } });
 
       assert.strictEqual(extractId(Position), startId);
       assert.strictEqual(extractId(Velocity), startId + 1);
@@ -78,8 +78,10 @@ describe("Registry", () => {
 
     it("stores metadata with schema in global registry", () => {
       const Health = defineComponent("Health", {
-        current: Type.i32(),
-        max: Type.i32(),
+        schema: {
+          current: Type.i32(),
+          max: Type.i32(),
+        },
       });
 
       const meta = COMPONENT_REGISTRY.byId.get(Health);
@@ -93,9 +95,11 @@ describe("Registry", () => {
 
     it("encodes components with COMPONENT_TYPE", () => {
       const Transform = defineComponent("Transform", {
-        x: Type.f32(),
-        y: Type.f32(),
-        rotation: Type.f32(),
+        schema: {
+          x: Type.f32(),
+          y: Type.f32(),
+          rotation: Type.f32(),
+        },
       });
 
       assert.strictEqual(extractType(Transform), COMPONENT_TYPE);
@@ -109,11 +113,24 @@ describe("Registry", () => {
       COMPONENT_REGISTRY.nextComponentId = ID_MASK_20 + 1;
 
       assert.throws(() => {
-        defineComponent("OverLimit", { value: Type.i32() });
+        defineComponent("OverLimit", { schema: { value: Type.i32() } });
       }, IrisLimitExceeded);
 
       // Restore
       COMPONENT_REGISTRY.nextComponentId = originalNextId;
+    });
+
+    it("rejects an empty schema without registering a definition", () => {
+      const name = "EmptyComponentSchema";
+      const byIdSize = COMPONENT_REGISTRY.byId.size;
+      const nextComponentId = COMPONENT_REGISTRY.nextComponentId;
+
+      // @ts-expect-error -- testing runtime validation of an empty schema
+      assert.throws(() => defineComponent(name, { schema: {} }), IrisInvalidArgument);
+
+      assert.strictEqual(COMPONENT_REGISTRY.byId.size, byIdSize);
+      assert.strictEqual(COMPONENT_REGISTRY.byName.has(name), false);
+      assert.strictEqual(COMPONENT_REGISTRY.nextComponentId, nextComponentId);
     });
   });
 
@@ -183,6 +200,19 @@ describe("Registry", () => {
       assert.ok(meta.schema.since);
       assert.ok(meta.schema.shares);
     });
+
+    it("rejects an empty schema without registering a definition", () => {
+      const name = "EmptyRelationSchema";
+      const byIdSize = COMPONENT_REGISTRY.byId.size;
+      const nextRelationId = COMPONENT_REGISTRY.nextRelationId;
+
+      // @ts-expect-error -- testing runtime validation of an empty schema
+      assert.throws(() => defineRelation(name, { schema: {} }), IrisInvalidArgument);
+
+      assert.strictEqual(COMPONENT_REGISTRY.byId.size, byIdSize);
+      assert.strictEqual(COMPONENT_REGISTRY.byName.has(name), false);
+      assert.strictEqual(COMPONENT_REGISTRY.nextRelationId, nextRelationId);
+    });
   });
 
   // ============================================================================
@@ -216,7 +246,7 @@ describe("Registry", () => {
   describe("Registry Isolation", () => {
     it("rejects names already used by any definition kind without allocating an ID", () => {
       const name = "SharedDefinitionName";
-      const tag = defineTag(name);
+      const tag = defineComponent(name);
       const byIdSize = COMPONENT_REGISTRY.byId.size;
       const nextTagId = COMPONENT_REGISTRY.nextTagId;
       const nextComponentId = COMPONENT_REGISTRY.nextComponentId;
@@ -224,7 +254,7 @@ describe("Registry", () => {
 
       assert.strictEqual(COMPONENT_REGISTRY.byName.get(name), tag);
       assert.throws(
-        () => defineComponent(name, { value: Type.i32() }),
+        () => defineComponent(name, { schema: { value: Type.i32() } }),
         (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
       assert.throws(
@@ -232,7 +262,7 @@ describe("Registry", () => {
         (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
       assert.throws(
-        () => defineTag(name),
+        () => defineComponent(name),
         (error: unknown) => error instanceof IrisDuplicate && error.resource === "Definition" && error.id === name
       );
 
@@ -247,8 +277,8 @@ describe("Registry", () => {
       const componentStart = COMPONENT_REGISTRY.nextComponentId;
       const relationStart = COMPONENT_REGISTRY.nextRelationId;
 
-      const Tag1 = defineTag("IsolationTag1");
-      const Component1 = defineComponent("IsolationComponent1", { value: Type.i32() });
+      const Tag1 = defineComponent("IsolationTag1");
+      const Component1 = defineComponent("IsolationComponent1", { schema: { value: Type.i32() } });
       const Relation1 = defineRelation("IsolationRelation1");
 
       // Each counter increments independently
@@ -262,8 +292,8 @@ describe("Registry", () => {
     });
 
     it("stores all types in same byId map", () => {
-      const tag = defineTag("MapTestTag");
-      const component = defineComponent("MapTestComponent", { value: Type.i32() });
+      const tag = defineComponent("MapTestTag");
+      const component = defineComponent("MapTestComponent", { schema: { value: Type.i32() } });
       const relation = defineRelation("MapTestRelation");
 
       // All accessible from same map

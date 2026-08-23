@@ -11,7 +11,9 @@ import { useHasResource } from "./useHasResource.js";
 // ============================================================================
 
 const Time = defineComponent("Time", {
-  delta: Type.f32(),
+  schema: {
+    delta: Type.f32(),
+  },
 });
 
 // ============================================================================

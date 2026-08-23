@@ -1,4 +1,4 @@
-import { IrisInvalidVectorSize } from "./error.js";
+import { IrisInvalidArgument, IrisInvalidVectorSize } from "./error.js";
 
 // ============================================================================
 // Type Definitions
@@ -136,12 +136,14 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
  *
  * @example
  * ```typescript
- * const Position = defineComponent("Position", { x: Type.f32(), y: Type.f32() });
- * const Velocity = defineComponent("Velocity", { value: Type.f32(2) }); // vec2
+ * const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
+ * const Velocity = defineComponent("Velocity", { schema: { value: Type.f32(2) } }); // vec2
  * const Player = defineComponent("Player", {
- *   name: Type.string(),
- *   alive: Type.bool(),
- *   inventory: Type.ref<Map<string, number>>(),
+ *   schema: {
+ *     name: Type.string(),
+ *     alive: Type.bool(),
+ *     inventory: Type.ref<Map<string, number>>(),
+ *   },
  * });
  * ```
  */
@@ -265,6 +267,19 @@ export type VectorFields<S extends SchemaRecord> = {
  * `defineRelation` accept.
  */
 export type SchemaRecord = Record<string, Schema>;
+
+/** A schema record with at least one field. @internal */
+export type NonEmptySchema<S extends SchemaRecord> = keyof S extends never ? never : S;
+
+/** Rejects omitted and explicitly empty schemas. @internal */
+export function assertNonEmptySchema(schema: SchemaRecord | undefined): void {
+  if (schema === undefined || Object.keys(schema).length === 0) {
+    throw new IrisInvalidArgument({
+      expected: "schema with at least one field",
+      actual: schema === undefined ? "missing schema" : "empty schema",
+    });
+  }
+}
 
 /**
  * Infers the plain-object value shape of a schema record: the initial data
