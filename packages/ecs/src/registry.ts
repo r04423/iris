@@ -136,7 +136,7 @@ function assertDefinitionNameAvailable(name: string): void {
  *   schema: { x: Type.f32(), y: Type.f32() },
  * });
  * addComponent(world, entity, Player);
- * addComponent(world, entity, Position, { x: 10, y: 20 });
+ * addComponent(world, entity, [Position, { x: 10, y: 20 }]);
  * ```
  */
 export function defineComponent<N extends string>(name: N): Tag<N>;

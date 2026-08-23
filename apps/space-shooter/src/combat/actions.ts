@@ -28,14 +28,17 @@ export const combatActions = defineActions((world: World) => ({
     const entity = createEntity(world);
 
     addComponent(world, entity, IsBullet);
-    addComponent(world, entity, Transform, { x, y, rotation: Math.atan2(dy, dx) });
-    addComponent(world, entity, Bullet, {
-      speed: between(500, 540),
-      dx,
-      dy,
-      lifetime: between(1.0, 1.4),
-      timeAlive: 0,
-    });
+    addComponent(world, entity, [Transform, { x, y, rotation: Math.atan2(dy, dx) }]);
+    addComponent(world, entity, [
+      Bullet,
+      {
+        speed: between(500, 540),
+        dx,
+        dy,
+        lifetime: between(1.0, 1.4),
+        timeAlive: 0,
+      },
+    ]);
 
     if (firedBy !== undefined) {
       addComponent(world, entity, pair(FiredBy, firedBy));
@@ -96,7 +99,7 @@ export const combatActions = defineActions((world: World) => ({
 
   activateShield(entity: EntityWith<typeof IsPlayer>, duration: number): void {
     if (!hasComponent(world, entity, ShieldVisibility)) {
-      addComponent(world, entity, ShieldVisibility, { duration, current: 0 });
+      addComponent(world, entity, [ShieldVisibility, { duration, current: 0 }]);
     } else {
       setComponentValue(world, entity, ShieldVisibility, "current", 0);
     }

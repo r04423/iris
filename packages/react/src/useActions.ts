@@ -20,7 +20,7 @@ import { useResetGeneration, useWorld } from "./context.js";
  * const spawnActions = defineActions((world) => ({
  *   spawnEnemy(x: number, y: number) {
  *     const e = createEntity(world);
- *     addComponent(world, e, Position, { x, y });
+ *     addComponent(world, e, [Position, { x, y }]);
  *     return e;
  *   },
  * }));

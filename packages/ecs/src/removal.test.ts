@@ -32,7 +32,7 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
+      addComponent(world, entity, [Health, { value: 100 }]);
       removeComponent(world, entity, Health);
 
       await runOnce(world);
@@ -83,9 +83,9 @@ describe("Removal", () => {
       const e2 = createEntity(world);
       const e3 = createEntity(world);
 
-      addComponent(world, e1, Health, { value: 100 });
-      addComponent(world, e2, Health, { value: 100 });
-      addComponent(world, e3, Health, { value: 100 });
+      addComponent(world, e1, [Health, { value: 100 }]);
+      addComponent(world, e2, [Health, { value: 100 }]);
+      addComponent(world, e3, [Health, { value: 100 }]);
 
       removeComponent(world, e1, Health);
       removeComponent(world, e2, Health);
@@ -152,7 +152,7 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
+      addComponent(world, entity, [Health, { value: 100 }]);
       removeComponent(world, entity, Health);
 
       await runOnce(world);
@@ -181,7 +181,7 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
+      addComponent(world, entity, [Health, { value: 100 }]);
       removeComponent(world, entity, Health);
 
       await runOnce(world); // sees removal
@@ -220,8 +220,8 @@ describe("Removal", () => {
       const e1 = createEntity(world);
       const e2 = createEntity(world);
 
-      addComponent(world, e1, Health, { value: 100 });
-      addComponent(world, e2, Position, { x: 0, y: 0 });
+      addComponent(world, e1, [Health, { value: 100 }]);
+      addComponent(world, e2, [Position, { x: 0, y: 0 }]);
 
       removeComponent(world, e1, Health);
       removeComponent(world, e2, Position);
@@ -262,8 +262,8 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
-      addComponent(world, entity, Armor, { value: 50 });
+      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, [Armor, { value: 50 }]);
 
       removeComponent(world, entity, Health);
       removeComponent(world, entity, Armor);
@@ -307,8 +307,8 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
-      addComponent(world, entity, Position, { x: 10, y: 20 });
+      addComponent(world, entity, [Health, { value: 100 }]);
+      addComponent(world, entity, [Position, { x: 10, y: 20 }]);
       addComponent(world, entity, Player);
 
       destroyEntity(world, entity);
@@ -335,7 +335,7 @@ describe("Removal", () => {
       );
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { value: 100 });
+      addComponent(world, entity, [Health, { value: 100 }]);
 
       // Explicitly remove, then destroy
       removeComponent(world, entity, Health);
@@ -543,7 +543,7 @@ describe("Removal", () => {
         })
       );
 
-      addComponent(world, player, pair(Owns, item), { quantity: 5 });
+      addComponent(world, player, [pair(Owns, item), { quantity: 5 }]);
       removeComponent(world, player, pair(Owns, item));
 
       await runOnce(world);
@@ -594,12 +594,12 @@ describe("Removal", () => {
 
       const entity = createEntity(world);
 
-      addComponent(world, entity, Health, { value: 100 });
+      addComponent(world, entity, [Health, { value: 100 }]);
       removeComponent(world, entity, Health);
 
       await runOnce(world); // First frame: sees first removal
 
-      addComponent(world, entity, Health, { value: 50 });
+      addComponent(world, entity, [Health, { value: 50 }]);
       removeComponent(world, entity, Health);
 
       await runOnce(world); // Second frame: sees second removal

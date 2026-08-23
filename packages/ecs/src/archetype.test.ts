@@ -1084,7 +1084,7 @@ describe("Archetype", () => {
       const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, entity, [Position, { x: 10.0, y: 20.0 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1106,7 +1106,7 @@ describe("Archetype", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { current: 80, max: 100 });
+      addComponent(world, entity, [Health, { current: 80, max: 100 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1129,8 +1129,8 @@ describe("Archetype", () => {
       const Velocity = defineComponent("Velocity", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Position, { x: 0.0, y: 0.0 }]);
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1170,10 +1170,10 @@ describe("Archetype", () => {
       });
 
       const e1 = createEntity(world);
-      addComponent(world, e1, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, e1, [Position, { x: 10.0, y: 20.0 }]);
 
       const e2 = createEntity(world);
-      addComponent(world, e2, Position, { x: 30.0, y: 40.0 });
+      addComponent(world, e2, [Position, { x: 30.0, y: 40.0 }]);
 
       const meta1 = getEntityMeta(world, e1)!;
       const meta2 = getEntityMeta(world, e2)!;
@@ -1198,7 +1198,7 @@ describe("Archetype", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
+      addComponent(world, entity, [Position, { x: 0.0, y: 0.0 }]);
 
       // Get archetype with Position
       const meta1 = getEntityMeta(world, entity)!;
@@ -1206,7 +1206,7 @@ describe("Archetype", () => {
       assert.ok(archetype1.schemas.get(Position));
 
       // Add Velocity (transitions to new archetype)
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       const meta2 = getEntityMeta(world, entity)!;
       const archetype2 = meta2.archetype;
@@ -1226,8 +1226,8 @@ describe("Archetype", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Position, { x: 0.0, y: 0.0 }]);
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       // Archetype has both schemas
       const meta1 = getEntityMeta(world, entity)!;
@@ -1268,13 +1268,13 @@ describe("Archetype", () => {
       const entity = createEntity(world);
 
       // Add Position
-      addComponent(world, entity, Position, { x: 0.0, y: 0.0 });
+      addComponent(world, entity, [Position, { x: 0.0, y: 0.0 }]);
 
       // Add Velocity (transition 1)
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       // Add Health (transition 2)
-      addComponent(world, entity, Health, { current: 100, max: 100 });
+      addComponent(world, entity, [Health, { current: 100, max: 100 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1468,7 +1468,7 @@ describe("Archetype", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
       const meta = getEntityMeta(world, entity)!;
       const column = meta.archetype.columns.get(Position)!.value!;
@@ -1488,9 +1488,9 @@ describe("Archetype", () => {
       const e2 = createEntity(world);
       const e3 = createEntity(world);
 
-      addComponent(world, e1, Position, { value: [1, 2] });
-      addComponent(world, e2, Position, { value: [3, 4] });
-      addComponent(world, e3, Position, { value: [5, 6] });
+      addComponent(world, e1, [Position, { value: [1, 2] }]);
+      addComponent(world, e2, [Position, { value: [3, 4] }]);
+      addComponent(world, e3, [Position, { value: [5, 6] }]);
 
       // Add tag to e1 (removes from current archetype via swap-and-pop)
       addComponent(world, e1, Tag);
@@ -1513,7 +1513,7 @@ describe("Archetype", () => {
       const Position = defineComponent("PositionClearsVectorDataOnEntityRemoval", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1536,7 +1536,7 @@ describe("Archetype", () => {
       const entities: EntityId[] = [];
       for (let i = 0; i < 20; i++) {
         const e = createEntity(world);
-        addComponent(world, e, Position, { value: [i * 10, i * 10 + 1] });
+        addComponent(world, e, [Position, { value: [i * 10, i * 10 + 1] }]);
         entities.push(e);
       }
 

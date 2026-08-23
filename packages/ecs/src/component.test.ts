@@ -106,7 +106,7 @@ describe("Component", () => {
       const Position = defineComponent("ca_narrow_Position", { schema: { x: Type.f32(), y: Type.f32() } });
       const entity = createEntity(world);
 
-      addComponent(world, entity, Position, { x: 1, y: 2 });
+      addComponent(world, entity, [Position, { x: 1, y: 2 }]);
 
       const x: number = getComponentValue(world, entity, Position, "x");
       assert.strictEqual(x, 1);
@@ -118,7 +118,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       const target = createEntity(world);
 
-      addComponent(world, entity, pair(Amount, target), { value: 42 });
+      addComponent(world, entity, [pair(Amount, target), { value: 42 }]);
 
       const value: number = getComponentValue(world, entity, pair(Amount, target), "value");
       assert.strictEqual(value, 42);
@@ -249,7 +249,7 @@ describe("Component", () => {
       const Player = defineComponent("ba_keep_Player");
       const entity = createEntity(world);
 
-      addComponent(world, entity, Position, { x: 1, y: 2 });
+      addComponent(world, entity, [Position, { x: 1, y: 2 }]);
 
       let positionAdds = 0;
       registerObserverCallback(world, "componentAdded", (componentId) => {
@@ -498,7 +498,7 @@ describe("Component", () => {
       const Velocity = defineComponent("br_idem_Velocity", { schema: { vx: Type.f32(), vy: Type.f32() } });
       const entity = createEntity(world);
 
-      addComponent(world, entity, Position, { x: 1, y: 2 });
+      addComponent(world, entity, [Position, { x: 1, y: 2 }]);
       const archetypeBefore = getEntityMeta(world, entity)!.archetype;
 
       removeComponents(world, entity, [Velocity]);
@@ -914,7 +914,7 @@ describe("Component", () => {
       const Position = defineComponent("Position", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 10.5, y: 20.5 });
+      addComponent(world, entity, [Position, { x: 10.5, y: 20.5 }]);
 
       assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10.5);
       assert.strictEqual(getComponentValue(world, entity, Position, "y"), 20.5);
@@ -928,7 +928,7 @@ describe("Component", () => {
       const Health = defineComponent("Health", { schema: { current: Type.i32(), max: Type.i32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Health, { current: 80, max: 100 });
+      addComponent(world, entity, [Health, { current: 80, max: 100 }]);
 
       assert.strictEqual(getComponentValue(world, entity, Health, "current"), 80);
       assert.strictEqual(getComponentValue(world, entity, Health, "max"), 100);
@@ -942,7 +942,7 @@ describe("Component", () => {
       const Name = defineComponent("StringFieldName", { schema: { value: Type.string<"Player" | "Enemy">() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Name, { value: "Player" });
+      addComponent(world, entity, [Name, { value: "Player" }]);
 
       assert.strictEqual(getComponentValue(world, entity, Name, "value"), "Player");
 
@@ -956,7 +956,7 @@ describe("Component", () => {
       const Stats = defineComponent("Stats", { schema: { strength: Type.i8(), dexterity: Type.i8() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Stats, { strength: 10, dexterity: 15 });
+      addComponent(world, entity, [Stats, { strength: 10, dexterity: 15 }]);
 
       assert.strictEqual(getComponentValue(world, entity, Stats, "strength"), 10);
       assert.strictEqual(getComponentValue(world, entity, Stats, "dexterity"), 15);
@@ -970,7 +970,7 @@ describe("Component", () => {
       const Inventory = defineComponent("InventoryRefField", { schema: { items: Type.ref<string[]>() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Inventory, { items: ["sword"] });
+      addComponent(world, entity, [Inventory, { items: ["sword"] }]);
 
       assert.deepStrictEqual(getComponentValue(world, entity, Inventory, "items"), ["sword"]);
 
@@ -983,7 +983,7 @@ describe("Component", () => {
       const Flags = defineComponent("Flags", { schema: { active: Type.bool(), visible: Type.bool() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Flags, { active: true, visible: false });
+      addComponent(world, entity, [Flags, { active: true, visible: false }]);
 
       assert.strictEqual(getComponentValue(world, entity, Flags, "active"), true);
       assert.strictEqual(getComponentValue(world, entity, Flags, "visible"), false);
@@ -1011,7 +1011,7 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, entity, [Position, { x: 10.0, y: 20.0 }]);
 
       // Access non-existent field
       // @ts-expect-error - Testing invalid field access
@@ -1029,10 +1029,10 @@ describe("Component", () => {
       const Velocity = defineComponent("Velocity", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, entity, [Position, { x: 10.0, y: 20.0 }]);
 
       // Add another component (archetype transition)
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       // Position values should be preserved
       assert.strictEqual(getComponentValue(world, entity, Position, "x"), 10.0);
@@ -1061,7 +1061,7 @@ describe("Component", () => {
 
       const entity = createEntity(world);
       addComponent(world, entity, Player);
-      addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, entity, [Position, { x: 10.0, y: 20.0 }]);
 
       assert.strictEqual(hasComponent(world, entity, Player), true);
       assert.strictEqual(hasComponent(world, entity, Position), true);
@@ -1080,7 +1080,7 @@ describe("Component", () => {
 
       const entity = createEntity(world);
       addComponent(world, entity, Enemy);
-      addComponent(world, entity, Health, { current: 50, max: 100 });
+      addComponent(world, entity, [Health, { current: 50, max: 100 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const archetype = meta.archetype;
@@ -1107,7 +1107,7 @@ describe("Component", () => {
 
       const entity = createEntity(world);
       addComponent(world, entity, Active);
-      addComponent(world, entity, Velocity, { x: 1.0, y: 1.0 });
+      addComponent(world, entity, [Velocity, { x: 1.0, y: 1.0 }]);
 
       removeComponent(world, entity, Active);
 
@@ -1133,7 +1133,7 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Transform, { x: 1.0, y: 2.0, rotation: 0.0, scale: 1.0 });
+      addComponent(world, entity, [Transform, { x: 1.0, y: 2.0, rotation: 0.0, scale: 1.0 }]);
 
       assert.strictEqual(getComponentValue(world, entity, Transform, "x"), 1.0);
       assert.strictEqual(getComponentValue(world, entity, Transform, "y"), 2.0);
@@ -1148,8 +1148,8 @@ describe("Component", () => {
       const e1 = createEntity(world);
       const e2 = createEntity(world);
 
-      addComponent(world, e1, Score, { value: 100 });
-      addComponent(world, e2, Score, { value: 200 });
+      addComponent(world, e1, [Score, { value: 100 }]);
+      addComponent(world, e2, [Score, { value: 200 }]);
 
       // Values should be independent
       assert.strictEqual(getComponentValue(world, e1, Score, "value"), 100);
@@ -1188,7 +1188,7 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+      addComponent(world, entity, [Position, { x: 10.0, y: 20.0 }]);
 
       // setComponentValue should be silent no-op for non-existent field
       // @ts-expect-error - Testing invalid field access
@@ -1204,7 +1204,7 @@ describe("Component", () => {
 
       world.revision = 2 ** 32 + 10;
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0 });
+      addComponent(world, entity, [Position, { x: 0 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const ticks = meta.archetype.ticks.get(Position)!;
@@ -1467,7 +1467,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionEmit", { schema: { x: Type.f32(), y: Type.f32() } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0, y: 0 });
+      addComponent(world, entity, [Position, { x: 0, y: 0 }]);
 
       const results: EntityId[][] = [];
 
@@ -1516,7 +1516,7 @@ describe("Component", () => {
 
       world.revision = 10;
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { x: 0 });
+      addComponent(world, entity, [Position, { x: 0 }]);
 
       const meta = getEntityMeta(world, entity)!;
       const ticks = meta.archetype.ticks.get(Position)!;
@@ -1541,7 +1541,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionGetsVectorValueAsTupleCopy", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10.5, 20.5] });
+      addComponent(world, entity, [Position, { value: [10.5, 20.5] }]);
 
       const pos = getComponentVectorValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [10.5, 20.5]);
@@ -1552,7 +1552,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionReturnsCopyNotReferenceIntoColumn", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
       const pos = getComponentVectorValue(world, entity, Position, "value")!;
       pos[0] = 999;
@@ -1566,7 +1566,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionSetsVectorValueTuple", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [0, 0] });
+      addComponent(world, entity, [Position, { value: [0, 0] }]);
 
       setComponentVectorValue(world, entity, Position, "value", [30.5, 40.5]);
 
@@ -1581,7 +1581,7 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
       const view = getComponentVectorView(world, entity, Position, "value");
       assert.ok(view instanceof Float32Array);
@@ -1595,7 +1595,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionViewMutationsAreVisibleGet", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
       const view = getComponentVectorView(world, entity, Position, "value")!;
       view[0] = 99;
@@ -1611,7 +1611,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       const target = createEntity(world);
       const offset = pair(Offset, target);
-      addComponent(world, entity, offset, { value: [10, 20] });
+      addComponent(world, entity, [offset, { value: [10, 20] }]);
 
       assert.ok(hasComponent(world, entity, offset));
       const value: [number, number] = getComponentVectorValue(world, entity, offset, "value");
@@ -1624,7 +1624,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       const target = createEntity(world);
       const offset = pair(Offset, target);
-      addComponent(world, entity, offset, { value: [0, 0] });
+      addComponent(world, entity, [offset, { value: [0, 0] }]);
 
       setComponentVectorValue(world, entity, offset, "value", [30, 40]);
 
@@ -1637,7 +1637,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       const target = createEntity(world);
       const offset = pair(Offset, target);
-      addComponent(world, entity, offset, { value: [10, 20] });
+      addComponent(world, entity, [offset, { value: [10, 20] }]);
 
       assert.ok(hasComponent(world, entity, offset));
       const view: ArrayBufferView = getComponentVectorView(world, entity, offset, "value");
@@ -1677,7 +1677,7 @@ describe("Component", () => {
       const Position = defineComponent("PositionSetUpdatesChangeDetectionTick", { schema: { value: Type.f32(2) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [0, 0] });
+      addComponent(world, entity, [Position, { value: [0, 0] }]);
 
       let changeCount = 0;
       addSystem(
@@ -1705,7 +1705,7 @@ describe("Component", () => {
       const Position3D = defineComponent("Position3D", { schema: { value: Type.f32(3) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position3D, { value: [1, 2, 3] });
+      addComponent(world, entity, [Position3D, { value: [1, 2, 3] }]);
 
       const pos = getComponentVectorValue(world, entity, Position3D, "value");
       assert.deepStrictEqual(pos, [1, 2, 3]);
@@ -1719,7 +1719,7 @@ describe("Component", () => {
       const Color = defineComponent("Color", { schema: { value: Type.u32(4) } });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Color, { value: [255, 128, 0, 255] });
+      addComponent(world, entity, [Color, { value: [255, 128, 0, 255] }]);
 
       const color = getComponentVectorValue(world, entity, Color, "value");
       assert.deepStrictEqual(color, [255, 128, 0, 255]);
@@ -1735,7 +1735,7 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Particle, { position: [1, 2, 3], mass: 9.8 });
+      addComponent(world, entity, [Particle, { position: [1, 2, 3], mass: 9.8 }]);
 
       const pos = getComponentVectorValue(world, entity, Particle, "position");
       assert.deepStrictEqual(pos, [1, 2, 3]);
@@ -1754,9 +1754,9 @@ describe("Component", () => {
       });
 
       const entity = createEntity(world);
-      addComponent(world, entity, Position, { value: [10, 20] });
+      addComponent(world, entity, [Position, { value: [10, 20] }]);
 
-      addComponent(world, entity, Velocity, { value: [1, 2] });
+      addComponent(world, entity, [Velocity, { value: [1, 2] }]);
 
       const pos = getComponentVectorValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [10, 20]);
@@ -1779,7 +1779,7 @@ describe("Component", () => {
       const entities: EntityId[] = [];
       for (let i = 0; i < 5; i++) {
         const e = createEntity(world);
-        addComponent(world, e, Position, { value: [i * 10, i * 10 + 1] });
+        addComponent(world, e, [Position, { value: [i * 10, i * 10 + 1] }]);
         entities.push(e);
       }
 

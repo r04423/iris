@@ -68,7 +68,7 @@ function addComponentBenchmarks(): BenchmarkDef[] {
       const w = world as AddPoolWorld;
       if (w.__addIdx >= w.__addPool.length) return;
       // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
-      addComponent(world, w.__addPool[w.__addIdx]!, ADD_TARGET as any, { v: 0 });
+      addComponent(world, w.__addPool[w.__addIdx]!, [ADD_TARGET, { v: 0 }] as any);
       w.__addIdx++;
     },
   });
@@ -98,7 +98,7 @@ function addComponentBenchmarks(): BenchmarkDef[] {
         const w = world as AddPoolWorld;
         if (w.__addIdx >= w.__addPool.length) return;
         // biome-ignore lint/suspicious/noExplicitAny: all pool components share { v: f32 } schema
-        addComponent(world, w.__addPool[w.__addIdx]!, w.__addTargets[w.__addIdx]! as any, { v: 0 });
+        addComponent(world, w.__addPool[w.__addIdx]!, [w.__addTargets[w.__addIdx]!, { v: 0 }] as any);
         w.__addIdx++;
       },
     });

@@ -85,7 +85,7 @@ export type World = {
  * ```typescript
  * const world = createWorld();
  * const player = createEntity(world);
- * addComponent(world, player, Position, { x: 0, y: 0 });
+ * addComponent(world, player, [Position, { x: 0, y: 0 }]);
  * ```
  */
 export function createWorld(): World {

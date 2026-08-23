@@ -327,7 +327,7 @@ describe("Relation", () => {
       const parent = createEntity(world);
 
       // Entity has both regular component and relation pair
-      addComponent(world, entity, Position, { x: 0 });
+      addComponent(world, entity, [Position, { x: 0 }]);
       addComponent(world, entity, pair(ChildOf, parent));
 
       // getRelationTargets should only return relation targets, not regular components
@@ -774,8 +774,8 @@ describe("Relation", () => {
       const enemy1 = createEntity(world);
       const enemy2 = createEntity(world);
 
-      addComponent(world, turret, pair(Targets, enemy1), { priority: 10 });
-      addComponent(world, turret, pair(Targets, enemy2), { priority: 20 });
+      addComponent(world, turret, [pair(Targets, enemy1), { priority: 10 }]);
+      addComponent(world, turret, [pair(Targets, enemy2), { priority: 20 }]);
 
       // Old pair removed
       assert.strictEqual(hasComponent(world, turret, pair(Targets, enemy1)), false);
@@ -820,7 +820,7 @@ describe("Relation", () => {
       const observerError = new Error("removal observer failed");
       let observed = false;
 
-      addComponent(world, child, oldPair, { priority: 1 });
+      addComponent(world, child, [oldPair, { priority: 1 }]);
 
       registerObserverCallback(world, "componentRemoved", (componentId, entityId) => {
         if (componentId !== oldPair || entityId !== child) {
@@ -836,7 +836,7 @@ describe("Relation", () => {
       });
 
       assert.throws(
-        () => addComponent(world, child, newPair, { priority: 2 }),
+        () => addComponent(world, child, [newPair, { priority: 2 }]),
         (error: unknown) => error === observerError
       );
 

@@ -31,23 +31,29 @@ export const enemyActions = defineActions((world: World) => {
       const entity = createEntity(world);
       setName(world, entity, `Enemy#${++enemyCounter}`);
       addComponent(world, entity, IsEnemy);
-      addComponent(world, entity, Transform, { x, y, rotation: 0 });
-      addComponent(world, entity, Movement, {
-        vx: 0,
-        vy: 0,
-        fx: 0,
-        fy: 0,
-        thrust: between(1.5, 2.1),
-        maxSpeed: between(20, 35),
-        damping: between(0.94, 0.98),
-        rotationSpeed: 0,
-      });
-      addComponent(world, entity, AutoRotate, { speed: between(2, 5) });
-      addComponent(world, entity, Avoidance, { range: between(2.0, 3.0) });
-      addComponent(world, entity, Visual, {
-        hue: between(-20, 20),
-        scale: between(0.85, 1.15),
-      });
+      addComponent(world, entity, [Transform, { x, y, rotation: 0 }]);
+      addComponent(world, entity, [
+        Movement,
+        {
+          vx: 0,
+          vy: 0,
+          fx: 0,
+          fy: 0,
+          thrust: between(1.5, 2.1),
+          maxSpeed: between(20, 35),
+          damping: between(0.94, 0.98),
+          rotationSpeed: 0,
+        },
+      ]);
+      addComponent(world, entity, [AutoRotate, { speed: between(2, 5) }]);
+      addComponent(world, entity, [Avoidance, { range: between(2.0, 3.0) }]);
+      addComponent(world, entity, [
+        Visual,
+        {
+          hue: between(-20, 20),
+          scale: between(0.85, 1.15),
+        },
+      ]);
 
       if (target !== undefined) {
         addComponent(world, entity, pair(Targeting, target));
@@ -72,14 +78,17 @@ export const enemyActions = defineActions((world: World) => {
       const entity = createEntity(world);
       setName(world, entity, `Explosion#${++explosionCounter}`);
       addComponent(world, entity, IsExplosion);
-      addComponent(world, entity, Transform, { x, y, rotation: 0 });
-      addComponent(world, entity, Explosion, {
-        duration: between(350, 450),
-        current: 0,
-        count: Math.floor(between(15, 25)),
-        rotationOffset: between(0, Math.PI / 3),
-        maxRadius: between(25, 35),
-      });
+      addComponent(world, entity, [Transform, { x, y, rotation: 0 }]);
+      addComponent(world, entity, [
+        Explosion,
+        {
+          duration: between(350, 450),
+          current: 0,
+          count: Math.floor(between(15, 25)),
+          rotationOffset: between(0, Math.PI / 3),
+          maxRadius: between(25, 35),
+        },
+      ]);
       return entity;
     },
 
