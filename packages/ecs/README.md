@@ -10,7 +10,7 @@ Entity Component System implementation for TypeScript.
 
 - **Entities** are unique identifiers -- just IDs
 - **Components** are plain data attached to entities
-- **Systems** are functions that query and process entities by their components
+- **Systems** are procedures that query and process entities by their components
 
 A player can be an entity with `Position`, `Health`, and `PlayerInput` components. A tree might be an entity with `Position` and `Sprite`. A movement system queries all entities with `Position` and `Velocity` -- it doesn't care if they're players, enemies, or projectiles.
 
@@ -823,7 +823,7 @@ Actions are initialized lazily and cached per world -- calling `spawnActions(wor
 An **Event** is an ephemeral message for communication between systems. Unlike components (persistent data on entities), events are fire-and-forget: emit once, consume once per system, then gone.
 
 ```typescript
-import { defineEvent, emitEvent, readEvents, Type } from "iris-ecs";
+import { defineEvent, defineSystem, emitEvent, readEvents, Type } from "iris-ecs";
 
 // Tag event (no data)
 const GameStarted = defineEvent("GameStarted");
@@ -841,11 +841,11 @@ emitEvent(world, GameStarted);
 emitEvent(world, DamageDealt, { target: enemy, amount: 25 });
 
 // Consume events in a system
-function damageSystem(world) {
+const damageSystem = defineSystem("damageSystem", (world) => {
   readEvents(world, DamageDealt, (event) => {
     applyDamage(event.target, event.amount);
   });
-}
+});
 ```
 
 Use events when systems need to react to something that happened without polling entity state. Common patterns: collision notifications, input events, game state transitions.
@@ -855,17 +855,17 @@ Use events when systems need to react to something that happened without polling
 Each system independently tracks which events it has consumed. Multiple systems can read the same events:
 
 ```typescript
-function uiSystem(world) {
+const uiSystem = defineSystem("uiSystem", (world) => {
   readEvents(world, DamageDealt, (e) => {
     showDamageNumber(e.target, e.amount);
   });
-}
+});
 
-function audioSystem(world) {
+const audioSystem = defineSystem("audioSystem", (world) => {
   readEvents(world, DamageDealt, (e) => {
     playHitSound(e.amount);
   });
-}
+});
 
 // Both systems see the same DamageDealt events
 ```
