@@ -2,7 +2,17 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { every, once } from "./conditions.js";
 import { IrisInvalidArgument } from "./error.js";
-import { addSystem, addSystemSet, defineSystem, defineSystemSet, runOnce, Startup, stop } from "./scheduler.js";
+import {
+  addSystem,
+  addSystemSet,
+  defineSystem,
+  defineSystemSet,
+  First,
+  Last,
+  runOnce,
+  Startup,
+  stop,
+} from "./scheduler.js";
 import { createWorld, resetWorld } from "./world.js";
 
 describe("Conditions", () => {
@@ -50,6 +60,76 @@ describe("Conditions", () => {
       await runOnce(world);
     }
     assert.deepStrictEqual(runs, [3, 6, 10]);
+  });
+
+  it("shares a built-in condition across attachments by definition identity", async () => {
+    const world = createWorld();
+    const shared = every(2);
+    const runs: string[] = [];
+
+    addSystem(
+      world,
+      defineSystem("firstShared", () => void runs.push("first")),
+      { condition: shared }
+    );
+    addSystem(
+      world,
+      defineSystem("secondShared", () => void runs.push("second")),
+      { condition: shared }
+    );
+
+    await runOnce(world);
+    await runOnce(world);
+
+    assert.deepStrictEqual(runs, ["first", "second"]);
+  });
+
+  it("creates independent built-in definitions on every call", async () => {
+    const world = createWorld();
+    let firstRuns = 0;
+    let secondRuns = 0;
+
+    addSystem(
+      world,
+      defineSystem("firstIndependent", () => void firstRuns++),
+      { schedule: First, condition: once() }
+    );
+    addSystem(
+      world,
+      defineSystem("secondIndependent", () => void secondRuns++),
+      { schedule: Last, condition: once() }
+    );
+
+    await runOnce(world);
+    await runOnce(world);
+
+    assert.deepStrictEqual({ firstRuns, secondRuns }, { firstRuns: 1, secondRuns: 1 });
+  });
+
+  it("isolates one built-in definition between worlds", async () => {
+    const firstWorld = createWorld();
+    const secondWorld = createWorld();
+    const shared = once();
+    let firstRuns = 0;
+    let secondRuns = 0;
+
+    addSystem(
+      firstWorld,
+      defineSystem("firstWorld", () => void firstRuns++),
+      { condition: shared }
+    );
+    addSystem(
+      secondWorld,
+      defineSystem("secondWorld", () => void secondRuns++),
+      { condition: shared }
+    );
+
+    await runOnce(firstWorld);
+    await runOnce(secondWorld);
+    await runOnce(firstWorld);
+    await runOnce(secondWorld);
+
+    assert.deepStrictEqual({ firstRuns, secondRuns }, { firstRuns: 1, secondRuns: 1 });
   });
 
   it("every counts its own evaluations, so nested intervals multiply", async () => {

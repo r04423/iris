@@ -1,48 +1,51 @@
 import { IrisInvalidInterval } from "./error.js";
+import { defineComponent } from "./registry.js";
+import { addResource, getResourceValue } from "./resource.js";
+import { Type } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
 // Condition Types
 // ============================================================================
 
-const CONDITION_FACTORY_BRAND: unique symbol = Symbol("ConditionFactory");
+declare const CONDITION_BRAND: unique symbol;
 
 /**
- * Synchronous condition tick. Returning false skips the attached system or set.
- *
- * Conditions execute outside system context, so event reads and change
- * detection see nothing. Conditions may observe world state, but must not
- * mutate gameplay data or scheduler registrations.
+ * Named synchronous scheduler condition created by {@link defineCondition}.
  *
  * @example
  * ```typescript
- * const enabled = defineCondition("enabled", (world) =>
- *   () => hasResource(world, Enabled)
- * );
+ * const enabled = defineCondition("enabled", (world) => hasResource(world, Enabled));
  * ```
  */
-export type ConditionTick = () => boolean;
-
-/**
- * Reusable condition factory with per-attachment initialization.
- *
- * @example
- * ```typescript
- * const everyOtherRun = defineCondition("everyOtherRun", () => {
- *   let run = false;
- *   return () => (run = !run);
- * });
- * addSystem(world, movementSystem, { condition: everyOtherRun });
- * ```
- */
-export type ConditionFactory = {
-  /** @internal Runtime brand for condition factories. */
-  readonly [CONDITION_FACTORY_BRAND]: true;
+export type Condition = {
+  /** @internal Nominal brand for condition definitions. */
+  readonly [CONDITION_BRAND]: true;
   /** Descriptive condition name. */
   readonly name: string;
-  /** Initializes a synchronous tick for one attachment. */
-  readonly init: (world: World) => ConditionTick;
+  /** Checks whether attached systems may run. */
+  readonly check: (world: World) => boolean;
 };
+
+// ============================================================================
+// Built-in Condition State
+// ============================================================================
+
+const ConditionState = defineComponent("IrisConditionState", {
+  counts: Type.ref<Map<Condition, number>>(),
+});
+
+/** Lazy resource storage lets world reset discard counters without condition hooks. */
+function ensureConditionCounts(world: World): Map<Condition, number> {
+  let counts = getResourceValue(world, ConditionState, "counts");
+
+  if (counts === undefined) {
+    counts = new Map();
+    addResource(world, ConditionState, { counts });
+  }
+
+  return counts;
+}
 
 // ============================================================================
 // Condition Definition
@@ -51,23 +54,22 @@ export type ConditionFactory = {
 /**
  * Defines a reusable synchronous scheduler condition.
  *
- * The initializer runs independently for every system or set attachment before
- * scheduling begins and again after `resetWorld()`. It may observe world state,
- * but must not mutate it.
+ * A definition is evaluated at most once per schedule invocation, with its
+ * result shared by every system and set using that definition. Conditions run
+ * outside system context, so event reads and change detection see nothing.
  *
- * @param init - Initializer returning the boolean condition tick
- * @returns Condition factory for the `condition` option of {@link addSystem} or `addSystemSet()`
+ * @param name - Descriptive label; identity comes from the returned definition
+ * @param check - Synchronous predicate evaluated outside system context
+ * @returns Condition for the `condition` option of {@link addSystem} or `addSystemSet()`
  *
  * @example
  * ```typescript
- * const gameIsRunning = defineCondition("gameIsRunning", (world) =>
- *   () => hasResource(world, GameState)
- * );
+ * const gameIsRunning = defineCondition("gameIsRunning", (world) => hasResource(world, GameState));
  * addSystem(world, movementSystem, { condition: gameIsRunning });
  * ```
  */
-export function defineCondition(name: string, init: (world: World) => ConditionTick): ConditionFactory {
-  return { [CONDITION_FACTORY_BRAND]: true, name, init };
+export function defineCondition(name: string, check: (world: World) => boolean): Condition {
+  return { name, check } as Condition;
 }
 
 // ============================================================================
@@ -75,35 +77,42 @@ export function defineCondition(name: string, init: (world: World) => ConditionT
 // ============================================================================
 
 /**
- * Create a condition that passes only on its first evaluation.
+ * Creates a condition that passes only on its first evaluation.
  *
- * @returns Condition factory that passes once
+ * Each call creates an independent definition. State belongs to the world and
+ * starts over after `resetWorld()`.
+ *
+ * @returns Condition that passes once
  *
  * @example
  * ```typescript
  * addSystem(world, initializeRenderer, { condition: once() });
  * ```
  */
-export function once(): ConditionFactory {
-  return defineCondition("once", () => {
-    let pending = true;
+export function once(): Condition {
+  const condition = defineCondition("once", (world) => {
+    const counts = ensureConditionCounts(world);
 
-    return () => {
-      const result = pending;
-      pending = false;
-      return result;
-    };
+    if (counts.has(condition)) {
+      return false;
+    }
+
+    counts.set(condition, 1);
+
+    return true;
   });
+
+  return condition;
 }
 
 /**
- * Create a condition that passes on every nth evaluation.
+ * Creates a condition that passes on every nth evaluation.
  *
- * A system condition is evaluated once per frame, so `every(10)` passes every
- * tenth frame.
+ * Each call creates an independent definition. Reusing that definition shares
+ * one evaluation per schedule invocation.
  *
  * @param ticks - Positive safe integer interval, counted in condition evaluations
- * @returns Condition factory that passes on every nth evaluation
+ * @returns Condition that passes on every nth evaluation
  * @throws {IrisInvalidInterval} If ticks is not a positive safe integer
  *
  * @example
@@ -111,14 +120,19 @@ export function once(): ConditionFactory {
  * addSystem(world, updateAI, { condition: every(10) });
  * ```
  */
-export function every(ticks: number): ConditionFactory {
+export function every(ticks: number): Condition {
   if (!Number.isSafeInteger(ticks) || ticks <= 0) {
     throw new IrisInvalidInterval(ticks);
   }
 
-  return defineCondition(`every(${ticks})`, () => {
-    let count = 0;
+  const condition = defineCondition(`every(${ticks})`, (world) => {
+    const counts = ensureConditionCounts(world);
+    const count = ((counts.get(condition) ?? 0) + 1) % ticks;
 
-    return () => ++count % ticks === 0;
+    counts.set(condition, count);
+
+    return count === 0;
   });
+
+  return condition;
 }

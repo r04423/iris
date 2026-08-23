@@ -26,9 +26,6 @@ import {
   createSystemSetState,
   createSystemState,
   resetExecutionState,
-  resetScheduleState,
-  resetSystemSetState,
-  resetSystemState,
 } from "./scheduler.js";
 
 // ============================================================================
@@ -149,9 +146,6 @@ export function resetWorld(world: World): void {
   resetEntityState(world);
   resetNameState(world);
   resetExecutionState(world);
-  resetSystemState(world);
-  resetSystemSetState(world);
-  resetScheduleState(world);
   resetEventState(world);
   resetActionState(world);
 

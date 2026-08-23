@@ -66,19 +66,40 @@ describe("World", () => {
       assert.strictEqual(world.entities.byRawId.length, 0);
     });
 
-    it("preserves systems after reset", () => {
+    it("preserves registered systems and their built schedule after reset", async () => {
       const world = createWorld();
+      let runs = 0;
 
-      function testSystem() {
-        // no-op
-      }
+      addSystem(
+        world,
+        defineSystem("testSystem", () => void runs++)
+      );
 
-      addSystem(world, defineSystem("testSystem", testSystem));
-
+      await runOnce(world);
       resetWorld(world);
+      await runOnce(world);
 
-      // System still registered
-      assert.ok(world.systems.byId.has("testSystem"));
+      assert.strictEqual(runs, 2);
+    });
+
+    it("rebuilds an already-dirty schedule after reset", async () => {
+      const world = createWorld();
+      const calls: string[] = [];
+
+      addSystem(
+        world,
+        defineSystem("existing", () => void calls.push("existing"))
+      );
+      await runOnce(world);
+
+      addSystem(
+        world,
+        defineSystem("addedBeforeReset", () => void calls.push("added"))
+      );
+      resetWorld(world);
+      await runOnce(world);
+
+      assert.deepStrictEqual(calls, ["existing", "existing", "added"]);
     });
 
     it("clears queries and filters", () => {

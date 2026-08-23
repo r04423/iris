@@ -2524,14 +2524,14 @@ describe("Scheduler", () => {
   });
 
   describe("Conditions", () => {
-    it("initializes system and set conditions before direct ticks", async () => {
+    it("checks system and set conditions at their first point of use", async () => {
       const world = createWorld();
       const Group = defineSystemSet("Group");
       const calls: string[] = [];
       const condition = (name: string) =>
         defineCondition(name, () => {
           calls.push(name);
-          return () => true;
+          return true;
         });
 
       addSystemSet(world, Group, { condition: condition("set condition") });
@@ -2558,10 +2558,10 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.deepStrictEqual(calls, [
-        "first condition",
-        "second condition",
         "set condition",
+        "first condition",
         "first system",
+        "second condition",
         "second system",
       ]);
     });
@@ -2570,7 +2570,7 @@ describe("Scheduler", () => {
       const world = createWorld();
       let checks = 0;
       let runs = 0;
-      const alternating = defineCondition("alternating", () => () => ++checks % 2 === 0);
+      const alternating = defineCondition("alternating", () => ++checks % 2 === 0);
 
       addSystem(
         world,
@@ -2592,7 +2592,7 @@ describe("Scheduler", () => {
       const Group = defineSystemSet("Group");
       let checks = 0;
       const calls: string[] = [];
-      const alternating = defineCondition("alternatingSet", () => () => ++checks % 2 === 1);
+      const alternating = defineCondition("alternatingSet", () => ++checks % 2 === 1);
       addSystemSet(world, Group, { condition: alternating });
       addSystem(
         world,
@@ -2627,14 +2627,14 @@ describe("Scheduler", () => {
       const world = createWorld();
       const Group = defineSystemSet("Group");
       let memberChecks = 0;
-      addSystemSet(world, Group, { condition: defineCondition("setFalse", () => () => false) });
+      addSystemSet(world, Group, { condition: defineCondition("setFalse", () => false) });
       addSystem(
         world,
         defineSystem("member", () => assert.fail("system ran")),
         {
           name: "member",
           set: Group,
-          condition: defineCondition("member", () => () => {
+          condition: defineCondition("member", () => {
             memberChecks++;
             return true;
           }),
@@ -2646,42 +2646,57 @@ describe("Scheduler", () => {
       assert.strictEqual(memberChecks, 0);
     });
 
-    it("initializes reused attachments independently and reinitializes them after reset", async () => {
+    it("shares one condition result across systems and sets by definition identity", async () => {
       const world = createWorld();
       const Group = defineSystemSet("Group");
-      let inits = 0;
+      let checks = 0;
       let runs = 0;
-      const firstTickOnly = defineCondition("firstTickOnly", () => {
-        inits++;
-        let first = true;
-        return () => {
-          const result = first;
-          first = false;
-          return result;
-        };
-      });
-      addSystemSet(world, Group, { condition: firstTickOnly });
+      const alternating = defineCondition("sharedAlternating", () => ++checks % 2 === 1);
+      addSystemSet(world, Group, { condition: alternating });
       addSystem(
         world,
         defineSystem("one", () => {
           runs++;
         }),
-        { name: "one", set: Group, condition: firstTickOnly }
+        { name: "one", set: Group, condition: alternating }
       );
       addSystem(
         world,
         defineSystem("two", () => {
           runs++;
         }),
-        { name: "two", condition: firstTickOnly }
+        { name: "two", condition: alternating }
       );
 
       await runOnce(world);
       await runOnce(world);
-      resetWorld(world);
       await runOnce(world);
 
-      assert.deepStrictEqual({ inits, runs }, { inits: 6, runs: 4 });
+      assert.deepStrictEqual({ checks, runs }, { checks: 3, runs: 4 });
+    });
+
+    it("evaluates a reused definition independently in different schedules", async () => {
+      const world = createWorld();
+      let checks = 0;
+      const shared = defineCondition("crossSchedule", () => {
+        checks++;
+        return true;
+      });
+
+      addSystem(
+        world,
+        defineSystem("first", () => {}),
+        { schedule: First, condition: shared }
+      );
+      addSystem(
+        world,
+        defineSystem("last", () => {}),
+        { schedule: Last, condition: shared }
+      );
+
+      await runOnce(world);
+
+      assert.strictEqual(checks, 2);
     });
 
     it("keeps conditions outside system context and preserves instrumentation cleanup on errors", async () => {
@@ -2695,7 +2710,7 @@ describe("Scheduler", () => {
         defineSystem("throws", () => assert.fail("system ran")),
         {
           name: "throws",
-          condition: defineCondition("throws", (conditionWorld) => () => {
+          condition: defineCondition("throws", (conditionWorld) => {
             assert.strictEqual(conditionWorld.execution.systemId, null);
             throw new Error("condition failed");
           }),
@@ -2721,7 +2736,7 @@ describe("Scheduler", () => {
         defineSystem("skipped", () => assert.fail("system ran")),
         {
           name: "skipped",
-          condition: defineCondition("false", () => () => false),
+          condition: defineCondition("false", () => false),
         }
       );
 
@@ -2740,7 +2755,7 @@ describe("Scheduler", () => {
         {
           name: "startup",
           schedule: Startup,
-          condition: defineCondition("startupFalse", () => () => {
+          condition: defineCondition("startupFalse", () => {
             startupChecks++;
             return false;
           }),
@@ -2752,7 +2767,7 @@ describe("Scheduler", () => {
         {
           name: "shutdown",
           schedule: Shutdown,
-          condition: defineCondition("shutdownFalse", () => () => {
+          condition: defineCondition("shutdownFalse", () => {
             shutdownChecks++;
             return false;
           }),
@@ -2774,7 +2789,7 @@ describe("Scheduler", () => {
         {
           name: "immediateShutdown",
           schedule: Shutdown,
-          condition: defineCondition("immediateShutdownFalse", () => () => {
+          condition: defineCondition("immediateShutdownFalse", () => {
             immediateShutdownChecks++;
             return false;
           }),
@@ -2786,18 +2801,14 @@ describe("Scheduler", () => {
       assert.strictEqual(immediateShutdownChecks, 1);
     });
 
-    it("initializes but never evaluates an empty set condition", async () => {
+    it("does not evaluate an empty set condition", async () => {
       const world = createWorld();
-      let inits = 0;
-      let ticks = 0;
+      let checks = 0;
       const Empty = defineSystemSet("Empty");
       addSystemSet(world, Empty, {
         condition: defineCondition("empty", () => {
-          inits++;
-          return () => {
-            ticks++;
-            return true;
-          };
+          checks++;
+          return true;
         }),
       });
       addSystem(
@@ -2808,7 +2819,7 @@ describe("Scheduler", () => {
 
       await runOnce(world);
 
-      assert.deepStrictEqual({ inits, ticks }, { inits: 1, ticks: 0 });
+      assert.strictEqual(checks, 0);
     });
   });
 

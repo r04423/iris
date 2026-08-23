@@ -1,4 +1,4 @@
-import type { ConditionFactory, ConditionTick } from "./conditions.js";
+import type { Condition } from "./conditions.js";
 import {
   addEdge,
   addNode,
@@ -156,40 +156,6 @@ export function createExecutionState(): ExecutionState {
 }
 
 /**
- * Discards initialized condition runners. Registered systems survive world resets.
- * @internal
- */
-export function resetSystemState(world: World): void {
-  for (const meta of world.systems.byId.values()) {
-    if (meta.conditionFactory !== null) {
-      meta.conditionRunner = null;
-    }
-  }
-}
-
-/**
- * Discards initialized set condition runners. Registered sets survive world resets.
- * @internal
- */
-export function resetSystemSetState(world: World): void {
-  for (const meta of world.systemSets.byId.values()) {
-    if (meta.conditionFactory !== null) {
-      meta.conditionRunner = null;
-    }
-  }
-}
-
-/**
- * Discards built schedules for rebuilding. Pipeline configuration survives
- * world resets.
- * @internal
- */
-export function resetScheduleState(world: World): void {
-  world.schedules.byId.clear();
-  world.schedules.dirty = true;
-}
-
-/**
  * Returns execution state to idle with a zeroed frame counter.
  * @internal
  */
@@ -340,7 +306,7 @@ export type SystemSetOptions = {
   /** All systems in this set run after these systems or sets. */
   after?: SystemReference | SystemReference[];
   /** Condition evaluated at most once per schedule invocation; false skips every member and their own conditions. */
-  condition?: ConditionFactory;
+  condition?: Condition;
 };
 
 /**
@@ -355,10 +321,8 @@ export type SystemSetMeta = {
   after: string[];
   /** System names that belong to this set (populated by `addSystem()` calls). */
   systems: string[];
-  /** Condition factory attached to this set, if any. */
-  conditionFactory: ConditionFactory | null;
-  /** Initialized condition tick; null until the next frame or shutdown initializes it, and again after `resetWorld()`. */
-  conditionRunner: ConditionTick | null;
+  /** Condition attached to this set, if any. */
+  condition: Condition | null;
 };
 
 // ============================================================================
@@ -393,7 +357,7 @@ type SystemOptionsBase = {
    * Condition checked each schedule run; false skips the system without
    * firing its `systemStarted`/`systemFinished` events.
    */
-  condition?: ConditionFactory;
+  condition?: Condition;
 };
 
 /**
@@ -437,10 +401,8 @@ export type SystemsOptions = Omit<SystemOptionsBase, "name"> & SystemTarget;
 export type SystemMeta = {
   /** Function the scheduler executes. */
   tick: (world: World) => void | Promise<void>;
-  /** Condition factory attached to this system, if any. */
-  conditionFactory: ConditionFactory | null;
-  /** Initialized condition tick; null until the next frame or shutdown initializes it, and again after `resetWorld()`. */
-  conditionRunner: ConditionTick | null;
+  /** Condition attached to this system, if any. */
+  condition: Condition | null;
   /** Schedule this system belongs to (the set's schedule when registered through a set). */
   schedule: ScheduleLabel;
   /** Registration order; breaks ties between systems no constraint separates, keeping execution deterministic. */
@@ -515,8 +477,7 @@ export function addSystemSet(world: World, set: SystemSetLabel, options?: System
     before: normalizeReferences(options?.before),
     after: normalizeReferences(options?.after),
     systems: [],
-    conditionFactory: options?.condition ?? null,
-    conditionRunner: null,
+    condition: options?.condition ?? null,
   });
 
   world.schedules.dirty = true;
@@ -596,8 +557,7 @@ export function addSystem(world: World, system: System, options?: SystemOptions)
 
   world.systems.byId.set(name, {
     tick: system.tick,
-    conditionFactory: options?.condition ?? null,
-    conditionRunner: null,
+    condition: options?.condition ?? null,
     // A set's schedule wins over the schedule option, which the types forbid combining.
     schedule: setMeta !== null ? setMeta.schedule : (options?.schedule ?? Update),
     index: world.systems.nextIndex++,
@@ -896,25 +856,10 @@ function rebuildPipeline(world: World): void {
   world.schedules.dirty = false;
 }
 
-/**
- * Initializes pending conditions, then rebuilds dirty schedules.
- */
+/** Keeps built schedules until their persistent configuration changes. */
 function prepareScheduler(world: World): void {
-  // Every path that leaves a condition uninitialized also marks schedules dirty.
   if (!world.schedules.dirty) {
     return;
-  }
-
-  for (const meta of world.systems.byId.values()) {
-    if (meta.conditionFactory !== null && meta.conditionRunner === null) {
-      meta.conditionRunner = meta.conditionFactory.init(world);
-    }
-  }
-
-  for (const meta of world.systemSets.byId.values()) {
-    if (meta.conditionFactory !== null && meta.conditionRunner === null) {
-      meta.conditionRunner = meta.conditionFactory.init(world);
-    }
   }
 
   rebuildPipeline(world);
@@ -923,6 +868,20 @@ function prepareScheduler(world: World): void {
 // ============================================================================
 // Schedule Execution (Internal)
 // ============================================================================
+
+/** Caches definitions so reused conditions cannot disagree within one schedule invocation. */
+function evaluateCondition(world: World, condition: Condition, results: Map<Condition, boolean>): boolean {
+  const cached = results.get(condition);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const result = condition.check(world);
+  results.set(condition, result);
+
+  return result;
+}
 
 /**
  * Executes a single schedule. Awaits async systems.
@@ -941,9 +900,7 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
   fireObserverEvent(world, "scheduleStarted", scheduleLabel);
 
   try {
-    // A set's condition is evaluated at most once per schedule invocation, so its
-    // members cannot disagree about whether the set ran.
-    let setResults: Map<SystemSetLabel, boolean> | null = null;
+    let conditionResults: Map<Condition, boolean> | null = null;
 
     for (const systemId of order) {
       const meta = world.systems.byId.get(systemId)!;
@@ -952,23 +909,21 @@ async function executeSchedule(world: World, scheduleLabel: ScheduleLabel): Prom
       if (meta.set !== undefined) {
         const setMeta = world.systemSets.byId.get(meta.set)!;
 
-        if (setMeta.conditionRunner !== null) {
-          setResults ??= new Map();
-          let passed = setResults.get(meta.set);
+        if (setMeta.condition !== null) {
+          conditionResults ??= new Map();
 
-          if (passed === undefined) {
-            passed = setMeta.conditionRunner();
-            setResults.set(meta.set, passed);
-          }
-
-          if (!passed) {
+          if (!evaluateCondition(world, setMeta.condition, conditionResults)) {
             continue;
           }
         }
       }
 
-      if (meta.conditionRunner !== null && !meta.conditionRunner()) {
-        continue;
+      if (meta.condition !== null) {
+        conditionResults ??= new Map();
+
+        if (!evaluateCondition(world, meta.condition, conditionResults)) {
+          continue;
+        }
       }
 
       world.execution.systemId = systemId;

@@ -658,7 +658,7 @@ A system uses either `schedule` or `set`, not both -- the set inherits its sched
 import { addSystem, addSystemSet, defineCondition, getResourceValue } from "iris-ecs";
 
 const gameIsPlaying = defineCondition("gameIsPlaying", (world) => {
-  return () => getResourceValue(world, GameState, "playing") === true;
+  return getResourceValue(world, GameState, "playing") === true;
 });
 
 addSystemSet(world, GameplaySystems, { condition: gameIsPlaying });
@@ -667,9 +667,9 @@ addSystem(world, updateEnemies, { set: GameplaySystems });
 addSystem(world, updateAudio, { condition: gameIsPlaying });
 ```
 
-A system condition is checked immediately before that system runs. A set condition is checked once per schedule run and shared by every member.
+A condition definition is checked at most once per schedule run. Its result is shared by every system and set using that same definition in the schedule; create separate definitions when checks need independent identity. Checks run outside system context, so event reads and change-detection queries see nothing.
 
-Use `once()` for the first condition tick or `every(ticks)` for world-tick intervals:
+Use `once()` for the first evaluation or `every(ticks)` for evaluation intervals:
 
 ```typescript
 import { every, once } from "iris-ecs";
