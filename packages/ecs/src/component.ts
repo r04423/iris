@@ -14,7 +14,7 @@ import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } fro
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
 import type { EntityMeta } from "./entity.js";
 import { ensureEntity, getEntityMeta, moveEntityToArchetype } from "./entity.js";
-import { IrisInvalidPair } from "./error.js";
+import { IrisComponentNotFound, IrisInvalidPair } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget } from "./relation.js";
@@ -460,6 +460,55 @@ export function hasComponent<C extends EntityId>(
   const meta = ensureEntity(world, entityId);
 
   return meta.archetype.typesSet.has(componentId);
+}
+
+/**
+ * Asserts that an entity has a component.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisComponentNotFound} If the entity lacks the component
+ *
+ * @example
+ * ```typescript
+ * assertComponent(world, entity, Position);
+ * const x = getComponentValue(world, entity, Position, "x");
+ * ```
+ */
+export function assertComponent<E extends EntityId, C extends EntityId>(
+  world: World,
+  entityId: E,
+  componentId: C
+): asserts entityId is E & EntityWith<C> {
+  if (!hasComponent(world, entityId, componentId)) {
+    throw new IrisComponentNotFound(entityId, componentId);
+  }
+}
+
+/**
+ * Asserts that an entity has every component in a collection.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ * @throws {IrisComponentNotFound} If the entity lacks a component
+ *
+ * @example
+ * ```typescript
+ * assertComponents(world, entity, [Position, Velocity]);
+ * ```
+ */
+export function assertComponents<E extends EntityId, const C extends readonly EntityId[]>(
+  world: World,
+  entityId: E,
+  componentIds: C
+): asserts entityId is E & EntityWith<C[number]> {
+  ensureEntity(world, entityId);
+
+  for (let i = 0; i < componentIds.length; i++) {
+    const componentId = componentIds[i]!;
+
+    if (!hasComponent(world, entityId, componentId)) {
+      throw new IrisComponentNotFound(entityId, componentId);
+    }
+  }
 }
 
 /**

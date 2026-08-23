@@ -1,10 +1,12 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { createEntity } from "./entity.js";
+import { IrisResourceNotFound } from "./error.js";
 import { changed, collectEntities, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import {
   addResource,
+  assertResource,
   getResource,
   getResourceValue,
   getResourceView,
@@ -39,6 +41,31 @@ describe("Resource", () => {
 
       const dt: number = getResourceValue(world, Time, "delta");
       assert.strictEqual(dt, 0.016);
+    });
+
+    it("asserts and narrows a present resource", () => {
+      const world = createWorld();
+      const Time = defineComponent("TimeAssertedResource", { schema: { delta: Type.f64() } });
+
+      function initialize() {
+        addResource(world, Time, { delta: 0.016 });
+      }
+
+      initialize();
+      assertResource(world, Time);
+
+      const dt: number = getResourceValue(world, Time, "delta");
+      assert.strictEqual(dt, 0.016);
+    });
+
+    it("throws a resource error when absent", () => {
+      const world = createWorld();
+      const Time = defineComponent("TimeMissingAssertedResource", { schema: { delta: Type.f64() } });
+
+      assert.throws(
+        () => assertResource(world, Time),
+        (error: unknown) => error instanceof IrisResourceNotFound && error.componentId === Time
+      );
     });
 
     it("accepts only data component definitions", () => {

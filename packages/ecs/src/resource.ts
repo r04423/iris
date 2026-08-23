@@ -10,6 +10,7 @@ import {
   setComponentValue,
 } from "./component.js";
 import type { Component, EntityWith } from "./encoding.js";
+import { IrisResourceNotFound } from "./error.js";
 import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
 import type { World } from "./world.js";
 
@@ -74,6 +75,26 @@ export function hasResource<S extends SchemaRecord, N extends string>(
   component: Component<S, N>
 ): component is Component<S, N> & EntityWith<Component<S, N>> {
   return hasComponent(world, component, component);
+}
+
+/**
+ * Asserts that a resource is present in the world.
+ *
+ * @throws {IrisResourceNotFound} If the resource is absent
+ *
+ * @example
+ * ```typescript
+ * assertResource(world, Time);
+ * const dt = getResourceValue(world, Time, "delta");
+ * ```
+ */
+export function assertResource<S extends SchemaRecord, N extends string>(
+  world: World,
+  component: Component<S, N>
+): asserts component is Component<S, N> & EntityWith<Component<S, N>> {
+  if (!hasResource(world, component)) {
+    throw new IrisResourceNotFound(component);
+  }
 }
 
 /**

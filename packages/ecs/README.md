@@ -98,6 +98,7 @@ An **Entity** is a unique identifier representing a thing in your world. Entitie
 import {
   createWorld,
   createEntity,
+  assertEntity,
   destroyEntity,
   isEntityAlive,
   resetWorld,
@@ -117,12 +118,13 @@ const npc = createEntity(world, [
 destroyEntity(world, enemy);
 isEntityAlive(world, enemy); // false
 isEntityAlive(world, player); // true
+assertEntity(world, player); // throws if absent, destroyed, or stale
 
 // Clear all entities and state, keeping component/tag definitions
 resetWorld(world);
 ```
 
-Create entities with `createEntity()`, optionally passing an array of component entries to attach in one call. Destroy them with `destroyEntity()`. Use `isEntityAlive()` to check if an entity reference is still valid. Call `resetWorld()` to clear all entities and state while preserving definitions -- useful for level reloads or testing.
+Create entities with `createEntity()`, optionally passing an array of component entries to attach in one call. Destroy them with `destroyEntity()`. Use `isEntityAlive()` for conditional checks and `assertEntity()` when absence or death is an error. The assertion also narrows optional entity references. Call `resetWorld()` to clear all entities and state while preserving definitions -- useful for level reloads or testing.
 
 ⚠️ **Entity IDs are recycled.** After destroying an entity, its ID may be reused for a new entity. Never store entity IDs long-term without checking `isEntityAlive()` first -- your old reference might now point to a different entity.
 
@@ -184,6 +186,8 @@ import {
   Type,
   addComponent,
   addComponents,
+  assertComponent,
+  assertComponents,
   getComponent,
   setComponent,
   getComponentValue,
@@ -197,6 +201,9 @@ const Health = defineComponent("Health", { schema: { current: Type.i32(), max: T
 
 addComponent(world, entity, Position, { value: [0, 0] });
 addComponent(world, entity, Health, { current: 100, max: 100 });
+
+// Assert required components and narrow the entity type
+assertComponents(world, entity, [Position, Health]);
 
 // Read or replace the complete record
 const health = getComponent(world, entity, Health);  // { current: 100, max: 100 }
@@ -212,6 +219,8 @@ pos[0] = 10;
 ```
 
 `getComponent()` returns an allocated record snapshot. Its vector fields are also copies, while reference fields retain their stored values. `setComponent()` replaces every field in the record. Use `getComponentValue()` and `setComponentValue()` when you only need one field, avoiding record allocations.
+
+Use `hasComponent()` when absence is expected. Use `assertComponent()` or `assertComponents()` to fail and narrow the entity for subsequent typed access.
 
 #### Schema Types
 
@@ -323,6 +332,7 @@ A **Resource** is a global singleton -- world-level data that isn't attached to 
 import {
   defineComponent,
   addResource,
+  assertResource,
   getResource,
   setResource,
   getResourceValue,
@@ -335,6 +345,7 @@ import {
 const Time = defineComponent("Time", { schema: { delta: Type.f32(), elapsed: Type.f32() } });
 
 addResource(world, Time, { delta: 0.016, elapsed: 0 });
+assertResource(world, Time);
 
 // Read or replace the complete record
 const time = getResource(world, Time);               // { delta: 0.016, elapsed: 0 }
@@ -349,7 +360,7 @@ if (hasResource(world, Time)) {
 }
 ```
 
-`getResource()` returns an allocated record snapshot. Its vector fields are also copies, while reference fields retain their stored values. `setResource()` replaces every field in the record.
+`getResource()` returns an allocated record snapshot. Its vector fields are also copies, while reference fields retain their stored values. `setResource()` replaces every field in the record. Use `hasResource()` when absence is expected and `assertResource()` when the resource is required.
 
 Resources participate in component queries:
 

@@ -3,13 +3,17 @@ import { describe, it } from "node:test";
 import { addComponent, getComponentValue, hasComponent } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { extractId, extractMeta, ID_MASK_20 } from "./encoding.js";
-import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
-import { IrisLimitExceeded, IrisNotFound } from "./error.js";
+import { assertEntity, createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
+import { IrisEntityNotFound, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { defineComponent, defineRelation, Exclusive, OnDeleteTarget, Wildcard } from "./registry.js";
 import { pair } from "./relation.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
+
+function optional<T>(value: T): T | undefined {
+  return value;
+}
 
 describe("Entity", () => {
   describe("Entity Creation", () => {
@@ -199,6 +203,30 @@ describe("Entity", () => {
   });
 
   describe("Entity Validation", () => {
+    it("asserts and narrows an optional entity", () => {
+      const world = createWorld();
+      const Position = defineComponent("assert_alive_Position", { schema: { x: Type.f32() } });
+      const created = createEntity(world, [[Position, { x: 1 }]]);
+      const entity = optional(created);
+
+      assertEntity(world, entity);
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      assert.strictEqual(x, 1);
+    });
+
+    it("throws for absent and destroyed entities", () => {
+      const world = createWorld();
+      const entity = createEntity(world);
+      let absent: typeof entity | undefined;
+
+      assert.throws(() => assertEntity(world, absent), IrisEntityNotFound);
+
+      destroyEntity(world, entity);
+
+      assert.throws(() => assertEntity(world, entity), IrisEntityNotFound);
+    });
+
     it("throws on ensureEntity for destroyed entities", () => {
       const world = createWorld();
       const entity = createEntity(world);

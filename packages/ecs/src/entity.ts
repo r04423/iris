@@ -357,6 +357,26 @@ export function isEntityAlive(world: World, entity: EntityId): boolean {
 }
 
 /**
+ * Asserts that an entity is present and alive in the world.
+ *
+ * Narrows optional entity references while preserving any component presence
+ * carried by the input type.
+ *
+ * @throws {IrisEntityNotFound} If the entity is absent or not alive
+ *
+ * @example
+ * ```typescript
+ * const player = queryFirstEntity(world, [Player]);
+ * assertEntity(world, player);
+ * ```
+ */
+export function assertEntity<E extends EntityId>(world: World, entity: E | undefined): asserts entity is E {
+  if (entity === undefined || !isEntityAlive(world, entity)) {
+    throw new IrisEntityNotFound(entity);
+  }
+}
+
+/**
  * Moves an entity to a different archetype, transferring shared component data
  * and patching the row of the entity swapped into its old slot.
  * @internal

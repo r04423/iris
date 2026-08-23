@@ -185,8 +185,34 @@ export class IrisEntityLimitExceeded extends IrisLimitExceeded {
  * ```
  */
 export class IrisEntityNotFound extends IrisNotFound {
-  constructor(id: number) {
-    super({ resource: "Entity", id, context: "world" });
+  constructor(id: number | undefined) {
+    super({ resource: "Entity", id: id ?? "undefined", context: "world" });
+  }
+}
+
+/**
+ * Thrown when an entity lacks a required component.
+ */
+export class IrisComponentNotFound extends IrisNotFound {
+  readonly entityId: number;
+  readonly componentId: number;
+
+  constructor(entityId: number, componentId: number) {
+    super({ resource: "Component", id: componentId, context: `entity "${entityId}"` });
+    this.entityId = entityId;
+    this.componentId = componentId;
+  }
+}
+
+/**
+ * Thrown when a required resource is absent from the world.
+ */
+export class IrisResourceNotFound extends IrisNotFound {
+  readonly componentId: number;
+
+  constructor(componentId: number) {
+    super({ resource: "Resource", id: componentId, context: "world" });
+    this.componentId = componentId;
   }
 }
 

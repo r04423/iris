@@ -4,6 +4,7 @@
 
 export {
   IrisCircularDependency,
+  IrisComponentNotFound,
   IrisDefinitionLimitExceeded,
   IrisDuplicate,
   IrisDuplicateDefinition,
@@ -26,6 +27,7 @@ export {
   IrisLimitExceeded,
   IrisNotFound,
   IrisQueryLimitExceeded,
+  IrisResourceNotFound,
   IrisRevisionOverflow,
   IrisScheduleNotFound,
   IrisSchedulerBusy,
@@ -50,7 +52,7 @@ export { createWorld, getWorldInternals, resetWorld } from "./world.js";
 // Entity Operations
 // ============================================================================
 
-export { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
+export { assertEntity, createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 
 // ============================================================================
 // Component Operations
@@ -59,6 +61,8 @@ export { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 export {
   addComponent,
   addComponents,
+  assertComponent,
+  assertComponents,
   getComponent,
   getComponentValue,
   getComponentView,
@@ -89,6 +93,7 @@ export { getPairRelation, getPairTarget, getRelationTargets, pair } from "./rela
 
 export {
   addResource,
+  assertResource,
   getResource,
   getResourceValue,
   getResourceView,

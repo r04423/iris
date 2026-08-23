@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   addComponent,
   addComponents,
+  assertComponent,
+  assertComponents,
   getComponent,
   getComponentValue,
   getComponentView,
@@ -16,7 +18,7 @@ import {
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
 import { createEntity, destroyEntity, ensureEntity, getEntityMeta, isEntityAlive } from "./entity.js";
-import { IrisInvalidArgument, IrisNotFound } from "./error.js";
+import { IrisComponentNotFound, IrisInvalidArgument, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
 import { added, changed, queryEntities } from "./query.js";
 import { defineComponent, defineRelation, Wildcard } from "./registry.js";
@@ -617,6 +619,59 @@ describe("Component", () => {
       const entity2 = createEntity(world);
 
       assert.strictEqual(hasComponent(world, entity1, entity2), false);
+    });
+
+    it("asserts and narrows a present component", () => {
+      const world = createWorld();
+      const Position = defineComponent("assert_has_Position", { schema: { x: Type.f32() } });
+      const created = createEntity(world);
+      const entity: EntityId = created;
+
+      function initialize() {
+        addComponent(world, created, Position, { x: 1 });
+      }
+
+      initialize();
+      assertComponent(world, entity, Position);
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      assert.strictEqual(x, 1);
+    });
+
+    it("asserts and narrows every component in a collection", () => {
+      const world = createWorld();
+      const Position = defineComponent("assert_all_Position", { schema: { x: Type.f32() } });
+      const Velocity = defineComponent("assert_all_Velocity", { schema: { x: Type.f32() } });
+      const created = createEntity(world, [
+        [Position, { x: 1 }],
+        [Velocity, { x: 2 }],
+      ]);
+      const entity: EntityId = created;
+
+      assertComponents(world, entity, [Position, Velocity]);
+
+      const x: number = getComponentValue(world, entity, Position, "x");
+      const velocity: number = getComponentValue(world, entity, Velocity, "x");
+      assert.strictEqual(x, 1);
+      assert.strictEqual(velocity, 2);
+    });
+
+    it("reports absent entities and the first missing component", () => {
+      const world = createWorld();
+      const Present = defineComponent("assert_missing_Present");
+      const Missing = defineComponent("assert_missing_Missing");
+      const Later = defineComponent("assert_missing_Later");
+      const entity = createEntity(world, [Present]);
+
+      assert.throws(
+        () => assertComponent(world, entity, Missing),
+        (error: unknown) =>
+          error instanceof IrisComponentNotFound && error.entityId === entity && error.componentId === Missing
+      );
+      assert.throws(
+        () => assertComponents(world, entity, [Present, Missing, Later]),
+        (error: unknown) => error instanceof IrisComponentNotFound && error.componentId === Missing
+      );
     });
 
     it("throws for destroyed entities (fail-fast)", () => {
