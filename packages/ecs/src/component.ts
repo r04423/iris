@@ -3,13 +3,12 @@ import {
   archetypeTraverseAdd,
   archetypeTraverseRemove,
   destroyArchetype,
+  readComponentColumns,
   readField,
-  readVectorField,
   stampComponentChanged,
   viewVectorField,
   writeComponentColumns,
   writeField,
-  writeVectorField,
 } from "./archetype.js";
 import type { Component, Entity, EntityId, EntityWith, Pair, Relation, Tag } from "./encoding.js";
 import { encodePair, extractPairRelationId, extractPairTargetId, extractPairTargetType, isPair } from "./encoding.js";
@@ -19,14 +18,7 @@ import { IrisInvalidPair } from "./error.js";
 import { fireObserverEvent } from "./observer.js";
 import { Exclusive, Wildcard } from "./registry.js";
 import { getPairRelation, getPairTarget } from "./relation.js";
-import type {
-  InferSchema,
-  InferSchemaRecord,
-  ScalarFields,
-  SchemaRecord,
-  TypedArrayInstance,
-  VectorFields,
-} from "./schema.js";
+import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -470,11 +462,100 @@ export function hasComponent<C extends EntityId>(
 }
 
 /**
- * Gets a scalar field value from a data component or pair.
+ * Gets a complete data component or pair as a record snapshot.
  *
  * Returns undefined when the component is absent; narrow with
- * {@link hasComponent} first for a non-optional type. Vector fields use
- * {@link getComponentVectorValue}.
+ * {@link hasComponent} first for a non-optional type. The record and its
+ * vector fields are copies; reference fields retain their stored values.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ *
+ * @example
+ * ```typescript
+ * const position = getComponent(world, entity, Position);
+ * ```
+ */
+export function getComponent<S extends SchemaRecord, N extends string>(
+  world: World,
+  entityId: EntityWith<Component<S, N>>,
+  componentId: Component<S, N>
+): InferSchemaRecord<S>;
+
+export function getComponent<S extends SchemaRecord, N extends string, T>(
+  world: World,
+  entityId: EntityWith<Pair<Relation<S, N>, T>>,
+  componentId: Pair<Relation<S, N>, T>
+): InferSchemaRecord<S>;
+
+export function getComponent<S extends SchemaRecord>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>
+): InferSchemaRecord<S> | undefined;
+
+export function getComponent<S extends SchemaRecord>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>
+): InferSchemaRecord<S> | undefined {
+  const { archetype, row } = ensureEntity(world, entityId);
+
+  return readComponentColumns(archetype, row, componentId) as InferSchemaRecord<S> | undefined;
+}
+
+/**
+ * Replaces a complete data component or pair record.
+ *
+ * No-op when the component is absent. Marks the component changed for
+ * `changed()` query filters.
+ *
+ * @throws {IrisEntityNotFound} If the entity is not alive
+ *
+ * @example
+ * ```typescript
+ * setComponent(world, entity, Position, { x: 10.0, y: 20.0 });
+ * ```
+ */
+export function setComponent<S extends SchemaRecord, N extends string>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S, N>,
+  data: InferSchemaRecord<S>
+): void;
+
+export function setComponent<S extends SchemaRecord, N extends string, T>(
+  world: World,
+  entityId: EntityId,
+  componentId: Pair<Relation<S, N>, T>,
+  data: InferSchemaRecord<S>
+): void;
+
+export function setComponent<S extends SchemaRecord>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>,
+  data: InferSchemaRecord<S>
+): void;
+
+export function setComponent<S extends SchemaRecord>(
+  world: World,
+  entityId: EntityId,
+  componentId: Component<S> | Pair<Relation<S>>,
+  data: InferSchemaRecord<S>
+): void {
+  const { archetype, row } = ensureEntity(world, entityId);
+
+  if (writeComponentColumns(archetype, row, componentId, data, world.revision)) {
+    fireObserverEvent(world, "componentChanged", componentId, entityId);
+  }
+}
+
+/**
+ * Gets a field value from a data component or pair.
+ *
+ * Scalar values are returned directly and vector fields as tuple copies.
+ * Returns undefined when the component is absent; narrow with
+ * {@link hasComponent} first for a non-optional type.
  *
  * @throws {IrisEntityNotFound} If the entity is not alive
  *
@@ -483,28 +564,28 @@ export function hasComponent<C extends EntityId>(
  * const x = getComponentValue(world, entity, Position, "x");
  * ```
  */
-export function getComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
+export function getComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
   world: World,
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentValue<S extends SchemaRecord, N extends string, T, K extends ScalarFields<S>>(
+export function getComponentValue<S extends SchemaRecord, N extends string, T, K extends keyof S>(
   world: World,
   entityId: EntityWith<Pair<Relation<S, N>, T>>,
   componentId: Pair<Relation<S, N>, T>,
   fieldName: K
 ): InferSchema<S[K]>;
 
-export function getComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): InferSchema<S[K]> | undefined;
 
-export function getComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function getComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
@@ -516,7 +597,7 @@ export function getComponentValue<S extends SchemaRecord, K extends ScalarFields
 }
 
 /**
- * Sets a scalar field value on a data component or pair.
+ * Sets a field value on a data component or pair.
  *
  * No-op when the component is absent. Marks the component changed for
  * `changed()` query filters.
@@ -528,7 +609,7 @@ export function getComponentValue<S extends SchemaRecord, K extends ScalarFields
  * setComponentValue(world, entity, Position, "x", 10.0);
  * ```
  */
-export function setComponentValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
+export function setComponentValue<S extends SchemaRecord, N extends string, K extends keyof S>(
   world: World,
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
@@ -536,7 +617,7 @@ export function setComponentValue<S extends SchemaRecord, N extends string, K ex
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, N extends string, T, K extends ScalarFields<S>>(
+export function setComponentValue<S extends SchemaRecord, N extends string, T, K extends keyof S>(
   world: World,
   entityId: EntityWith<Pair<Relation<S, N>, T>>,
   componentId: Pair<Relation<S, N>, T>,
@@ -544,7 +625,7 @@ export function setComponentValue<S extends SchemaRecord, N extends string, T, K
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
@@ -552,7 +633,7 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
   value: InferSchema<S[K]>
 ): void;
 
-export function setComponentValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function setComponentValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
@@ -570,14 +651,14 @@ export function setComponentValue<S extends SchemaRecord, K extends ScalarFields
  * Marks a component as changed without writing a value.
  *
  * Feeds `changed()` query filters after out-of-band writes -- e.g. mutations
- * through {@link getComponentVectorView}, which bypass change tracking.
+ * through {@link getComponentView}, which bypass change tracking.
  * No-op when the component is absent.
  *
  * @throws {IrisEntityNotFound} If the entity is not alive
  *
  * @example
  * ```typescript
- * const view = getComponentVectorView(world, entity, Position, "value");
+ * const view = getComponentView(world, entity, Position, "value");
  * view[0] += 1.0;
  * markComponentChanged(world, entity, Position);
  * ```
@@ -687,108 +768,8 @@ function markPairTopologyChanged(world: World, meta: EntityMeta, pairId: Pair): 
 }
 
 // ============================================================================
-// Vector Component Operations (Public API)
+// Component Views (Public API)
 // ============================================================================
-
-/**
- * Gets a vector field value as a tuple copy.
- *
- * Mutating the returned array does not affect stored data; use
- * {@link getComponentVectorView} for zero-copy access. Returns undefined when
- * the component is absent; narrow with {@link hasComponent} first for a
- * non-optional type.
- *
- * @throws {IrisEntityNotFound} If the entity is not alive
- *
- * @example
- * ```typescript
- * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
- * const pos = getComponentVectorValue(world, entity, Position, "value"); // [number, number]
- * ```
- */
-export function getComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityWith<Component<S, N>>,
-  componentId: Component<S, N>,
-  fieldName: K
-): InferSchema<S[K]>;
-
-export function getComponentVectorValue<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityWith<Pair<Relation<S, N>, T>>,
-  componentId: Pair<Relation<S, N>, T>,
-  fieldName: K
-): InferSchema<S[K]>;
-
-export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityId,
-  componentId: Component<S> | Pair<Relation<S>>,
-  fieldName: K
-): InferSchema<S[K]> | undefined;
-
-export function getComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityId,
-  componentId: Component<S> | Pair<Relation<S>>,
-  fieldName: K
-): InferSchema<S[K]> | undefined {
-  const { archetype, row } = ensureEntity(world, entityId);
-
-  return readVectorField(archetype, componentId, fieldName as string, row) as InferSchema<S[K]> | undefined;
-}
-
-/**
- * Sets a vector field value from a tuple.
- *
- * No-op when the component is absent. Marks the component changed for
- * `changed()` query filters.
- *
- * @throws {IrisEntityNotFound} If the entity is not alive
- *
- * @example
- * ```typescript
- * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
- * setComponentVectorValue(world, entity, Position, "value", [10, 20]);
- * ```
- */
-export function setComponentVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityWith<Component<S, N>>,
-  componentId: Component<S, N>,
-  fieldName: K,
-  value: InferSchema<S[K]>
-): void;
-
-export function setComponentVectorValue<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityWith<Pair<Relation<S, N>, T>>,
-  componentId: Pair<Relation<S, N>, T>,
-  fieldName: K,
-  value: InferSchema<S[K]>
-): void;
-
-export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityId,
-  componentId: Component<S> | Pair<Relation<S>>,
-  fieldName: K,
-  value: InferSchema<S[K]>
-): void;
-
-export function setComponentVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  entityId: EntityId,
-  componentId: Component<S> | Pair<Relation<S>>,
-  fieldName: K,
-  value: InferSchema<S[K]>
-): void {
-  const { archetype, row } = ensureEntity(world, entityId);
-
-  if (writeVectorField(archetype, componentId, fieldName as string, row, value as number[], world.revision)) {
-    fireObserverEvent(world, "componentChanged", componentId, entityId);
-  }
-}
 
 /**
  * Gets a zero-copy typed array view into a vector field.
@@ -803,32 +784,32 @@ export function setComponentVectorValue<S extends SchemaRecord, K extends Vector
  * @example
  * ```typescript
  * const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
- * const view = getComponentVectorView(world, entity, Position, "value"); // Float32Array
+ * const view = getComponentView(world, entity, Position, "value"); // Float32Array
  * view[0] += 1.0; // direct mutation, no copy
  * ```
  */
-export function getComponentVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+export function getComponentView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
   world: World,
   entityId: EntityWith<Component<S, N>>,
   componentId: Component<S, N>,
   fieldName: K
 ): TypedArrayInstance;
 
-export function getComponentVectorView<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
+export function getComponentView<S extends SchemaRecord, N extends string, T, K extends VectorFields<S>>(
   world: World,
   entityId: EntityWith<Pair<Relation<S, N>, T>>,
   componentId: Pair<Relation<S, N>, T>,
   fieldName: K
 ): TypedArrayInstance;
 
-export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+export function getComponentView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,
   fieldName: K
 ): TypedArrayInstance | undefined;
 
-export function getComponentVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+export function getComponentView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   entityId: EntityId,
   componentId: Component<S> | Pair<Relation<S>>,

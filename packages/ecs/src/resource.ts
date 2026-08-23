@@ -1,12 +1,10 @@
 import {
   addComponent,
   getComponentValue,
-  getComponentVectorValue,
-  getComponentVectorView,
+  getComponentView,
   hasComponent,
   removeComponent,
   setComponentValue,
-  setComponentVectorValue,
 } from "./component.js";
 import type { Component, EntityId, EntityWith } from "./encoding.js";
 import type {
@@ -174,7 +172,7 @@ export function getResourceVectorValue<S extends SchemaRecord, K extends VectorF
   component: Component<S>,
   key: K
 ): InferSchema<S[K]> | undefined {
-  return getComponentVectorValue(world, component, component, key);
+  return getComponentValue(world, component, component, key);
 }
 
 /**
@@ -208,7 +206,7 @@ export function setResourceVectorValue<S extends SchemaRecord, K extends VectorF
   key: K,
   value: InferSchema<S[K]>
 ): void {
-  setComponentVectorValue(world, component, component, key, value);
+  setComponentValue(world, component, component, key, value);
 }
 
 /**
@@ -244,5 +242,5 @@ export function getResourceVectorView<S extends SchemaRecord, K extends VectorFi
   component: Component<S>,
   key: K
 ): TypedArrayInstance | undefined {
-  return getComponentVectorView(world, component, component, key);
+  return getComponentView(world, component, component, key);
 }

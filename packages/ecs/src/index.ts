@@ -59,15 +59,15 @@ export { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 export {
   addComponent,
   addComponents,
+  getComponent,
   getComponentValue,
-  getComponentVectorValue,
-  getComponentVectorView,
+  getComponentView,
   hasComponent,
   markComponentChanged,
   removeComponent,
   removeComponents,
+  setComponent,
   setComponentValue,
-  setComponentVectorValue,
 } from "./component.js";
 
 // ============================================================================

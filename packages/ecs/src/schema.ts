@@ -130,8 +130,7 @@ function numericFactory(ArrayCtor: TypedArrayConstructor): NumericFactory {
  * `defineRelation`.
  *
  * Numeric factories take an optional size (2-16) to declare a fixed-length
- * vector field, read and written through the vector accessors like
- * `getComponentVectorValue`. Value types flow into the accessors
+ * vector field. Value types flow into component and resource accessors
  * automatically -- no annotations needed.
  *
  * @example
@@ -232,7 +231,7 @@ export type InferSchema<S extends Schema> = S extends Schema<infer T> ? T : neve
 /**
  * Union of all typed array instances.
  *
- * The type of the zero-copy views returned by `getComponentVectorView` and
+ * The type of the zero-copy views returned by `getComponentView` and
  * `getResourceVectorView`.
  */
 export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
@@ -241,8 +240,7 @@ export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
  * Field names of a schema record holding a single value per entity -- numbers,
  * strings, booleans, references.
  *
- * The field-name constraint of the scalar accessors: `getComponentValue`,
- * `setComponentValue`, and their resource equivalents accept only these keys.
+ * The field-name constraint of the scalar resource accessors.
  */
 export type ScalarFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? never : K;
@@ -251,8 +249,8 @@ export type ScalarFields<S extends SchemaRecord> = {
 /**
  * Field names of a schema record declared as fixed-length vectors.
  *
- * The field-name constraint of the vector accessors: `getComponentVectorValue`,
- * `setComponentVectorValue`, and the view getters accept only these keys.
+ * The field-name constraint of component and resource view getters and the
+ * vector-specific resource accessors.
  */
 export type VectorFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? K : never;

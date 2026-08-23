@@ -3,15 +3,15 @@ import { describe, it } from "node:test";
 import {
   addComponent,
   addComponents,
+  getComponent,
   getComponentValue,
-  getComponentVectorValue,
-  getComponentVectorView,
+  getComponentView,
   hasComponent,
   markComponentChanged,
   removeComponent,
   removeComponents,
+  setComponent,
   setComponentValue,
-  setComponentVectorValue,
 } from "./component.js";
 import type { EntityId } from "./encoding.js";
 import { encodePair, extractId } from "./encoding.js";
@@ -1048,6 +1048,99 @@ describe("Component", () => {
   });
 
   // ============================================================================
+  // Whole Component Access
+  // ============================================================================
+
+  describe("Whole Component Access", () => {
+    it("returns an independent record and vector snapshot", () => {
+      const world = createWorld();
+      const Particle = defineComponent("ParticleWholeSnapshot", {
+        schema: {
+          position: Type.f32(2),
+          mass: Type.f32(),
+          cache: Type.ref<Map<string, number>>(),
+        },
+      });
+      const cache = new Map([["score", 1]]);
+      const entity = createEntity(world);
+
+      addComponent(world, entity, [Particle, { position: [10, 20], mass: 2, cache }]);
+
+      const snapshot: { position: [number, number]; mass: number; cache: Map<string, number> } = getComponent(
+        world,
+        entity,
+        Particle
+      );
+      const next = getComponent(world, entity, Particle);
+
+      assert.notStrictEqual(snapshot, next);
+      assert.notStrictEqual(snapshot.position, next.position);
+      assert.strictEqual(snapshot.cache, cache);
+
+      snapshot.position[0] = 99;
+      snapshot.mass = 4;
+
+      assert.deepStrictEqual(getComponent(world, entity, Particle), {
+        position: [10, 20],
+        mass: 2,
+        cache,
+      });
+    });
+
+    it("replaces the complete record and announces one change", () => {
+      const world = createWorld();
+      const Transform = defineComponent("TransformWholeReplace", {
+        schema: { position: Type.f32(2), rotation: Type.f32() },
+      });
+      const entity = createEntity(world);
+
+      addComponent(world, entity, [Transform, { position: [0, 0], rotation: 0 }]);
+
+      let changes = 0;
+      registerObserverCallback(world, "componentChanged", (componentId, observedEntity) => {
+        if (componentId === Transform && observedEntity === entity) {
+          changes++;
+        }
+      });
+
+      setComponent(world, entity, Transform, { position: [10, 20], rotation: 45 });
+
+      assert.deepStrictEqual(getComponent(world, entity, Transform), { position: [10, 20], rotation: 45 });
+      assert.strictEqual(changes, 1);
+    });
+
+    it("gets and sets data relation records", () => {
+      const world = createWorld();
+      const Offset = defineRelation("OffsetWholeRecord", {
+        schema: { value: Type.f32(2), weight: Type.f32() },
+      });
+      const entity = createEntity(world);
+      const target = createEntity(world);
+      const offset = pair(Offset, target);
+
+      addComponent(world, entity, [offset, { value: [1, 2], weight: 3 }]);
+
+      const before: { value: [number, number]; weight: number } = getComponent(world, entity, offset);
+      assert.deepStrictEqual(before, { value: [1, 2], weight: 3 });
+
+      setComponent(world, entity, offset, { value: [4, 5], weight: 6 });
+      assert.deepStrictEqual(getComponent(world, entity, offset), { value: [4, 5], weight: 6 });
+    });
+
+    it("returns undefined and skips writes when the component is absent", () => {
+      const world = createWorld();
+      const Position = defineComponent("PositionWholeAbsent", { schema: { x: Type.f32(), y: Type.f32() } });
+      const entity = createEntity(world);
+
+      assert.strictEqual(getComponent(world, entity, Position), undefined);
+
+      setComponent(world, entity, Position, { x: 10, y: 20 });
+
+      assert.strictEqual(getComponent(world, entity, Position), undefined);
+    });
+  });
+
+  // ============================================================================
   // Mixed Tag and Data Component Usage
   // ============================================================================
 
@@ -1543,7 +1636,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position, { value: [10.5, 20.5] }]);
 
-      const pos = getComponentVectorValue(world, entity, Position, "value");
+      const pos = getComponentValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [10.5, 20.5]);
     });
 
@@ -1554,10 +1647,10 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position, { value: [10, 20] }]);
 
-      const pos = getComponentVectorValue(world, entity, Position, "value")!;
+      const pos = getComponentValue(world, entity, Position, "value")!;
       pos[0] = 999;
 
-      const pos2 = getComponentVectorValue(world, entity, Position, "value");
+      const pos2 = getComponentValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos2, [10, 20]);
     });
 
@@ -1568,9 +1661,9 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position, { value: [0, 0] }]);
 
-      setComponentVectorValue(world, entity, Position, "value", [30.5, 40.5]);
+      setComponentValue(world, entity, Position, "value", [30.5, 40.5]);
 
-      const pos = getComponentVectorValue(world, entity, Position, "value");
+      const pos = getComponentValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [30.5, 40.5]);
     });
 
@@ -1583,7 +1676,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position, { value: [10, 20] }]);
 
-      const view = getComponentVectorView(world, entity, Position, "value");
+      const view = getComponentView(world, entity, Position, "value");
       assert.ok(view instanceof Float32Array);
       assert.strictEqual(view.length, 2);
       assert.strictEqual(view[0], 10);
@@ -1597,11 +1690,11 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position, { value: [10, 20] }]);
 
-      const view = getComponentVectorView(world, entity, Position, "value")!;
+      const view = getComponentView(world, entity, Position, "value")!;
       view[0] = 99;
       view[1] = 88;
 
-      const pos = getComponentVectorValue(world, entity, Position, "value");
+      const pos = getComponentValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [99, 88]);
     });
 
@@ -1614,7 +1707,7 @@ describe("Component", () => {
       addComponent(world, entity, [offset, { value: [10, 20] }]);
 
       assert.ok(hasComponent(world, entity, offset));
-      const value: [number, number] = getComponentVectorValue(world, entity, offset, "value");
+      const value: [number, number] = getComponentValue(world, entity, offset, "value");
       assert.deepStrictEqual(value, [10, 20]);
     });
 
@@ -1626,9 +1719,9 @@ describe("Component", () => {
       const offset = pair(Offset, target);
       addComponent(world, entity, [offset, { value: [0, 0] }]);
 
-      setComponentVectorValue(world, entity, offset, "value", [30, 40]);
+      setComponentValue(world, entity, offset, "value", [30, 40]);
 
-      assert.deepStrictEqual(getComponentVectorValue(world, entity, offset, "value"), [30, 40]);
+      assert.deepStrictEqual(getComponentValue(world, entity, offset, "value"), [30, 40]);
     });
 
     it("gets live relation pair vector view", () => {
@@ -1640,11 +1733,11 @@ describe("Component", () => {
       addComponent(world, entity, [offset, { value: [10, 20] }]);
 
       assert.ok(hasComponent(world, entity, offset));
-      const view: ArrayBufferView = getComponentVectorView(world, entity, offset, "value");
+      const view: ArrayBufferView = getComponentView(world, entity, offset, "value");
       assert.ok(view instanceof Float32Array);
       view[0] = 99;
 
-      assert.deepStrictEqual(getComponentVectorValue(world, entity, offset, "value"), [99, 20]);
+      assert.deepStrictEqual(getComponentValue(world, entity, offset, "value"), [99, 20]);
     });
 
     it("returns undefined for missing relation pair", () => {
@@ -1656,8 +1749,8 @@ describe("Component", () => {
       const target = createEntity(world);
       const offset = pair(Offset, target);
 
-      assert.strictEqual(getComponentVectorValue(world, entity, offset, "value"), undefined);
-      assert.strictEqual(getComponentVectorView(world, entity, offset, "value"), undefined);
+      assert.strictEqual(getComponentValue(world, entity, offset, "value"), undefined);
+      assert.strictEqual(getComponentView(world, entity, offset, "value"), undefined);
     });
 
     it("returns undefined for missing component", () => {
@@ -1668,8 +1761,8 @@ describe("Component", () => {
 
       const entity = createEntity(world);
 
-      assert.strictEqual(getComponentVectorValue(world, entity, Position, "value"), undefined);
-      assert.strictEqual(getComponentVectorView(world, entity, Position, "value"), undefined);
+      assert.strictEqual(getComponentValue(world, entity, Position, "value"), undefined);
+      assert.strictEqual(getComponentView(world, entity, Position, "value"), undefined);
     });
 
     it("set updates change detection tick", async () => {
@@ -1695,7 +1788,7 @@ describe("Component", () => {
       await runOnce(world);
       assert.strictEqual(changeCount, 1); // no change
 
-      setComponentVectorValue(world, entity, Position, "value", [1, 2]);
+      setComponentValue(world, entity, Position, "value", [1, 2]);
       await runOnce(world);
       assert.strictEqual(changeCount, 2); // changed
     });
@@ -1707,10 +1800,10 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Position3D, { value: [1, 2, 3] }]);
 
-      const pos = getComponentVectorValue(world, entity, Position3D, "value");
+      const pos = getComponentValue(world, entity, Position3D, "value");
       assert.deepStrictEqual(pos, [1, 2, 3]);
 
-      const view = getComponentVectorView(world, entity, Position3D, "value")!;
+      const view = getComponentView(world, entity, Position3D, "value")!;
       assert.strictEqual(view.length, 3);
     });
 
@@ -1721,7 +1814,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Color, { value: [255, 128, 0, 255] }]);
 
-      const color = getComponentVectorValue(world, entity, Color, "value");
+      const color = getComponentValue(world, entity, Color, "value");
       assert.deepStrictEqual(color, [255, 128, 0, 255]);
     });
 
@@ -1737,7 +1830,7 @@ describe("Component", () => {
       const entity = createEntity(world);
       addComponent(world, entity, [Particle, { position: [1, 2, 3], mass: 9.8 }]);
 
-      const pos = getComponentVectorValue(world, entity, Particle, "position");
+      const pos = getComponentValue(world, entity, Particle, "position");
       assert.deepStrictEqual(pos, [1, 2, 3]);
 
       const mass = getComponentValue(world, entity, Particle, "mass");
@@ -1758,15 +1851,15 @@ describe("Component", () => {
 
       addComponent(world, entity, [Velocity, { value: [1, 2] }]);
 
-      const pos = getComponentVectorValue(world, entity, Position, "value");
+      const pos = getComponentValue(world, entity, Position, "value");
       assert.deepStrictEqual(pos, [10, 20]);
 
-      const vel = getComponentVectorValue(world, entity, Velocity, "value");
+      const vel = getComponentValue(world, entity, Velocity, "value");
       assert.deepStrictEqual(vel, [1, 2]);
 
       removeComponent(world, entity, Position);
 
-      const velAfter = getComponentVectorValue(world, entity, Velocity, "value");
+      const velAfter = getComponentValue(world, entity, Velocity, "value");
       assert.deepStrictEqual(velAfter, [1, 2]);
     });
 
@@ -1784,7 +1877,7 @@ describe("Component", () => {
       }
 
       for (let i = 0; i < 5; i++) {
-        const pos = getComponentVectorValue(world, entities[i]!, Position, "value");
+        const pos = getComponentValue(world, entities[i]!, Position, "value");
         assert.deepStrictEqual(pos, [i * 10, i * 10 + 1]);
       }
     });

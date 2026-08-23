@@ -449,17 +449,25 @@ export function stampComponentChanged(
 // ============================================================================
 
 /**
- * Reads one row's scalar field value. Undefined when the component or field
- * is absent.
+ * Reads one row's field value. Vector fields return fresh arrays. Undefined
+ * when the component or field is absent.
  * @internal
  */
 export function readField(archetype: Archetype, componentId: EntityId, fieldName: string, row: number): unknown {
-  return resolveColumn(archetype, componentId, fieldName)?.[row];
+  const column = resolveColumn(archetype, componentId, fieldName);
+
+  if (!column) {
+    return;
+  }
+
+  return getColumnStride(column, archetype.capacity) === 1
+    ? column[row]
+    : readVectorSlot(column, row, archetype.capacity);
 }
 
 /**
- * Writes one row's scalar field value and stamps the changed tick. Returns
- * false without writing when the component or field is absent.
+ * Writes one row's field value and stamps the changed tick. Returns false
+ * without writing when the component or field is absent.
  * @internal
  */
 export function writeField(
@@ -476,52 +484,12 @@ export function writeField(
     return false;
   }
 
-  column[row] = value;
-  stampComponentChanged(archetype, componentId, row, revision);
-
-  return true;
-}
-
-/**
- * Reads one row's vector field as a fresh array. Undefined when the component
- * or field is absent.
- * @internal
- */
-export function readVectorField(
-  archetype: Archetype,
-  componentId: EntityId,
-  fieldName: string,
-  row: number
-): unknown[] | undefined {
-  const column = resolveColumn(archetype, componentId, fieldName);
-
-  if (!column) {
-    return;
+  if (getColumnStride(column, archetype.capacity) === 1) {
+    column[row] = value;
+  } else {
+    writeVectorSlot(column, row, archetype.capacity, value as number[]);
   }
 
-  return readVectorSlot(column, row, archetype.capacity);
-}
-
-/**
- * Writes one row's vector field from an array and stamps the changed tick.
- * Returns false without writing when the component or field is absent.
- * @internal
- */
-export function writeVectorField(
-  archetype: Archetype,
-  componentId: EntityId,
-  fieldName: string,
-  row: number,
-  value: number[],
-  revision: number
-): boolean {
-  const column = resolveColumn(archetype, componentId, fieldName);
-
-  if (!column) {
-    return false;
-  }
-
-  writeVectorSlot(column, row, archetype.capacity, value);
   stampComponentChanged(archetype, componentId, row, revision);
 
   return true;
@@ -550,6 +518,35 @@ export function viewVectorField(
 // ============================================================================
 // Component Data Writes
 // ============================================================================
+
+/**
+ * Reads one component row into a fresh record. Vector fields are copied;
+ * reference fields retain their stored values. Undefined when the component
+ * has no columns.
+ * @internal
+ */
+export function readComponentColumns(
+  archetype: Archetype,
+  row: number,
+  componentId: EntityId
+): Record<string, unknown> | undefined {
+  const fieldColumns = archetype.columns.get(componentId);
+
+  if (!fieldColumns) {
+    return;
+  }
+
+  const data: Record<string, unknown> = {};
+
+  for (const fieldName in fieldColumns) {
+    const column = fieldColumns[fieldName]!;
+
+    data[fieldName] =
+      getColumnStride(column, archetype.capacity) === 1 ? column[row] : readVectorSlot(column, row, archetype.capacity);
+  }
+
+  return data;
+}
 
 /**
  * Writes a record of field values into a component's columns at one row and

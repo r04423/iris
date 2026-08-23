@@ -47,7 +47,7 @@ import {
   defineComponent,
   defineSystem,
   collectEntities,
-  getComponentVectorView,
+  getComponentView,
   markComponentChanged,
   addSystem,
   runOnce,
@@ -73,8 +73,8 @@ const movementSystem = defineSystem("movementSystem", (world) => {
   const entities = collectEntities(world, [Position, Velocity]);
 
   for (const e of entities) {
-    const pos = getComponentVectorView(world, e, Position, "value");
-    const vel = getComponentVectorView(world, e, Velocity, "value");
+    const pos = getComponentView(world, e, Position, "value");
+    const vel = getComponentView(world, e, Velocity, "value");
 
     pos[0] += vel[0];
     pos[1] += vel[1];
@@ -184,11 +184,12 @@ import {
   Type,
   addComponent,
   addComponents,
+  getComponent,
+  setComponent,
   getComponentValue,
   setComponentValue,
-  getComponentVectorValue,
-  setComponentVectorValue,
-  getComponentVectorView,
+  getComponentView,
+  markComponentChanged,
 } from "iris-ecs";
 
 const Position = defineComponent("Position", { schema: { value: Type.f32(2) } });
@@ -197,13 +198,20 @@ const Health = defineComponent("Health", { schema: { current: Type.i32(), max: T
 addComponent(world, entity, [Position, { value: [0, 0] }]);
 addComponent(world, entity, [Health, { current: 100, max: 100 }]);
 
-// Scalar fields use getComponentValue / setComponentValue
-const hp = getComponentValue(world, entity, Health, "current");  // 100
+// Read or replace the complete record
+const health = getComponent(world, entity, Health);  // { current: 100, max: 100 }
+setComponent(world, entity, Health, { current: 90, max: 100 });
+
+// Read or write one scalar or vector field
+const hp = getComponentValue(world, entity, Health, "current");  // 90
 setComponentValue(world, entity, Health, "current", 80);
 
-// Vector fields use dedicated access functions
-const pos = getComponentVectorView(world, entity, Position, "value");  // Float32Array [0, 0]
+// Borrow a live view when copying a vector is unnecessary
+const pos = getComponentView(world, entity, Position, "value");  // Float32Array [0, 0]
+pos[0] = 10;
 ```
+
+`getComponent()` returns an allocated record snapshot. Its vector fields are also copies, while reference fields retain their stored values. `setComponent()` replaces every field in the record. Use `getComponentValue()` and `setComponentValue()` when you only need one field, avoiding record allocations.
 
 #### Schema Types
 
@@ -260,9 +268,9 @@ When component fields represent logically grouped numbers (positions, colors, di
 import {
   defineComponent,
   addComponent,
-  getComponentVectorValue,
-  setComponentVectorValue,
-  getComponentVectorView,
+  getComponentValue,
+  setComponentValue,
+  getComponentView,
   Type,
 } from "iris-ecs";
 
@@ -274,21 +282,22 @@ addComponent(world, entity, [Position, { value: [10, 20] }]);
 addComponent(world, entity, [Color, { value: [255, 128, 0, 255] }]);
 ```
 
-Vector fields use dedicated access functions instead of the scalar `getComponentValue` / `setComponentValue`:
+The value functions copy vector fields as tuples:
 
 ```typescript
 // Copy-based read -- returns a tuple (e.g., [number, number])
-const pos = getComponentVectorValue(world, entity, Position, "value");
+const pos = getComponentValue(world, entity, Position, "value");
 
 // Copy-based write
-setComponentVectorValue(world, entity, Position, "value", [30, 40]);
+setComponentValue(world, entity, Position, "value", [30, 40]);
 
 // Zero-copy view -- returns a TypedArray subarray backed by the column buffer
-const view = getComponentVectorView(world, entity, Position, "value");
+const view = getComponentView(world, entity, Position, "value");
 view[0] += 1.0; // direct mutation, no copy
+markComponentChanged(world, entity, Position);
 ```
 
-The zero-copy view shares the underlying buffer -- mutations are immediate. Views are invalidated if the archetype resizes (when new entities are added and capacity grows). Use views within a system tick; do not cache across frames.
+The view shares the underlying buffer, so mutations are immediate and bypass automatic change tracking. Call `markComponentChanged()` after writing. Structural changes can invalidate views; use them locally and do not cache them.
 
 Components can mix scalar and vector fields:
 
@@ -302,11 +311,9 @@ const Particle = defineComponent("Particle", {
 
 addComponent(world, entity, [Particle, { position: [0, 0, 0], mass: 1.0 }]);
 
-const mass = getComponentValue(world, entity, Particle, "mass");            // number
-const pos = getComponentVectorValue(world, entity, Particle, "position");   // [number, number, number]
+const mass = getComponentValue(world, entity, Particle, "mass");          // number
+const pos = getComponentValue(world, entity, Particle, "position");       // [number, number, number]
 ```
-
-TypeScript enforces the scalar/vector boundary at the type level -- `getComponentValue` rejects vector fields, and `getComponentVectorValue` rejects scalar fields.
 
 ### Resources
 
@@ -346,7 +353,7 @@ const resources = collectEntities(world, [Time]);
 
 Use resources for frame timing, configuration, asset registry, input state, physics settings, or any global data that systems need but doesn't belong to a specific entity.
 
-Resources with vector fields use dedicated access functions, mirroring the component vector API:
+Resources with vector fields use dedicated resource accessors:
 
 ```typescript
 import {
@@ -462,7 +469,7 @@ const p = pair(Targets, enemy);
 const priority = getComponentValue(world, turret, p, "priority");
 ```
 
-Vector relation fields use the same vector accessors as components.
+Relation data uses the same record, value, and view accessors as components.
 
 ```typescript
 const Offset = defineRelation("Offset", {
@@ -471,7 +478,7 @@ const Offset = defineRelation("Offset", {
 
 const p = pair(Offset, target);
 addComponent(world, entity, [p, { value: [10, 20] }]);
-const offset = getComponentVectorView(world, entity, p, "value");
+const offset = getComponentView(world, entity, p, "value");
 ```
 
 ### Archetypes (Under the Hood)
@@ -515,7 +522,7 @@ import { collectEntities, queryFirstEntity, not } from "iris-ecs";
 const entities = collectEntities(world, [Position, Velocity]);
 
 for (const entity of entities) {
-  const pos = getComponentVectorView(world, entity, Position, "value")!;
+  const pos = getComponentView(world, entity, Position, "value")!;
   // ...
 }
 
@@ -570,7 +577,7 @@ import {
   run,
   stop,
   collectEntities,
-  getComponentVectorView,
+  getComponentView,
   getResourceValue,
   markComponentChanged,
 } from "iris-ecs";
@@ -581,8 +588,8 @@ const movementSystem = defineSystem("movementSystem", (world) => {
   const entities = collectEntities(world, [Position, Velocity]);
 
   for (const e of entities) {
-    const pos = getComponentVectorView(world, e, Position, "value");
-    const vel = getComponentVectorView(world, e, Velocity, "value");
+    const pos = getComponentView(world, e, Position, "value");
+    const vel = getComponentView(world, e, Velocity, "value");
 
     pos[0] += vel[0] * dt;
     pos[1] += vel[1] * dt;
