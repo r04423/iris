@@ -232,7 +232,7 @@ export type InferSchema<S extends Schema> = S extends Schema<infer T> ? T : neve
  * Union of all typed array instances.
  *
  * The type of the zero-copy views returned by `getComponentView` and
- * `getResourceVectorView`.
+ * `getResourceView`.
  */
 export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
 
@@ -240,7 +240,7 @@ export type TypedArrayInstance = InstanceType<TypedArrayConstructor>;
  * Field names of a schema record holding a single value per entity -- numbers,
  * strings, booleans, references.
  *
- * The field-name constraint of the scalar resource accessors.
+ * Useful for APIs that deliberately exclude vector fields.
  */
 export type ScalarFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? never : K;
@@ -249,8 +249,7 @@ export type ScalarFields<S extends SchemaRecord> = {
 /**
  * Field names of a schema record declared as fixed-length vectors.
  *
- * The field-name constraint of component and resource view getters and the
- * vector-specific resource accessors.
+ * The field-name constraint of component and resource view getters.
  */
 export type VectorFields<S extends SchemaRecord> = {
   [K in keyof S]: S[K] extends VectorSchema ? K : never;

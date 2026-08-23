@@ -1,20 +1,16 @@
 import {
   addComponent,
+  getComponent,
   getComponentValue,
   getComponentView,
   hasComponent,
+  markComponentChanged,
   removeComponent,
+  setComponent,
   setComponentValue,
 } from "./component.js";
-import type { Component, EntityId, EntityWith } from "./encoding.js";
-import type {
-  InferSchema,
-  InferSchemaRecord,
-  ScalarFields,
-  SchemaRecord,
-  TypedArrayInstance,
-  VectorFields,
-} from "./schema.js";
+import type { Component, EntityWith } from "./encoding.js";
+import type { InferSchema, InferSchemaRecord, SchemaRecord, TypedArrayInstance, VectorFields } from "./schema.js";
 import type { World } from "./world.js";
 
 // ============================================================================
@@ -56,7 +52,7 @@ export function addResource<S extends SchemaRecord, N extends string>(
  * removeResource(world, Time);
  * ```
  */
-export function removeResource(world: World, component: EntityId): void {
+export function removeResource(world: World, component: Component): void {
   removeComponent(world, component, component);
 }
 
@@ -76,39 +72,83 @@ export function removeResource(world: World, component: EntityId): void {
 export function hasResource<S extends SchemaRecord, N extends string>(
   world: World,
   component: Component<S, N>
-): component is Component<S, N> & EntityWith<Component<S, N>>;
-
-export function hasResource(world: World, component: EntityId): boolean;
-
-export function hasResource(world: World, component: EntityId): boolean {
+): component is Component<S, N> & EntityWith<Component<S, N>> {
   return hasComponent(world, component, component);
 }
 
 /**
- * Gets a scalar field value from a resource.
+ * Gets a complete resource record snapshot.
  *
  * Returns undefined when the resource is absent; narrow with
- * {@link hasResource} first for a non-optional type. Vector fields use
- * {@link getResourceVectorValue}.
+ * {@link hasResource} first for a non-optional type. The record and its vector
+ * fields are copies; reference fields retain their stored values.
+ *
+ * @example
+ * ```typescript
+ * const time = getResource(world, Time);
+ * ```
+ */
+export function getResource<S extends SchemaRecord, N extends string>(
+  world: World,
+  component: Component<S, N> & EntityWith<Component<S, N>>
+): InferSchemaRecord<S>;
+
+export function getResource<S extends SchemaRecord>(
+  world: World,
+  component: Component<S>
+): InferSchemaRecord<S> | undefined;
+
+export function getResource<S extends SchemaRecord>(
+  world: World,
+  component: Component<S>
+): InferSchemaRecord<S> | undefined {
+  return getComponent(world, component, component);
+}
+
+/**
+ * Replaces a complete resource record.
+ *
+ * No-op when the resource is absent. Marks the resource changed for
+ * `changed()` query filters.
+ *
+ * @example
+ * ```typescript
+ * setResource(world, Time, { delta: 0.033 });
+ * ```
+ */
+export function setResource<S extends SchemaRecord>(
+  world: World,
+  component: Component<S>,
+  data: InferSchemaRecord<S>
+): void {
+  setComponent(world, component, component, data);
+}
+
+/**
+ * Gets a field value from a resource.
+ *
+ * Scalar values are returned directly and vector fields as tuple copies.
+ * Returns undefined when the resource is absent; narrow with
+ * {@link hasResource} first for a non-optional type.
  *
  * @example
  * ```typescript
  * const dt = getResourceValue(world, Time, "delta");
  * ```
  */
-export function getResourceValue<S extends SchemaRecord, N extends string, K extends ScalarFields<S>>(
+export function getResourceValue<S extends SchemaRecord, N extends string, K extends keyof S>(
   world: World,
   component: Component<S, N> & EntityWith<Component<S, N>>,
   key: K
 ): InferSchema<S[K]>;
 
-export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   component: Component<S>,
   key: K
 ): InferSchema<S[K]> | undefined;
 
-export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function getResourceValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   component: Component<S>,
   key: K
@@ -117,7 +157,7 @@ export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<
 }
 
 /**
- * Sets a scalar field value on a resource.
+ * Sets a field value on a resource.
  *
  * No-op when the resource is absent. Marks the resource changed for
  * `changed()` query filters.
@@ -127,7 +167,7 @@ export function getResourceValue<S extends SchemaRecord, K extends ScalarFields<
  * setResourceValue(world, Time, "delta", 0.033);
  * ```
  */
-export function setResourceValue<S extends SchemaRecord, K extends ScalarFields<S>>(
+export function setResourceValue<S extends SchemaRecord, K extends keyof S>(
   world: World,
   component: Component<S>,
   key: K,
@@ -137,107 +177,57 @@ export function setResourceValue<S extends SchemaRecord, K extends ScalarFields<
 }
 
 // ============================================================================
-// Vector Resource Operations
+// Resource Change Tracking
 // ============================================================================
 
 /**
- * Gets a vector field value from a resource as a tuple copy.
- *
- * Mutating the returned array does not affect stored data; use
- * {@link getResourceVectorView} for zero-copy access. Returns undefined when
- * the resource is absent; narrow with `hasResource` first for a non-optional
- * type.
+ * Marks a resource as changed without writing a value.
+ * No-op when the resource is absent.
  *
  * @example
  * ```typescript
- * const Gravity = defineComponent("Gravity", { schema: { value: Type.f32(3) } });
- * addResource(world, Gravity, { value: [0, -9.81, 0] });
- * const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
+ * const view = getResourceView(world, Gravity, "value");
+ * view[1] = -20;
+ * markResourceChanged(world, Gravity);
  * ```
  */
-export function getResourceVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S, N> & EntityWith<Component<S, N>>,
-  key: K
-): InferSchema<S[K]>;
-
-export function getResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S>,
-  key: K
-): InferSchema<S[K]> | undefined;
-
-export function getResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S>,
-  key: K
-): InferSchema<S[K]> | undefined {
-  return getComponentValue(world, component, component, key);
+export function markResourceChanged(world: World, component: Component): void {
+  markComponentChanged(world, component, component);
 }
 
-/**
- * Sets a vector field value on a resource from a tuple.
- *
- * No-op when the resource is absent. Marks the resource changed for
- * `changed()` query filters.
- *
- * @example
- * ```typescript
- * setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
- * ```
- */
-export function setResourceVectorValue<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S, N> & EntityWith<Component<S, N>>,
-  key: K,
-  value: InferSchema<S[K]>
-): void;
-
-export function setResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S>,
-  key: K,
-  value: InferSchema<S[K]>
-): void;
-
-export function setResourceVectorValue<S extends SchemaRecord, K extends VectorFields<S>>(
-  world: World,
-  component: Component<S>,
-  key: K,
-  value: InferSchema<S[K]>
-): void {
-  setComponentValue(world, component, component, key, value);
-}
+// ============================================================================
+// Resource Views
+// ============================================================================
 
 /**
  * Gets a zero-copy typed array view into a vector field on a resource.
  *
  * Mutations through the view write directly to stored data, bypassing change
- * detection -- call `markComponentChanged(world, component, component)` after
- * writing. Any structural change to the resource's storage invalidates the
- * view. Returns undefined when the resource is absent; narrow with
- * {@link hasResource} first for a non-optional type.
+ * detection -- call {@link markResourceChanged} after writing. Any structural
+ * change to the resource's storage invalidates the view. Returns undefined
+ * when the resource is absent; narrow with {@link hasResource} first for a
+ * non-optional type.
  *
  * @example
  * ```typescript
  * const Gravity = defineComponent("Gravity", { schema: { value: Type.f32(3) } });
- * const view = getResourceVectorView(world, Gravity, "value"); // Float32Array
+ * const view = getResourceView(world, Gravity, "value"); // Float32Array
  * view[1] = -20; // direct mutation, no copy
  * ```
  */
-export function getResourceVectorView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
+export function getResourceView<S extends SchemaRecord, N extends string, K extends VectorFields<S>>(
   world: World,
   component: Component<S, N> & EntityWith<Component<S, N>>,
   key: K
 ): TypedArrayInstance;
 
-export function getResourceVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+export function getResourceView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   component: Component<S>,
   key: K
 ): TypedArrayInstance | undefined;
 
-export function getResourceVectorView<S extends SchemaRecord, K extends VectorFields<S>>(
+export function getResourceView<S extends SchemaRecord, K extends VectorFields<S>>(
   world: World,
   component: Component<S>,
   key: K

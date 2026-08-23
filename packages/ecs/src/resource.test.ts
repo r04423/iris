@@ -1,18 +1,20 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { hasComponent } from "./component.js";
-import { collectEntities } from "./query.js";
+import { createEntity } from "./entity.js";
+import { changed, collectEntities, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import {
   addResource,
+  getResource,
   getResourceValue,
-  getResourceVectorValue,
-  getResourceVectorView,
+  getResourceView,
   hasResource,
+  markResourceChanged,
   removeResource,
+  setResource,
   setResourceValue,
-  setResourceVectorValue,
 } from "./resource.js";
+import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld } from "./world.js";
 
@@ -39,6 +41,21 @@ describe("Resource", () => {
       assert.strictEqual(dt, 0.016);
     });
 
+    it("accepts only data component definitions", () => {
+      const world = createWorld();
+      const Marker = defineComponent("MarkerRejectedAsResource");
+      const entity = createEntity(world);
+
+      function invalidResourceCalls() {
+        // @ts-expect-error -- tags cannot identify data-bearing resources
+        hasResource(world, Marker);
+        // @ts-expect-error -- arbitrary entities cannot identify resources
+        removeResource(world, entity);
+      }
+
+      void invalidResourceCalls;
+    });
+
     it("modifies global resource", () => {
       const world = createWorld();
       const Config = defineComponent("Config", { schema: { mode: Type.string<"debug" | "release">() } });
@@ -63,15 +80,42 @@ describe("Resource", () => {
       assert.strictEqual(getResourceValue(world, Time, "delta"), undefined);
     });
 
-    it("uses Component-on-Self pattern", () => {
+    it("returns an independent record and vector snapshot", () => {
       const world = createWorld();
-      const Global = defineComponent("Global", { schema: { value: Type.i32() } });
+      const State = defineComponent("StateReturnsIndependentSnapshot", {
+        schema: {
+          position: Type.f32(2),
+          active: Type.bool(),
+          cache: Type.ref<Map<string, number>>(),
+        },
+      });
+      const cache = new Map([["score", 1]]);
 
-      addResource(world, Global, { value: 123 });
+      addResource(world, State, { position: [10, 20], active: true, cache });
 
-      // Check via standard component API
-      // The component ID is used as both the Entity ID and the Component ID
-      assert.strictEqual(hasComponent(world, Global, Global), true);
+      const snapshot = getResource(world, State);
+      const next = getResource(world, State);
+
+      assert.notStrictEqual(snapshot, next);
+      assert.notStrictEqual(snapshot.position, next.position);
+      assert.strictEqual(snapshot.cache, cache);
+
+      snapshot.position[0] = 99;
+      snapshot.active = false;
+
+      assert.deepStrictEqual(getResource(world, State), { position: [10, 20], active: true, cache });
+    });
+
+    it("replaces the complete record", () => {
+      const world = createWorld();
+      const Time = defineComponent("TimeReplacesCompleteRecord", {
+        schema: { delta: Type.f64(), elapsed: Type.f64() },
+      });
+
+      addResource(world, Time, { delta: 0.016, elapsed: 10 });
+      setResource(world, Time, { delta: 0.033, elapsed: 20 });
+
+      assert.deepStrictEqual(getResource(world, Time), { delta: 0.033, elapsed: 20 });
     });
 
     it("appears in standard queries", () => {
@@ -82,7 +126,6 @@ describe("Resource", () => {
 
       const results = collectEntities(world, [Physics]);
 
-      // Should find the singleton entity (which is the component ID itself)
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], Physics);
     });
@@ -95,7 +138,7 @@ describe("Resource", () => {
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
 
-      const value = getResourceVectorValue(world, Gravity, "value");
+      const value = getResourceValue(world, Gravity, "value");
       assert.deepStrictEqual(value, [0, -9.81, 0]);
     });
 
@@ -104,36 +147,61 @@ describe("Resource", () => {
       const Gravity = defineComponent("GravityWritesVectorResource", { schema: { value: Type.f64(3) } });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
-      setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+      setResourceValue(world, Gravity, "value", [0, -20, 0]);
 
-      const value = getResourceVectorValue(world, Gravity, "value");
+      const value = getResourceValue(world, Gravity, "value");
       assert.deepStrictEqual(value, [0, -20, 0]);
     });
 
-    it("returns zero-copy typed array view", () => {
+    it("returns a live typed array view", () => {
       const world = createWorld();
       const Gravity = defineComponent("GravityReturnsZeroCopyTypedArrayView", { schema: { value: Type.f64(3) } });
 
       addResource(world, Gravity, { value: [0, -9.81, 0] });
 
-      const view = getResourceVectorView(world, Gravity, "value");
+      const view = getResourceView(world, Gravity, "value");
       assert.ok(view instanceof Float64Array);
       assert.strictEqual(view!.length, 3);
 
-      // Mutate through view
       view![1] = -20;
 
-      // Change visible via copy read
-      const value = getResourceVectorValue(world, Gravity, "value");
+      const value = getResourceValue(world, Gravity, "value");
       assert.deepStrictEqual(value, [0, -20, 0]);
+    });
+
+    it("marks view mutations for change detection", async () => {
+      const world = createWorld();
+      const Gravity = defineComponent("GravityMarksViewMutationChanged", { schema: { value: Type.f64(3) } });
+      let changes = 0;
+
+      addResource(world, Gravity, { value: [0, -9.81, 0] });
+      addSystem(
+        world,
+        defineSystem("trackGravityResourceChanges", (world) => {
+          queryEntities(world, [changed(Gravity)], () => {
+            changes++;
+          });
+        })
+      );
+
+      await runOnce(world);
+      await runOnce(world);
+
+      const view = getResourceView(world, Gravity, "value")!;
+      view[1] = -20;
+      markResourceChanged(world, Gravity);
+
+      await runOnce(world);
+
+      assert.strictEqual(changes, 2);
     });
 
     it("returns undefined for missing resource", () => {
       const world = createWorld();
       const Gravity = defineComponent("GravityReturnsUndefinedMissingResource", { schema: { value: Type.f64(3) } });
 
-      assert.strictEqual(getResourceVectorValue(world, Gravity, "value"), undefined);
-      assert.strictEqual(getResourceVectorView(world, Gravity, "value"), undefined);
+      assert.strictEqual(getResourceValue(world, Gravity, "value"), undefined);
+      assert.strictEqual(getResourceView(world, Gravity, "value"), undefined);
     });
   });
 });

@@ -323,6 +323,8 @@ A **Resource** is a global singleton -- world-level data that isn't attached to 
 import {
   defineComponent,
   addResource,
+  getResource,
+  setResource,
   getResourceValue,
   setResourceValue,
   hasResource,
@@ -334,17 +336,22 @@ const Time = defineComponent("Time", { schema: { delta: Type.f32(), elapsed: Typ
 
 addResource(world, Time, { delta: 0.016, elapsed: 0 });
 
-// Read and write resource values
-const dt = getResourceValue(world, Time, "delta");    // 0.016
-setResourceValue(world, Time, "elapsed", 1.5);
+// Read or replace the complete record
+const time = getResource(world, Time);               // { delta: 0.016, elapsed: 0 }
+setResource(world, Time, { delta: 0.033, elapsed: 1.5 });
 
-// Check existence and remove
+// Read or write one scalar or vector field
+const dt = getResourceValue(world, Time, "delta");    // 0.033
+setResourceValue(world, Time, "elapsed", 2);
+
 if (hasResource(world, Time)) {
   removeResource(world, Time);
 }
 ```
 
-Resources use the **component-on-self pattern** internally -- the component is added to itself as an entity. This means resources appear in queries:
+`getResource()` returns an allocated record snapshot. Its vector fields are also copies, while reference fields retain their stored values. `setResource()` replaces every field in the record.
+
+Resources participate in component queries:
 
 ```typescript
 const resources = collectEntities(world, [Time]);
@@ -353,15 +360,16 @@ const resources = collectEntities(world, [Time]);
 
 Use resources for frame timing, configuration, asset registry, input state, physics settings, or any global data that systems need but doesn't belong to a specific entity.
 
-Resources with vector fields use dedicated resource accessors:
+Vector fields use the same value accessors. Borrow a view when copying is unnecessary:
 
 ```typescript
 import {
   defineComponent,
   addResource,
-  getResourceVectorValue,
-  setResourceVectorValue,
-  getResourceVectorView,
+  getResourceValue,
+  setResourceValue,
+  getResourceView,
+  markResourceChanged,
   Type,
 } from "iris-ecs";
 
@@ -369,14 +377,15 @@ const Gravity = defineComponent("Gravity", { schema: { value: Type.f64(3) } });
 addResource(world, Gravity, { value: [0, -9.81, 0] });
 
 // Copy-based read
-const g = getResourceVectorValue(world, Gravity, "value"); // [number, number, number]
+const g = getResourceValue(world, Gravity, "value"); // [number, number, number]
 
 // Copy-based write
-setResourceVectorValue(world, Gravity, "value", [0, -20, 0]);
+setResourceValue(world, Gravity, "value", [0, -20, 0]);
 
 // Zero-copy view
-const view = getResourceVectorView(world, Gravity, "value"); // Float64Array
+const view = getResourceView(world, Gravity, "value"); // Float64Array
 view[1] = -15; // direct mutation
+markResourceChanged(world, Gravity);
 ```
 
 ### Relations

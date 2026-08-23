@@ -89,13 +89,14 @@ export { getPairRelation, getPairTarget, getRelationTargets, pair } from "./rela
 
 export {
   addResource,
+  getResource,
   getResourceValue,
-  getResourceVectorValue,
-  getResourceVectorView,
+  getResourceView,
   hasResource,
+  markResourceChanged,
   removeResource,
+  setResource,
   setResourceValue,
-  setResourceVectorValue,
 } from "./resource.js";
 
 // ============================================================================
