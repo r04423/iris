@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { addComponent, hasComponent, setComponentValue } from "./component.js";
+import { addComponent, getComponentValue, hasComponent, setComponentValue } from "./component.js";
 import { createEntity, destroyEntity } from "./entity.js";
 import { IrisDuplicate, IrisInvalidArgument } from "./error.js";
 import { getName, lookupByName, Name, removeName, setName } from "./name.js";
@@ -100,12 +100,19 @@ describe("Name", () => {
       setName(world, entity, "player");
       addComponent(world, entity, Position, { x: 0, y: 0 });
 
-      // Has Position but not Health
-      assert.strictEqual(lookupByName(world, "player", [Position]), entity);
+      const required = [Position] as const;
+      const positioned = lookupByName(world, "player", required);
+
+      assert.strictEqual(positioned, entity);
+
+      if (positioned !== undefined) {
+        const x: number = getComponentValue(world, positioned, Position, "x");
+        assert.strictEqual(x, 0);
+      }
+
       assert.strictEqual(lookupByName(world, "player", [Health]), undefined);
       assert.strictEqual(lookupByName(world, "player", [Position, Health]), undefined);
 
-      // Add Health
       addComponent(world, entity, Health);
       assert.strictEqual(lookupByName(world, "player", [Position, Health]), entity);
     });

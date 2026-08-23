@@ -165,18 +165,8 @@ export type {
   Tag,
 } from "./encoding.js";
 export type { Event, EventSchema, PendingEvent } from "./event.js";
-export type { FilterTerms } from "./filters.js";
-export type { EventPayloads, EventType, Observer, ObserverMeta } from "./observer.js";
-export type {
-  AddedModifier,
-  ChangedModifier,
-  ColumnsTuple as EXPERIMENTAL_ColumnsTuple,
-  ExtractIncluded,
-  ModifierType,
-  NotModifier,
-  OrModifier,
-  QueryModifier,
-} from "./query.js";
+export type { EventPayloads, EventType, Observer } from "./observer.js";
+export type { ColumnsTuple as EXPERIMENTAL_ColumnsTuple, QueryTerm, QueryTerms } from "./query.js";
 export type {
   FrameDriver,
   ScheduleLabel,

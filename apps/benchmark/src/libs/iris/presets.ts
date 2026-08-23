@@ -1,12 +1,4 @@
-import {
-  createEntity,
-  createWorld,
-  type EntityId,
-  not,
-  type QueryModifier,
-  queryFirstEntity,
-  type World,
-} from "iris-ecs";
+import { createEntity, createWorld, not, type QueryTerm, queryFirstEntity, type World } from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
 import {
   addEntityTypes,
@@ -71,7 +63,7 @@ function activateQueries(world: World, count: number, seed: number): void {
     // 1-3 terms drawn from the template's own types
     const maxTerms = Math.min(3, types.length);
     const termCount = 1 + Math.floor(rng() * maxTerms);
-    const terms: (EntityId | QueryModifier)[] = [];
+    const terms: QueryTerm[] = [];
     const used = new Set<number>();
 
     for (let j = 0; j < termCount; j++) {

@@ -630,12 +630,12 @@ const renderSystem = defineSystem("renderSystem", (world) => {
 });
 
 addSystem(world, inputSystem);
-addSystem(world, physicsSystem, { after: "inputSystem" });
-addSystem(world, renderSystem, { after: "physicsSystem" });
+addSystem(world, physicsSystem, { after: ["inputSystem"] });
+addSystem(world, renderSystem, { after: ["physicsSystem"] });
 // Executes: inputSystem -> physicsSystem -> renderSystem
 ```
 
-Without constraints, systems run in registration order. Use arrays for multiple constraints: `{ after: ["inputSystem", "audioSystem"] }`.
+Use `before` and `after` to list scheduling dependencies. Systems without constraints run in registration order.
 
 A system can be registered multiple times with different names via the `name` option: `addSystem(world, movementSystem, { name: "lateMovement" })`.
 
@@ -649,11 +649,11 @@ import { defineSystemSet, addSystemSet, addSystem } from "iris-ecs";
 const PhysicsSystems = defineSystemSet("PhysicsSystems");
 const RenderSystems = defineSystemSet("RenderSystems");
 
-addSystemSet(world, PhysicsSystems, { before: RenderSystems });
+addSystemSet(world, PhysicsSystems, { before: [RenderSystems] });
 addSystemSet(world, RenderSystems);
 
 addSystem(world, applyGravity, { set: PhysicsSystems });
-addSystem(world, detectCollisions, { set: PhysicsSystems, after: applyGravity });
+addSystem(world, detectCollisions, { set: PhysicsSystems, after: [applyGravity] });
 addSystem(world, drawSprites, { set: RenderSystems });
 addSystem(world, drawParticles, { set: RenderSystems });
 // All physics systems run before all render systems
@@ -662,7 +662,7 @@ addSystem(world, drawParticles, { set: RenderSystems });
 Systems within a set still respect their own `before`/`after` constraints. A system can also order itself relative to a set without joining it:
 
 ```typescript
-addSystem(world, debugOverlay, { after: PhysicsSystems, before: RenderSystems });
+addSystem(world, debugOverlay, { after: [PhysicsSystems], before: [RenderSystems] });
 ```
 
 A system uses either `schedule` or `set`, not both -- the set inherits its schedule from `addSystemSet`.

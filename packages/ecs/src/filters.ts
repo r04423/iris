@@ -9,16 +9,8 @@ import type { World } from "./world.js";
 // ============================================================================
 
 /**
- * Inclusion and exclusion constraints for matching entities by component set.
- *
- * An entity matches when it has every `include` component and none of the
- * `exclude` components. Query operations expand their terms into filters of
- * this shape.
- *
- * @example
- * ```typescript
- * const terms: FilterTerms = { include: [Position, Velocity], exclude: [Player] };
- * ```
+ * Inclusion and exclusion constraints produced while resolving query terms.
+ * @internal
  */
 export type FilterTerms = {
   /** Required component IDs (all must be present). */

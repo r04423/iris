@@ -1,5 +1,5 @@
-import type { EntityId, EntityWith, ExtractIncluded, NotModifier } from "iris-ecs";
-import { useQueryEntities } from "./useQueryEntities.js";
+import type { EntityWith } from "iris-ecs";
+import { type ExtractIncluded, type ReactiveQueryTerm, useQueryEntities } from "./useQueryEntities.js";
 
 // ============================================================================
 // useQueryFirstEntity
@@ -23,8 +23,8 @@ import { useQueryEntities } from "./useQueryEntities.js";
  * }
  * ```
  */
-export function useQueryFirstEntity<T extends (EntityId | NotModifier)[]>(
-  ...terms: [...T]
+export function useQueryFirstEntity<T extends ReactiveQueryTerm[]>(
+  ...terms: T
 ): EntityWith<ExtractIncluded<T>> | undefined {
   return useQueryEntities(...terms).at(0);
 }

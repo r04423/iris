@@ -135,8 +135,8 @@ export class IrisInvalidArgument extends IrisError {
  * @example
  * ```typescript
  * // Thrown on circular system dependencies
- * addSystem(world, a, { before: b });
- * addSystem(world, b, { before: a });
+ * addSystem(world, a, { before: [b] });
+ * addSystem(world, b, { before: [a] });
  * await runOnce(world);
  * ```
  */
@@ -319,7 +319,7 @@ export class IrisSystemSetNotFound extends IrisNotFound {
  *
  * @example
  * ```typescript
- * addSystem(world, mySystem, { before: "missing" });
+ * addSystem(world, mySystem, { before: ["missing"] });
  * await runOnce(world); // throws IrisSystemNotFound
  * ```
  */
@@ -409,8 +409,8 @@ export class IrisSchedulerBusy extends IrisInvalidState {
  *
  * @example
  * ```typescript
- * addSystem(world, a, { before: "b" });
- * addSystem(world, b, { before: "a" });
+ * addSystem(world, a, { before: ["b"] });
+ * addSystem(world, b, { before: ["a"] });
  * await runOnce(world); // throws IrisCircularDependency
  * ```
  */

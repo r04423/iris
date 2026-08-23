@@ -4,7 +4,7 @@ import { addComponent, getComponentValue, removeComponent, setComponentValue } f
 import type { Entity, EntityId } from "./encoding.js";
 import { createEntity, destroyEntity, isEntityAlive } from "./entity.js";
 import { IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded } from "./error.js";
-import type { OrModifier } from "./query.js";
+import type { QueryTerms } from "./index.js";
 import {
   added,
   changed,
@@ -170,7 +170,8 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const entities = collectEntities(world, [Position]);
+      const terms = [Position] as const satisfies QueryTerms;
+      const entities = collectEntities(world, terms);
 
       assert.strictEqual(entities.length, 3);
       assert.ok(entities.some((e) => e === entity1));
@@ -928,7 +929,7 @@ describe("Query", () => {
 
     it("throws when branch expansion exceeds the limit", () => {
       const world = createWorld();
-      const groups: OrModifier[] = [];
+      const groups: ReturnType<typeof or>[] = [];
 
       // 6 groups of 2 alternatives = 64 branches > 32 limit
       for (let i = 0; i < 6; i++) {
@@ -952,7 +953,8 @@ describe("Query", () => {
       addComponent(world, entity2, Position);
       addComponent(world, entity3, Position);
 
-      const first = queryFirstEntity(world, [Position]);
+      const terms = [Position] as const satisfies QueryTerms;
+      const first = queryFirstEntity(world, terms);
 
       // Returns last added
       assert.strictEqual(first, entity3);
@@ -2157,7 +2159,7 @@ describe("Query", () => {
       });
 
       addSystem(world, systemB);
-      addSystem(world, systemA, { before: systemB });
+      addSystem(world, systemA, { before: [systemB] });
 
       await runOnce(world);
 
@@ -2206,7 +2208,7 @@ describe("Query", () => {
       });
 
       addSystem(world, systemB);
-      addSystem(world, systemA, { before: systemB });
+      addSystem(world, systemA, { before: [systemB] });
 
       await runOnce(world);
 
@@ -2463,8 +2465,9 @@ describe("Query", () => {
         addComponent(world, e2, Position, { x: 30, y: 40 });
 
         let callCount = 0;
+        const terms = [Position] as const satisfies QueryTerms;
 
-        queryColumns(world, [Position], (entities, [pos]) => {
+        queryColumns(world, terms, (entities, [pos]) => {
           callCount++;
 
           const x: 10 | 30 | undefined = pos.x[0];
@@ -2476,7 +2479,7 @@ describe("Query", () => {
           assert.strictEqual(pos.y[1], 40);
         });
 
-        queryEntities(world, [Position], (entity) => {
+        queryEntities(world, terms, (entity) => {
           const x: 10 | 30 = getComponentValue(world, entity, Position, "x");
           assert.ok(x === 10 || x === 30);
         });

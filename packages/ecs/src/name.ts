@@ -221,7 +221,7 @@ export function removeName(world: World, entityId: EntityId): void {
  * const armed = lookupByName(world, "player-1", [Position, Health]);
  * ```
  */
-export function lookupByName<C extends EntityId[]>(
+export function lookupByName<const C extends readonly EntityId[]>(
   world: World,
   name: string,
   components?: C

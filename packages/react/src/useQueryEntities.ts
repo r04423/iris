@@ -1,4 +1,4 @@
-import type { EntityId, EntityWith, ExtractIncluded, NotModifier } from "iris-ecs";
+import type { EntityId, EntityWith, QueryTerm } from "iris-ecs";
 import { collectEntities, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useResetGeneration, useWorld } from "./context.js";
@@ -8,12 +8,31 @@ import { useResetGeneration, useWorld } from "./context.js";
 // ============================================================================
 
 /**
+ * Query terms supported by reactive hooks.
+ * @internal
+ */
+export type ReactiveQueryTerm = EntityId | Extract<QueryTerm, { type: "not" }>;
+
+/**
+ * Components guaranteed present by reactive query terms.
+ * @internal
+ */
+export type ExtractIncluded<T extends readonly ReactiveQueryTerm[]> = T extends readonly [
+  infer Head,
+  ...infer Tail extends ReactiveQueryTerm[],
+]
+  ? Head extends EntityId
+    ? Head | ExtractIncluded<Tail>
+    : ExtractIncluded<Tail>
+  : never;
+
+/**
  * Produce a stable string key from query terms for use as a `useMemo`
  * dependency
  *
  * @internal
  */
-function termsToKey(terms: (EntityId | NotModifier)[]): string {
+function termsToKey(terms: readonly ReactiveQueryTerm[]): string {
   let key = "";
 
   for (let i = 0; i < terms.length; i++) {
@@ -57,9 +76,7 @@ function termsToKey(terms: (EntityId | NotModifier)[]): string {
  * }
  * ```
  */
-export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
-  ...terms: [...T]
-): EntityWith<ExtractIncluded<T>>[] {
+export function useQueryEntities<T extends ReactiveQueryTerm[]>(...terms: T): EntityWith<ExtractIncluded<T>>[] {
   type Result = EntityWith<ExtractIncluded<T>>;
 
   const world = useWorld();

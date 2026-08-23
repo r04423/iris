@@ -48,7 +48,7 @@ export type Observer<T extends EventType> = (...args: EventPayloads[T]) => void;
 /**
  * Registered callbacks for one observer event type.
  */
-export type ObserverMeta<T extends EventType> = {
+type ObserverMeta<T extends EventType> = {
   /** Callbacks fired on event. */
   callbacks: Observer<T>[];
 };

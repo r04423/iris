@@ -102,32 +102,52 @@ export function resetQueryState(world: World): void {
 /**
  * Discriminant tag distinguishing the query modifier kinds.
  */
-export type ModifierType = "not" | "added" | "changed" | "or";
+type ModifierType = "not" | "added" | "changed" | "or";
 
 /**
  * Query term excluding entities that have the component. Created by {@link not}.
  */
-export type NotModifier<C extends EntityId = EntityId> = { type: "not"; componentId: C };
+type NotModifier<C extends EntityId = EntityId> = { type: "not"; componentId: C };
 
 /**
  * Change-detection term matching recently added components. Created by {@link added}.
  */
-export type AddedModifier<C extends EntityId = EntityId> = { type: "added"; componentId: C };
+type AddedModifier<C extends EntityId = EntityId> = { type: "added"; componentId: C };
 
 /**
  * Change-detection term matching recently written components. Created by {@link changed}.
  */
-export type ChangedModifier<C extends EntityId = EntityId> = { type: "changed"; componentId: C };
+type ChangedModifier<C extends EntityId = EntityId> = { type: "changed"; componentId: C };
 
 /**
  * Query term matching entities with at least one of the alternatives. Created by {@link or}.
  */
-export type OrModifier<C extends EntityId = EntityId> = { type: "or"; componentIds: C[] };
+type OrModifier<C extends EntityId = EntityId> = { type: "or"; componentIds: readonly C[] };
 
 /**
  * Union of all modifier terms accepted alongside component IDs in query terms.
  */
-export type QueryModifier = NotModifier | AddedModifier | ChangedModifier | OrModifier;
+type QueryModifier = NotModifier | AddedModifier | ChangedModifier | OrModifier;
+
+/**
+ * Component ID or modifier accepted by query operations.
+ *
+ * @example
+ * ```typescript
+ * const term: QueryTerm = not(Dead);
+ * ```
+ */
+export type QueryTerm = EntityId | QueryModifier;
+
+/**
+ * Readonly collection of terms accepted by query operations.
+ *
+ * @example
+ * ```typescript
+ * const terms: QueryTerms = [Position, not(Dead)];
+ * ```
+ */
+export type QueryTerms = readonly QueryTerm[];
 
 /**
  * Creates a query term that excludes entities having the component.
@@ -210,7 +230,7 @@ export function or<C extends EntityId[]>(...componentIds: [...C]): OrModifier<C[
  * Only terms a match proves present may be extracted -- the union feeds
  * `EntityWith`, which suppresses the `undefined` return of a missing component.
  */
-export type ExtractIncluded<T extends unknown[]> = T extends [infer Head, ...infer Tail]
+type ExtractIncluded<T extends readonly unknown[]> = T extends readonly [infer Head, ...infer Tail]
   ? Head extends NotModifier
     ? ExtractIncluded<Tail>
     : // Change modifiers still require the component, so unwrap it
@@ -246,7 +266,7 @@ function isModifier(arg: unknown): arg is QueryModifier {
  *
  * @experimental Exported as `EXPERIMENTAL_ColumnsTuple`; may change or be removed.
  */
-export type ColumnsTuple<T extends unknown[]> = T extends [infer Head, ...infer Tail]
+export type ColumnsTuple<T extends readonly unknown[]> = T extends readonly [infer Head, ...infer Tail]
   ? // Excluded from matching archetypes, so never stored
     Head extends NotModifier
     ? ColumnsTuple<Tail>
@@ -313,7 +333,7 @@ export function hashQuery(
  * Gets or creates a query for the exact term sequence.
  * @internal
  */
-export function ensureQuery(world: World, terms: (EntityId | QueryModifier)[]): ResolvedQuery {
+export function ensureQuery(world: World, terms: QueryTerms): ResolvedQuery {
   let node = world.queries.byTerms;
 
   for (let i = 0; i < terms.length; i++) {
@@ -368,7 +388,7 @@ function ensureQueryTrieChild(node: QueryTrieNode, key: EntityId | ModifierType 
 /**
  * Resolves an uncached term sequence while sharing order-independent metadata.
  */
-function createQuery(world: World, terms: (EntityId | QueryModifier)[]): ResolvedQuery {
+function createQuery(world: World, terms: QueryTerms): ResolvedQuery {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
@@ -620,15 +640,15 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
  * });
  * ```
  */
-export function queryEntities<T extends (EntityId | QueryModifier)[]>(
+export function queryEntities<const T extends QueryTerms>(
   world: World,
-  terms: [...T],
+  terms: T,
   callback: (entity: EntityWith<ExtractIncluded<T>>) => unknown
 ): void;
 
 export function queryEntities(
   world: World,
-  terms: (EntityId | QueryModifier)[],
+  terms: QueryTerms,
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entity: any) => unknown
 ): void {
@@ -652,12 +672,12 @@ export function queryEntities(
  * }
  * ```
  */
-export function queryFirstEntity<T extends (EntityId | QueryModifier)[]>(
+export function queryFirstEntity<const T extends QueryTerms>(
   world: World,
-  terms: [...T]
+  terms: T
 ): EntityWith<ExtractIncluded<T>> | undefined;
 
-export function queryFirstEntity(world: World, terms: (EntityId | QueryModifier)[]): EntityId | undefined {
+export function queryFirstEntity(world: World, terms: QueryTerms): EntityId | undefined {
   let result: EntityId | undefined;
 
   queryEntitiesWithMeta(world, ensureQuery(world, terms).meta, (entity) => {
@@ -687,12 +707,9 @@ export function queryFirstEntity(world: World, terms: (EntityId | QueryModifier)
  * sorted.sort((a, b) => getComponentValue(world, a, Position, "x")! - getComponentValue(world, b, Position, "x")!);
  * ```
  */
-export function collectEntities<T extends (EntityId | QueryModifier)[]>(
-  world: World,
-  terms: [...T]
-): EntityWith<ExtractIncluded<T>>[];
+export function collectEntities<const T extends QueryTerms>(world: World, terms: T): EntityWith<ExtractIncluded<T>>[];
 
-export function collectEntities(world: World, terms: (EntityId | QueryModifier)[]): EntityId[] {
+export function collectEntities(world: World, terms: QueryTerms): EntityId[] {
   const result: EntityId[] = [];
 
   queryEntitiesWithMeta(world, ensureQuery(world, terms).meta, (entity) => {
@@ -731,15 +748,15 @@ export function collectEntities(world: World, terms: (EntityId | QueryModifier)[
  * });
  * ```
  */
-export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
+export function queryColumns<const T extends readonly (EntityId | NotModifier | OrModifier)[]>(
   world: World,
-  terms: [...T],
+  terms: T,
   callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
 ): void;
 
 export function queryColumns(
   world: World,
-  terms: (EntityId | QueryModifier)[],
+  terms: QueryTerms,
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entities: any, columns: any) => unknown
 ): void {

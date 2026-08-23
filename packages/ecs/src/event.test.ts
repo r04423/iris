@@ -532,7 +532,7 @@ describe("Event", () => {
             readerSeen.push(e.value);
           });
         }),
-        { after: emitter }
+        { after: [emitter] }
       );
 
       emitEvent(world, Event, { value: 1 });
@@ -929,7 +929,7 @@ describe("Event", () => {
             emitEvent(world, Event, { value: 99 });
           }
         }),
-        { after: reader }
+        { after: [reader] }
       );
 
       // First frame: reader sees nothing, writer emits

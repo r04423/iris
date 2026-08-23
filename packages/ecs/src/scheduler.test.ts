@@ -91,13 +91,15 @@ describe("Scheduler", () => {
       assert.strictEqual(world.systems.byId.get("physicsSystem")?.schedule, Update);
     });
 
-    it("extracts name from a single system constraint", () => {
+    it("accepts readonly system constraints", () => {
       const world = createWorld();
 
       const other = defineSystem("other", () => {});
       const another = defineSystem("another", () => {});
       const system = defineSystem("system", () => {});
-      addSystem(world, system, { before: other, after: another });
+      const before = [other] as const;
+      const after = [another] as const;
+      addSystem(world, system, { before, after });
 
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["other"]);
@@ -127,7 +129,8 @@ describe("Scheduler", () => {
           void calls.push(label);
         });
 
-      addSystems(world, [track("a"), track("b"), track("c")], { schedule: PostUpdate });
+      const systems = [track("a"), track("b"), track("c")] as const;
+      addSystems(world, systems, { schedule: PostUpdate });
 
       await runOnce(world);
 
@@ -139,7 +142,7 @@ describe("Scheduler", () => {
       const world = createWorld();
 
       const anchor = defineSystem("anchor", () => {});
-      addSystems(world, [defineSystem("a", () => {}), defineSystem("b", () => {})], { after: anchor });
+      addSystems(world, [defineSystem("a", () => {}), defineSystem("b", () => {})], { after: [anchor] });
 
       assert.deepStrictEqual(world.systems.byId.get("a")?.after, ["anchor"]);
       assert.deepStrictEqual(world.systems.byId.get("b")?.after, ["anchor"]);
@@ -157,7 +160,7 @@ describe("Scheduler", () => {
       const world = createWorld();
 
       const system = defineSystem("system", () => {});
-      addSystem(world, system, { before: "target1", after: ["target2", "target3"] });
+      addSystem(world, system, { before: ["target1"], after: ["target2", "target3"] });
 
       const meta = world.systems.byId.get("system");
       assert.deepStrictEqual(meta?.before, ["target1"]);
@@ -205,7 +208,7 @@ describe("Scheduler", () => {
       });
 
       addSystem(world, render);
-      addSystem(world, physics, { before: render });
+      addSystem(world, physics, { before: [render] });
 
       await runOnce(world);
 
@@ -231,7 +234,7 @@ describe("Scheduler", () => {
       const render = defineSystem("render", () => {
         calls.push("render");
       });
-      addSystem(world, render, { after: physics });
+      addSystem(world, render, { after: [physics] });
 
       await runOnce(world);
 
@@ -283,7 +286,7 @@ describe("Scheduler", () => {
 
       addSystem(world, c);
       addSystem(world, a);
-      addSystem(world, b, { after: a, before: c });
+      addSystem(world, b, { after: [a], before: [c] });
 
       await runOnce(world);
 
@@ -329,8 +332,8 @@ describe("Scheduler", () => {
       const a = defineSystem("a", () => {});
       const b = defineSystem("b", () => {});
 
-      addSystem(world, a, { before: b });
-      addSystem(world, b, { before: a });
+      addSystem(world, a, { before: [b] });
+      addSystem(world, b, { before: [a] });
 
       await assert.rejects(runOnce(world), (err) => err instanceof IrisInvalidState);
     });
@@ -340,12 +343,12 @@ describe("Scheduler", () => {
 
       const world1 = createWorld();
       function system1() {}
-      addSystem(world1, defineSystem("system1", system1), { after: nonexistent });
+      addSystem(world1, defineSystem("system1", system1), { after: [nonexistent] });
       await assert.rejects(runOnce(world1), (err) => err instanceof IrisNotFound);
 
       const world2 = createWorld();
       function system2() {}
-      addSystem(world2, defineSystem("system2", system2), { before: nonexistent });
+      addSystem(world2, defineSystem("system2", system2), { before: [nonexistent] });
       await assert.rejects(runOnce(world2), (err) => err instanceof IrisNotFound);
     });
 
@@ -358,7 +361,7 @@ describe("Scheduler", () => {
       addSystem(
         world,
         defineSystem("updateSys", function updateSys() {}),
-        { before: postSys }
+        { before: [postSys] }
       );
 
       await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
@@ -2113,7 +2116,7 @@ describe("Scheduler", () => {
 
         const PhysicsSet = defineSystemSet("PhysicsSet");
         const RenderSet = defineSystemSet("RenderSet");
-        addSystemSet(world, PhysicsSet, { before: RenderSet });
+        addSystemSet(world, PhysicsSet, { before: [RenderSet] });
         addSystemSet(world, RenderSet);
 
         addSystem(
@@ -2160,7 +2163,7 @@ describe("Scheduler", () => {
         const PhysicsSet = defineSystemSet("PhysicsSet");
         const RenderSet = defineSystemSet("RenderSet");
         addSystemSet(world, PhysicsSet);
-        addSystemSet(world, RenderSet, { after: PhysicsSet });
+        addSystemSet(world, RenderSet, { after: [PhysicsSet] });
 
         addSystem(
           world,
@@ -2209,7 +2212,7 @@ describe("Scheduler", () => {
         const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
-        addSystem(world, standalone, { before: RenderSet });
+        addSystem(world, standalone, { before: [RenderSet] });
 
         addSystem(
           world,
@@ -2257,7 +2260,7 @@ describe("Scheduler", () => {
         const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
-        addSystem(world, standalone, { after: PhysicsSet });
+        addSystem(world, standalone, { after: [PhysicsSet] });
 
         await runOnce(world);
 
@@ -2273,7 +2276,7 @@ describe("Scheduler", () => {
           calls.push("standalone");
         });
         const PhysicsSet = defineSystemSet("PhysicsSet");
-        addSystemSet(world, PhysicsSet, { before: standalone });
+        addSystemSet(world, PhysicsSet, { before: [standalone] });
 
         addSystem(
           world,
@@ -2297,7 +2300,7 @@ describe("Scheduler", () => {
           calls.push("standalone");
         });
         const PhysicsSet = defineSystemSet("PhysicsSet");
-        addSystemSet(world, PhysicsSet, { after: standalone });
+        addSystemSet(world, PhysicsSet, { after: [standalone] });
 
         addSystem(world, standalone);
         addSystem(
@@ -2332,7 +2335,7 @@ describe("Scheduler", () => {
         const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
-        addSystem(world, standalone, { after: p1 });
+        addSystem(world, standalone, { after: [p1] });
 
         await runOnce(world);
 
@@ -2349,7 +2352,7 @@ describe("Scheduler", () => {
         const standalone = defineSystem("standalone", () => {
           calls.push("standalone");
         });
-        addSystem(world, standalone, { after: EmptySet });
+        addSystem(world, standalone, { after: [EmptySet] });
 
         await runOnce(world);
 
@@ -2370,8 +2373,8 @@ describe("Scheduler", () => {
           calls.push("b");
         });
 
-        addSystem(world, b, { after: EmptySet });
-        addSystem(world, a, { before: EmptySet });
+        addSystem(world, b, { after: [EmptySet] });
+        addSystem(world, a, { before: [EmptySet] });
 
         await runOnce(world);
 
@@ -2395,8 +2398,8 @@ describe("Scheduler", () => {
           calls.push("apply");
         });
 
-        addSystem(world, resolve, { set: PhysicsSet, after: detect });
-        addSystem(world, detect, { set: PhysicsSet, after: apply });
+        addSystem(world, resolve, { set: PhysicsSet, after: [detect] });
+        addSystem(world, detect, { set: PhysicsSet, after: [apply] });
         addSystem(world, apply, { set: PhysicsSet });
 
         await runOnce(world);
@@ -2409,8 +2412,8 @@ describe("Scheduler", () => {
 
         const SetA = defineSystemSet("SetA");
         const SetB = defineSystemSet("SetB");
-        addSystemSet(world, SetA, { before: SetB });
-        addSystemSet(world, SetB, { before: SetA });
+        addSystemSet(world, SetA, { before: [SetB] });
+        addSystemSet(world, SetB, { before: [SetA] });
 
         addSystem(
           world,
@@ -2433,7 +2436,7 @@ describe("Scheduler", () => {
         addSystem(
           world,
           defineSystem("sys", function sys() {}),
-          { before: UnknownSet }
+          { before: [UnknownSet] }
         );
 
         await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
@@ -2446,7 +2449,7 @@ describe("Scheduler", () => {
         addSystem(
           world,
           defineSystem("sys", function sys() {}),
-          { after: UnknownSet }
+          { after: [UnknownSet] }
         );
 
         await assert.rejects(runOnce(world), (err) => err instanceof IrisNotFound);
@@ -2455,7 +2458,7 @@ describe("Scheduler", () => {
       it("set referencing unknown target in before throws IrisNotFound", async () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
-        addSystemSet(world, PhysicsSet, { before: "nonexistent" });
+        addSystemSet(world, PhysicsSet, { before: ["nonexistent"] });
 
         addSystem(
           world,
@@ -2469,7 +2472,7 @@ describe("Scheduler", () => {
       it("set referencing unknown target in after throws IrisNotFound", async () => {
         const world = createWorld();
         const PhysicsSet = defineSystemSet("PhysicsSet");
-        addSystemSet(world, PhysicsSet, { after: "nonexistent" });
+        addSystemSet(world, PhysicsSet, { after: ["nonexistent"] });
 
         addSystem(
           world,
@@ -2512,7 +2515,7 @@ describe("Scheduler", () => {
           defineSystem("render", function render() {
             calls.push("render");
           }),
-          { after: PhysicsSet }
+          { after: [PhysicsSet] }
         );
 
         await runOnce(world);
@@ -2838,7 +2841,7 @@ describe("Scheduler", () => {
         defineSystem("leader", function leader() {
           calls.push("leader");
         }),
-        { before: "customName" }
+        { before: ["customName"] }
       );
 
       await runOnce(world);
@@ -2874,7 +2877,7 @@ describe("Scheduler", () => {
       const follower = defineSystem("follower", () => {
         calls.push("follower");
       });
-      addSystem(world, follower, { after: sys });
+      addSystem(world, follower, { after: [sys] });
 
       await runOnce(world);
 
@@ -2896,7 +2899,7 @@ describe("Scheduler", () => {
       const follower = defineSystem("follower", () => {
         calls.push("follower");
       });
-      addSystem(world, follower, { after: PhysicsSet });
+      addSystem(world, follower, { after: [PhysicsSet] });
 
       await runOnce(world);
 

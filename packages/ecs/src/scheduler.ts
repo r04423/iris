@@ -302,9 +302,9 @@ export type SystemSetOptions = {
   /** Schedule this set belongs to. Defaults to Update. */
   schedule?: ScheduleLabel;
   /** All systems in this set run before these systems or sets. */
-  before?: SystemReference | SystemReference[];
+  before?: readonly SystemReference[];
   /** All systems in this set run after these systems or sets. */
-  after?: SystemReference | SystemReference[];
+  after?: readonly SystemReference[];
   /** Condition evaluated at most once per schedule invocation; false skips every member and their own conditions. */
   condition?: Condition;
 };
@@ -312,7 +312,7 @@ export type SystemSetOptions = {
 /**
  * System set metadata registered by `addSystemSet()`.
  */
-export type SystemSetMeta = {
+type SystemSetMeta = {
   /** Schedule this set belongs to. */
   schedule: ScheduleLabel;
   /** Systems or sets this set must execute before. */
@@ -350,9 +350,9 @@ type SystemOptionsBase = {
   /** Custom registration name. Defaults to the system definition's name. */
   name?: string;
   /** Run before these systems or sets (within same schedule). */
-  before?: SystemReference | SystemReference[];
+  before?: readonly SystemReference[];
   /** Run after these systems or sets (within same schedule). */
-  after?: SystemReference | SystemReference[];
+  after?: readonly SystemReference[];
   /**
    * Condition checked each schedule run; false skips the system without
    * firing its `systemStarted`/`systemFinished` events.
@@ -398,7 +398,7 @@ export type SystemsOptions = Omit<SystemOptionsBase, "name"> & SystemTarget;
 /**
  * System metadata registered by `addSystem()`.
  */
-export type SystemMeta = {
+type SystemMeta = {
   /** Function the scheduler executes. */
   tick: (world: World) => void | Promise<void>;
   /** Condition attached to this system, if any. */
@@ -430,7 +430,7 @@ export type SystemMeta = {
  * @example
  * ```typescript
  * const PhysicsSystems = defineSystemSet("PhysicsSystems");
- * addSystemSet(world, PhysicsSystems, { before: RenderSystems });
+ * addSystemSet(world, PhysicsSystems, { before: [RenderSystems] });
  * ```
  */
 export function defineSystemSet(name: string): SystemSetLabel {
@@ -457,7 +457,7 @@ export function defineSystemSet(name: string): SystemSetLabel {
  * const RenderSystems = defineSystemSet("RenderSystems");
  * addSystemSet(world, PhysicsSystems, {
  *   schedule: Update,
- *   before: RenderSystems,
+ *   before: [RenderSystems],
  *   condition: gameIsRunning,
  * });
  * addSystemSet(world, RenderSystems, { schedule: Update });
@@ -495,14 +495,10 @@ function resolveReference(ref: SystemReference): string {
 }
 
 /**
- * Normalizes an optional single reference or reference array to a name array.
+ * Resolves an optional reference array to names.
  */
-function normalizeReferences(refs: SystemReference | SystemReference[] | undefined): string[] {
-  if (!refs) {
-    return [];
-  }
-
-  return Array.isArray(refs) ? refs.map(resolveReference) : [resolveReference(refs)];
+function normalizeReferences(refs: readonly SystemReference[] | undefined): string[] {
+  return refs?.map(resolveReference) ?? [];
 }
 
 // ============================================================================
@@ -527,7 +523,7 @@ function normalizeReferences(refs: SystemReference | SystemReference[] | undefin
  * addSystem(world, physicsSystem);
  * addSystem(world, renderSystem, {
  *   schedule: PostUpdate,
- *   after: physicsSystem,
+ *   after: [physicsSystem],
  *   condition: rendererIsReady,
  * });
  * addSystem(world, movementSystem);
@@ -584,7 +580,7 @@ export function addSystem(world: World, system: System, options?: SystemOptions)
  * addSystems(world, [broadphase, narrowphase, solver], { set: PhysicsSystems });
  * ```
  */
-export function addSystems(world: World, systems: System[], options?: SystemsOptions): void {
+export function addSystems(world: World, systems: readonly System[], options?: SystemsOptions): void {
   for (let i = 0; i < systems.length; i++) {
     addSystem(world, systems[i]!, options);
   }
