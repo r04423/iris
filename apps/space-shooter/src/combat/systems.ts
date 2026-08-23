@@ -1,7 +1,6 @@
 import type { Entity, EntityWith, World } from "iris-ecs";
 import {
   addResource,
-  cacheQuery,
   collectEntities,
   defineSystem,
   emitEvent,
@@ -47,8 +46,6 @@ export function initCombat(world: World): void {
 // ============================================================================
 
 export const handleShooting = defineSystem("handleShooting", (world) => {
-  const playerQuery = cacheQuery(world, [IsPlayer, Transform, ShootCooldown, Input]);
-
   const { getPosition, getRotation } = transformActions(world);
   const { canShoot: canShootAction, getShootCooldownState, setShootCooldownState, spawnBullet } = combatActions(world);
   const { getInputFire } = inputActions(world);
@@ -58,7 +55,7 @@ export const handleShooting = defineSystem("handleShooting", (world) => {
     const bulletSpawnOffset = getResourceValue(world, CombatConfig, "bulletSpawnOffset") ?? 15;
     const bulletSpreadAngle = getResourceValue(world, CombatConfig, "bulletSpreadAngle") ?? 0.08;
 
-    const player = queryFirstEntity(world, playerQuery);
+    const player = queryFirstEntity(world, [IsPlayer, Transform, ShootCooldown, Input]);
 
     if (player === undefined) {
       return;
@@ -106,8 +103,6 @@ export const handleShooting = defineSystem("handleShooting", (world) => {
 });
 
 export const updateBullets = defineSystem("updateBullets", (world) => {
-  const bullets = cacheQuery(world, [IsBullet, Bullet, Transform]);
-
   const { getPosition, setPosition } = transformActions(world);
   const { getBulletSpeed, getBulletDirection, getBulletLifetime, setBulletTimeAlive, despawnBullet } =
     combatActions(world);
@@ -115,7 +110,7 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, bullets)) {
+    for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
       const speed = getBulletSpeed(entity);
       const [dx, dy] = getBulletDirection(entity);
       const [lifetime, timeAlive] = getBulletLifetime(entity);
@@ -136,8 +131,6 @@ export const updateBullets = defineSystem("updateBullets", (world) => {
 // Broad phase via spatial hash, narrow phase via circle-circle distance check.
 // Emits EnemyKilled event to decouple collision detection from visual effects.
 export const updateBulletCollisions = defineSystem("updateBulletCollisions", (world) => {
-  const bullets = cacheQuery(world, [IsBullet, Bullet, Transform]);
-
   const { getPosition } = transformActions(world);
   const { despawnBullet } = combatActions(world);
   const { despawnEnemy } = enemyActions(world);
@@ -149,7 +142,7 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
     const enemyRadius = getResourceValue(world, EnemyConfig, "radius") ?? 8;
     const hitRadius = bulletRadius + enemyRadius;
 
-    for (const bullet of collectEntities(world, bullets)) {
+    for (const bullet of collectEntities(world, [IsBullet, Bullet, Transform])) {
       const [bx, by] = getPosition(bullet);
 
       map.getNearbyEntities(bx, by, hitRadius, nearby);
@@ -192,8 +185,6 @@ export const updateBulletCollisions = defineSystem("updateBulletCollisions", (wo
 // Push enemies away from the player proportional to player speed.
 // Emits PlayerHit to decouple collision physics from shield feedback.
 export const pushEnemies = defineSystem("pushEnemies", (world) => {
-  const players = cacheQuery(world, [IsPlayer, Transform, Movement]);
-
   const { applyForce } = physicsActions(world);
   const { getPosition } = transformActions(world);
   const { getVelocity } = movementActions(world);
@@ -206,7 +197,7 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
     const pushStrength = getResourceValue(world, PlayerConfig, "pushStrength") ?? 0.5;
     const collisionRadius = playerRadius + enemyRadius;
 
-    for (const player of collectEntities(world, players)) {
+    for (const player of collectEntities(world, [IsPlayer, Transform, Movement])) {
       const [px, py] = getPosition(player);
       const [pvx, pvy] = getVelocity(player);
       const playerSpeed = Math.sqrt(pvx * pvx + pvy * pvy);
@@ -251,8 +242,6 @@ export const pushEnemies = defineSystem("pushEnemies", (world) => {
 });
 
 export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
-  const playerQuery = cacheQuery(world, [IsPlayer]);
-
   const { activateShield } = combatActions(world);
 
   return () => {
@@ -262,7 +251,7 @@ export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
 
     readEvents(world, PlayerHit, () => {});
 
-    const player = queryFirstEntity(world, playerQuery);
+    const player = queryFirstEntity(world, [IsPlayer]);
     if (player === undefined) {
       return;
     }
@@ -275,8 +264,6 @@ export const handlePlayerHit = defineSystem("handlePlayerHit", (world) => {
 // Blinks the shield using a sine wave: visible when sin > 0, hidden otherwise.
 // The frequency controls how fast the shield flickers during its duration.
 export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world) => {
-  const shields = cacheQuery(world, [ShieldVisibility]);
-
   const { getShieldProgress, setShieldCurrent, deactivateShield, isShieldVisible, showShield, hideShield } =
     combatActions(world);
 
@@ -284,7 +271,7 @@ export const tickShieldVisibility = defineSystem("tickShieldVisibility", (world)
     const delta = getResourceValue(world, Time, "delta") ?? 0;
     const blinkFrequency = getResourceValue(world, CombatConfig, "shieldBlinkFrequency") ?? 250;
 
-    for (const entity of collectEntities(world, shields)) {
+    for (const entity of collectEntities(world, [ShieldVisibility])) {
       const [duration, prevCurrent] = getShieldProgress(entity);
       const current = prevCurrent + delta * 1000;
       setShieldCurrent(entity, current);

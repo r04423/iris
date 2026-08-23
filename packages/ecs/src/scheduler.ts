@@ -675,8 +675,8 @@ export function addSystems(world: World, systems: (SystemRunner | SystemFactory)
  *
  * The init function runs before the system's first execution and again after
  * `resetWorld()`. Initialization is deferred from `addSystem()` until the next
- * frame or `stop()` and must be safe to repeat. Use it to cache query
- * references, action getters, and other setup tied to the current world state.
+ * frame or `stop()` and must be safe to repeat. Use it to cache action getters
+ * and other setup tied to the current world state.
  * The returned tick function runs every frame during schedule execution.
  *
  * Local state can be declared as variables in the init closure -- use it for
@@ -689,12 +689,10 @@ export function addSystems(world: World, systems: (SystemRunner | SystemFactory)
  * ```typescript
  * const movementSystem = defineSystem("movementSystem", (world) => {
  *   // Init: runs before the first execution and after each reset
- *   const movers = cacheQuery(world, [Position, Velocity]);
- *
  *   // Tick: runs every frame
  *   return () => {
  *     const dt = getResourceValue(world, Time, "delta") ?? 0;
- *     const entities = collectEntities(world, movers);
+ *     const entities = collectEntities(world, [Position, Velocity]);
  *     for (const entity of entities) {
  *       const x = getComponentValue(world, entity, Position, "x")!;
  *       const vx = getComponentValue(world, entity, Velocity, "vx")!;

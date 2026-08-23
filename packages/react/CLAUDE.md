@@ -23,7 +23,7 @@ React bindings for Iris ECS.
 
 **`useSyncExternalStore` contract** -- Three hooks (`useComponentValue`, `useHasComponent`, `useQueryEntities`) use `useSyncExternalStore` for concurrent-mode safety. The `subscribe` function registers observer callbacks and returns an unsubscribe function. The `getSnapshot` function reads current ECS state.
 
-**Reset generation** -- `WorldProvider` registers a `worldReset` observer that increments a generation counter exposed via `ResetGenerationContext`. All hooks consume this counter as a `useCallback`/`useMemo` dependency. When `resetWorld()` clears `world.queries.byId` and `world.entities.byId`, the generation bump forces hooks to re-run `ensureQuery`/`cacheQuery` and re-read snapshots against the fresh world state.
+**Reset generation** -- `WorldProvider` registers a `worldReset` observer that increments a generation counter exposed via `ResetGenerationContext`. All hooks consume this counter as a `useCallback`/`useMemo` dependency. When `resetWorld()` clears query and entity state, the generation bump forces hooks to re-resolve terms and read fresh snapshots.
 
 **Snapshot stability** -- `useComponentValue` reads primitives from TypedArray columns; `Object.is` provides free referential stability for numbers, strings, and booleans. `useQueryEntities` performs shallow array comparison (index-by-index) against the cached result to preserve reference stability when contents haven't changed.
 

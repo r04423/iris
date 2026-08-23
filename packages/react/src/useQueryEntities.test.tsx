@@ -90,6 +90,28 @@ describe("useQueryEntities", () => {
     assert.deepStrictEqual(result.current, [both]);
   });
 
+  it("updates when query terms change", () => {
+    const world = createWorld();
+    const positioned = createEntity(world);
+    const healthy = createEntity(world);
+    addComponent(world, positioned, Position, { x: 0, y: 0 });
+    addComponent(world, healthy, Health, { current: 100, max: 100 });
+
+    const { result, rerender } = renderHook(
+      ({ term }: { term: typeof Position | typeof Health }) => useQueryEntities(term),
+      {
+        initialProps: { term: Position as typeof Position | typeof Health },
+        wrapper: createWrapper(world),
+      }
+    );
+
+    assert.deepStrictEqual(result.current, [positioned]);
+
+    rerender({ term: Health });
+
+    assert.deepStrictEqual(result.current, [healthy]);
+  });
+
   it("updates when entity gains matching component", () => {
     const world = createWorld();
     const entity = createEntity(world);

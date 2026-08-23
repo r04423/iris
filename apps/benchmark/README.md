@@ -36,7 +36,7 @@ Template selection uses seeded RNG over the weighted cycle (preserving distribut
 
 ### Query iteration
 
-Query benchmarks iterate cached queries over existing preset worlds with natural archetype fragmentation. Three selectivity tiers target different match rates based on component overlap across templates:
+Query benchmarks iterate warm term queries over existing preset worlds with natural archetype fragmentation. Three selectivity tiers target different match rates based on component overlap across templates:
 
 | Query | Match rate | Description |
 |-------|-----------|-------------|
@@ -56,7 +56,7 @@ Each benchmark runs against one or more **world presets** -- pre-populated world
 | medium | 10,000   | 40%     | 40%     | 20%     | ~213        | 400     |
 | large  | 100,000  | 30%     | 40%     | 30%     | ~229        | 1,000   |
 
-Entities follow power-law weights within each group. Template-derived queries are pre-cached to populate internal caches -- each picks a random template and selects 1-3 of its types as terms, with a chance of adding a modifier (include or `not()`).
+Entities follow power-law weights within each group. Template-derived terms are executed once to populate internal caches -- each picks a random template and selects 1-3 of its types, with a chance of adding a modifier (include or `not()`).
 
 ## Commands
 
@@ -268,7 +268,7 @@ alloc/op (retained):
 
 ### Query Iteration
 
-Iterate all matching entities through a pre-cached query. `ent/sec` = ops/sec x matching entity count.
+Iterate all matching entities through warm terms. `ent/sec` = ops/sec x matching entity count.
 
 > **Experimental traversal APIs:** The callback and column results below measure the traversal performance of `EXPERIMENTAL_queryEntities` and `EXPERIMENTAL_queryColumns`. These APIs are experimental, not part of the stable public API, and may change or be removed. The benchmark labels retain their original names so historical results remain comparable.
 

@@ -1,11 +1,10 @@
 import {
   type Component,
-  cacheQuery,
   type EntityId,
   getComponentValue,
-  type Query,
   EXPERIMENTAL_queryColumns as queryColumns,
   EXPERIMENTAL_queryEntities as queryEntities,
+  queryFirstEntity,
   setComponentValue,
   type World,
 } from "iris-ecs";
@@ -20,10 +19,11 @@ const allPresets: PresetName[] = ["xsmall", "small", "medium", "large"];
 const narrowPresets: PresetName[] = ["small", "medium", "large"];
 
 // ============================================================================
-// World extension for cached query state
+// World extension for query benchmark state
 // ============================================================================
 
-type QueryPoolWorld = World & { __queryMeta: Query<Component>; __sink: number };
+type BenchmarkTerms = Component[];
+type QueryPoolWorld = World & { __queryTerms: BenchmarkTerms; __sink: number };
 
 // ============================================================================
 // Shorthand alias
@@ -35,9 +35,9 @@ const C = GENERATED_COMPONENTS;
 // Helpers
 // ============================================================================
 
-function countMatches(world: World, query: Query<Component>): number {
+function countMatches(world: World, terms: BenchmarkTerms): number {
   let count = 0;
-  queryEntities(world, query, () => {
+  queryEntities(world, terms, () => {
     count++;
   });
   return count;
@@ -53,17 +53,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "iter all",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryEntities(world, w.__queryMeta, (entity) => {
+        queryEntities(world, w.__queryTerms, (entity) => {
           sink += entity as number;
         });
         w.__sink = sink;
@@ -73,17 +73,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "iter selective",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component, Component]>(world, [C[0]!, C[1]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!, C[1]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryEntities(world, w.__queryMeta, (entity) => {
+        queryEntities(world, w.__queryTerms, (entity) => {
           sink += entity as number;
         });
         w.__sink = sink;
@@ -93,17 +93,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "iter narrow",
       presets: narrowPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[10]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[10]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryEntities(world, w.__queryMeta, (entity) => {
+        queryEntities(world, w.__queryTerms, (entity) => {
           sink += entity as number;
         });
         w.__sink = sink;
@@ -116,17 +116,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "columns iter all",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryColumns(world, w.__queryMeta, (entities: EntityId[]) => {
+        queryColumns(world, w.__queryTerms, (entities: EntityId[]) => {
           for (let i = 0; i < entities.length; i++) {
             sink += entities[i] as number;
           }
@@ -138,17 +138,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "columns iter selective",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component, Component]>(world, [C[0]!, C[1]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!, C[1]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryColumns(world, w.__queryMeta, (entities: EntityId[]) => {
+        queryColumns(world, w.__queryTerms, (entities: EntityId[]) => {
           for (let i = 0; i < entities.length; i++) {
             sink += entities[i] as number;
           }
@@ -160,17 +160,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "columns iter narrow",
       presets: narrowPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[10]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[10]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         let sink = 0;
-        queryColumns(world, w.__queryMeta, (entities: EntityId[]) => {
+        queryColumns(world, w.__queryTerms, (entities: EntityId[]) => {
           for (let i = 0; i < entities.length; i++) {
             sink += entities[i] as number;
           }
@@ -185,16 +185,16 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "increment via entities",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
-        queryEntities(world, w.__queryMeta, (entity) => {
+        queryEntities(world, w.__queryTerms, (entity) => {
           const v = getComponentValue(world, entity, C[0]!, "v") as number;
           setComponentValue(world, entity, C[0]!, "v", v + 1);
         });
@@ -204,17 +204,17 @@ function queryBenchmarks(): BenchmarkDef[] {
       name: "increment via columns",
       presets: allPresets,
       entityCount(world: World) {
-        return countMatches(world, (world as QueryPoolWorld).__queryMeta);
+        return countMatches(world, (world as QueryPoolWorld).__queryTerms);
       },
       setup(world: World) {
         const w = world as QueryPoolWorld;
-        w.__queryMeta = cacheQuery<[Component]>(world, [C[0]!]);
-        w.__sink = 0;
+        w.__queryTerms = [C[0]!];
+        w.__sink = queryFirstEntity(world, w.__queryTerms) ?? 0;
       },
       fn(world: World) {
         const w = world as QueryPoolWorld;
         // biome-ignore lint/suspicious/noExplicitAny: generated components lack static schema types
-        (queryColumns as any)(world, w.__queryMeta, (entities: EntityId[], [col]: [{ v: Float32Array }]) => {
+        (queryColumns as any)(world, w.__queryTerms, (entities: EntityId[], [col]: [{ v: Float32Array }]) => {
           const v = col.v;
           for (let i = 0; i < entities.length; i++) {
             v[i]! += 1;

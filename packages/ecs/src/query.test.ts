@@ -7,7 +7,6 @@ import { IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded } from "./erro
 import type { OrModifier } from "./query.js";
 import {
   added,
-  cacheQuery,
   changed,
   collectEntities,
   ensureQuery,
@@ -23,8 +22,6 @@ import { pair } from "./relation.js";
 import { addSystem, defineSystem, runOnce } from "./scheduler.js";
 import { Type } from "./schema.js";
 import { createWorld, resetWorld } from "./world.js";
-
-const FactoryResetQueryTag = defineTag("FactoryResetQueryTag");
 
 describe("Query", () => {
   describe("Query Hashing", () => {
@@ -409,7 +406,7 @@ describe("Query", () => {
       // Contradictory branch is pruned, no dead filter is registered
       assert.strictEqual(query.meta.filters.length, 0);
       assert.strictEqual(world.filters.byId.size, 0);
-      assert.deepStrictEqual(collectEntities(world, query), []);
+      assert.deepStrictEqual(collectEntities(world, [Position, not(Position)]), []);
     });
   });
 
@@ -527,203 +524,6 @@ describe("Query", () => {
     });
   });
 
-  describe("Parametric Queries", () => {
-    it("caches query metadata by argument tuple", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricCacheChildOf");
-      const parent = createEntity(world);
-      const childrenOf = cacheQuery(world, (target: EntityId) => [pair(ChildOf, target)]);
-
-      assert.strictEqual(childrenOf(parent), childrenOf(parent));
-    });
-
-    it("resolves different arguments independently", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricArgumentsChildOf");
-      const parentA = createEntity(world);
-      const parentB = createEntity(world);
-      const childA = createEntity(world);
-      const childB = createEntity(world);
-      addComponent(world, childA, pair(ChildOf, parentA));
-      addComponent(world, childB, pair(ChildOf, parentB));
-      const childrenOf = cacheQuery(world, (target: EntityId) => [pair(ChildOf, target)]);
-
-      assert.deepStrictEqual(collectEntities(world, childrenOf(parentA)), [childA]);
-      assert.deepStrictEqual(collectEntities(world, childrenOf(parentB)), [childB]);
-      assert.notStrictEqual(childrenOf(parentA), childrenOf(parentB));
-    });
-
-    it("shares metadata with an equivalent static query", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricSharingChildOf");
-      const parent = createEntity(world);
-      const childrenOf = cacheQuery(world, (target: EntityId) => [pair(ChildOf, target)]);
-
-      assert.strictEqual(childrenOf(parent).meta, cacheQuery(world, [pair(ChildOf, parent)]).meta);
-    });
-
-    it("supports recursive traversal", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricTraversalChildOf");
-      const root = createEntity(world);
-      const childA = createEntity(world);
-      const childB = createEntity(world);
-      const grandchild = createEntity(world);
-      addComponent(world, childA, pair(ChildOf, root));
-      addComponent(world, childB, pair(ChildOf, root));
-      addComponent(world, grandchild, pair(ChildOf, childA));
-      const childrenOf = cacheQuery(world, (target: EntityId) => [pair(ChildOf, target)]);
-      const visited: EntityId[] = [];
-
-      function visit(parent: EntityId): void {
-        queryEntities(world, childrenOf(parent), (child) => {
-          visited.push(child);
-          visit(child);
-        });
-      }
-      visit(root);
-
-      assert.deepStrictEqual(new Set(visited), new Set([childA, childB, grandchild]));
-    });
-
-    it("supports multiple entity arguments", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricMultiChildOf");
-      const Likes = defineRelation("ParametricMultiLikes");
-      const parent = createEntity(world);
-      const friend = createEntity(world);
-      const entity = createEntity(world);
-      addComponent(world, entity, pair(ChildOf, parent));
-      addComponent(world, entity, pair(Likes, friend));
-      const relatedTo = cacheQuery(world, (parentId: EntityId, friendId: EntityId) => [
-        pair(ChildOf, parentId),
-        pair(Likes, friendId),
-      ]);
-
-      assert.deepStrictEqual(collectEntities(world, relatedTo(parent, friend)), [entity]);
-    });
-
-    it("keeps change detection independent when systems share cached metadata", async () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricSystemChildOf");
-      const parent = createEntity(world);
-      const child = createEntity(world);
-      addComponent(world, child, pair(ChildOf, parent));
-      const queryMetas: object[] = [];
-      const systemAResults: EntityId[] = [];
-      const systemBResults: EntityId[] = [];
-
-      addSystem(
-        world,
-        defineSystem("parametricSystemA", (systemWorld) => {
-          const newChildrenOf = cacheQuery(systemWorld, (target: EntityId) => [added(pair(ChildOf, target))]);
-          queryMetas.push(newChildrenOf(parent).meta);
-          return () => {
-            queryEntities(systemWorld, newChildrenOf(parent), (entity) => {
-              systemAResults.push(entity);
-            });
-          };
-        })
-      );
-      addSystem(
-        world,
-        defineSystem("parametricSystemB", (systemWorld) => {
-          const newChildrenOf = cacheQuery(systemWorld, (target: EntityId) => [added(pair(ChildOf, target))]);
-          queryMetas.push(newChildrenOf(parent).meta);
-          return () => {
-            queryEntities(systemWorld, newChildrenOf(parent), (entity) => {
-              systemBResults.push(entity);
-            });
-          };
-        })
-      );
-
-      await runOnce(world);
-
-      assert.strictEqual(queryMetas[0], queryMetas[1]);
-      assert.deepStrictEqual(systemAResults, [child]);
-      assert.deepStrictEqual(systemBResults, [child]);
-    });
-
-    it("reacquires a factory's static query after world reset", async () => {
-      const world = createWorld();
-      const counts: number[] = [];
-
-      addSystem(
-        world,
-        defineSystem("factoryResetQuery", (systemWorld) => {
-          const query = cacheQuery(systemWorld, [FactoryResetQueryTag]);
-          return () => {
-            counts.push(collectEntities(systemWorld, query).length);
-          };
-        })
-      );
-
-      const oldEntity = createEntity(world);
-      addComponent(world, oldEntity, FactoryResetQueryTag);
-      await runOnce(world);
-
-      resetWorld(world);
-      await runOnce(world);
-
-      const newEntity = createEntity(world);
-      addComponent(world, newEntity, FactoryResetQueryTag);
-      await runOnce(world);
-
-      assert.deepStrictEqual(counts, [1, 0, 1]);
-    });
-
-    it("rebuilds a pre-existing getter after world reset", () => {
-      const world = createWorld();
-      const ChildOf = defineRelation("ParametricResetChildOf");
-      const childrenOf = cacheQuery(world, (target: EntityId) => [pair(ChildOf, target)]);
-      const parent = createEntity(world);
-      const beforeReset = childrenOf(parent);
-
-      resetWorld(world);
-      const newParent = createEntity(world);
-      const child = createEntity(world);
-      addComponent(world, child, pair(ChildOf, newParent));
-
-      const afterReset = childrenOf(newParent);
-      assert.notStrictEqual(afterReset, beforeReset);
-      assert.deepStrictEqual(collectEntities(world, afterReset), [child]);
-    });
-
-    it("preserves pair order while sharing query metadata", () => {
-      const world = createWorld();
-      const Position = defineComponent("ParametricOrderPosition", { x: Type.f32() });
-      const Weight = defineRelation("ParametricOrderWeight", { schema: { value: Type.f32() } });
-      const target = createEntity(world);
-      const entity = createEntity(world);
-      const weighted = pair(Weight, target);
-      addComponent(world, entity, Position, { x: 10 });
-      addComponent(world, entity, weighted, { value: 20 });
-      const positionFirst = cacheQuery(world, (targetId: EntityId) => [Position, pair(Weight, targetId)]);
-      const weightFirst = cacheQuery(world, (targetId: EntityId) => [pair(Weight, targetId), Position]);
-
-      const positionFirstQuery = positionFirst(target);
-      const weightFirstQuery = weightFirst(target);
-
-      assert.deepStrictEqual(weightFirstQuery.requested, [weighted, Position]);
-      assert.strictEqual(positionFirstQuery.meta, weightFirstQuery.meta);
-      assert.strictEqual(world.queries.byId.size, 1);
-
-      queryColumns(world, weightFirstQuery, (_entities, [weight, position]) => {
-        assert.strictEqual(weight.value[0], 20);
-        assert.strictEqual(position.x[0], 10);
-      });
-    });
-
-    it("validates builder terms on first lookup", () => {
-      const world = createWorld();
-      const Dead = defineTag("ParametricInvalidDead");
-      const invalid = cacheQuery(world, (_target: EntityId) => [not(Dead)]);
-
-      assert.throws(() => invalid(createEntity(world)), IrisInvalidArgument);
-    });
-  });
-
   describe("Query Persistence", () => {
     it("survives target entity destruction", () => {
       const world = createWorld();
@@ -751,23 +551,21 @@ describe("Query", () => {
       const child1 = createEntity(world);
       addComponent(world, child1, pair(ChildOf, parent1));
 
-      const query = ensureQuery(world, [pair(ChildOf, parent1)]);
-
       // Verify child1 matches
-      const initial = collectEntities(world, query);
+      const initial = collectEntities(world, [pair(ChildOf, parent1)]);
       assert.strictEqual(initial.length, 1);
       assert.strictEqual(initial[0], child1);
 
       // Destroy child, entity removed, but query persists
       destroyEntity(world, child1);
       assert.strictEqual(world.queries.byId.size, 1);
-      assert.strictEqual(collectEntities(world, query).length, 0);
+      assert.strictEqual(collectEntities(world, [pair(ChildOf, parent1)]).length, 0);
 
       // Add new child with same pair, query re-matches
       const child2 = createEntity(world);
       addComponent(world, child2, pair(ChildOf, parent1));
 
-      const results = collectEntities(world, query);
+      const results = collectEntities(world, [pair(ChildOf, parent1)]);
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0], child2);
     });
@@ -910,8 +708,8 @@ describe("Query", () => {
       const followed = ensureQuery(world, [or(A), B]);
 
       assert.notStrictEqual(grouped, followed);
-      assert.deepStrictEqual(new Set(collectEntities(world, grouped)), new Set([aOnly, both]));
-      assert.deepStrictEqual(collectEntities(world, followed), [both]);
+      assert.deepStrictEqual(new Set(collectEntities(world, [or(A, B)])), new Set([aOnly, both]));
+      assert.deepStrictEqual(collectEntities(world, [or(A), B]), [both]);
     });
 
     it("matches archetypes created after query is cached", () => {
@@ -919,12 +717,12 @@ describe("Query", () => {
       const Velocity = createEntity(world);
       const Acceleration = createEntity(world);
 
-      const query = ensureQuery(world, [or(Velocity, Acceleration)]);
+      ensureQuery(world, [or(Velocity, Acceleration)]);
 
       const late = createEntity(world);
       addComponent(world, late, Acceleration);
 
-      assert.deepStrictEqual(collectEntities(world, query), [late]);
+      assert.deepStrictEqual(collectEntities(world, [or(Velocity, Acceleration)]), [late]);
     });
 
     it("treats single-alternative or() as plain inclusion", () => {
@@ -962,7 +760,7 @@ describe("Query", () => {
       const entity = createEntity(world);
       addComponent(world, entity, Acceleration);
 
-      assert.deepStrictEqual(collectEntities(world, query), [entity]);
+      assert.deepStrictEqual(collectEntities(world, [not(Velocity), or(Velocity, Acceleration)]), [entity]);
     });
 
     it("returns no entities when all branches are contradictory", () => {
@@ -976,8 +774,9 @@ describe("Query", () => {
       const query = ensureQuery(world, [not(Velocity), not(Acceleration), or(Velocity, Acceleration)]);
 
       assert.strictEqual(query.meta.filters.length, 0);
-      assert.deepStrictEqual(collectEntities(world, query), []);
-      assert.strictEqual(queryFirstEntity(world, query), undefined);
+      const terms = [not(Velocity), not(Acceleration), or(Velocity, Acceleration)];
+      assert.deepStrictEqual(collectEntities(world, terms), []);
+      assert.strictEqual(queryFirstEntity(world, terms), undefined);
     });
 
     it("dedupes duplicate alternatives within a group", () => {
@@ -1047,7 +846,7 @@ describe("Query", () => {
       const query = ensureQuery(world, [or(A, B), or(C, D)]);
 
       assert.strictEqual(query.meta.filters.length, 4);
-      assert.deepStrictEqual(collectEntities(world, query), [matching]);
+      assert.deepStrictEqual(collectEntities(world, [or(A, B), or(C, D)]), [matching]);
     });
 
     it("matches wildcard pair alternatives", () => {
@@ -1232,26 +1031,6 @@ describe("Query", () => {
       const first = queryFirstEntity(world, [pair(ChildOf, parent)]);
 
       assert.strictEqual(first, child);
-    });
-  });
-
-  describe("queryEntities with Query", () => {
-    it("fetches entities using query metadata", () => {
-      const world = createWorld();
-      const Position = createEntity(world);
-
-      const entity1 = createEntity(world);
-      const entity2 = createEntity(world);
-
-      addComponent(world, entity1, Position);
-      addComponent(world, entity2, Position);
-
-      const query = ensureQuery(world, [Position]);
-      const entities = collectEntities(world, query);
-
-      assert.strictEqual(entities.length, 2);
-      assert.ok(entities.some((e) => e === entity1));
-      assert.ok(entities.some((e) => e === entity2));
     });
   });
 
@@ -2452,7 +2231,7 @@ describe("Query", () => {
       addSystem(world, function reader() {
         const cursor = query.meta.lastRevision.get("reader");
         world.revision = Number.MAX_SAFE_INTEGER;
-        assert.throws(() => collectEntities(world, query), IrisLimitExceeded);
+        assert.throws(() => collectEntities(world, [added(Tracked)]), IrisLimitExceeded);
         assert.strictEqual(world.revision, Number.MAX_SAFE_INTEGER);
         assert.strictEqual(query.meta.lastRevision.get("reader"), cursor);
       });
@@ -2773,26 +2552,7 @@ describe("Query", () => {
       });
     });
 
-    describe("Pre-Cached Query", () => {
-      it("works with pre-cached query from ensureQuery", () => {
-        const world = createWorld();
-        const Position = defineComponent("qc_cache_Position", { x: Type.f32() });
-        const e1 = createEntity(world);
-
-        addComponent(world, e1, Position, { x: 42 });
-
-        const q = ensureQuery(world, [Position]);
-        let called = false;
-
-        queryColumns(world, q, (entities, [pos]) => {
-          called = true;
-          assert.strictEqual(entities.length, 1);
-          assert.strictEqual(pos.x[0], 42);
-        });
-
-        assert.strictEqual(called, true);
-      });
-
+    describe("Term Order", () => {
       it("preserves the requested column order for equivalent term queries", () => {
         const world = createWorld();
         const Position = defineComponent("qc_cache_order_Position", { x: Type.f32() });

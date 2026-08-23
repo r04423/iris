@@ -110,7 +110,6 @@ export { getName, lookupByName, Name, removeName, setName } from "./name.js";
 
 export {
   added,
-  cacheQuery,
   changed,
   collectEntities,
   not,
@@ -175,8 +174,6 @@ export type {
   ModifierType,
   NotModifier,
   OrModifier,
-  Query,
-  QueryMeta,
   QueryModifier,
 } from "./query.js";
 export type {

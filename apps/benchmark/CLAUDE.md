@@ -42,7 +42,7 @@ src/
 
 **Modifier rate inversely correlates with world size** -- Larger worlds need fewer modifiers per entity to achieve similar archetype diversity. xsmall uses 10%, large uses 0.2%.
 
-**Query cache activation** -- Presets pre-execute template-derived queries (1-3 terms each, ~20% chance of modifier terms) to populate internal query caches. This simulates realistic cache pressure from queries that target component sets that actually co-occur.
+**Query cache activation** -- Presets execute template-derived terms (1-3 terms each, ~20% chance of modifier terms) to populate internal query caches. This simulates realistic cache pressure from queries that target component sets that actually co-occur.
 
 ## When to Run
 

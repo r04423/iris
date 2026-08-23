@@ -1,5 +1,5 @@
 import type { EntityId, EntityWith, ExtractIncluded, NotModifier } from "iris-ecs";
-import { cacheQuery, collectEntities, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
+import { collectEntities, registerObserverCallback, unregisterObserverCallback } from "iris-ecs";
 import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { useResetGeneration, useWorld } from "./context.js";
 
@@ -70,26 +70,23 @@ export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
   const termKey = termsToKey(terms);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: termKey encodes terms identity
-  const query = useMemo(() => {
+  const stableTerms = useMemo(() => {
     dirtyRef.current = true;
 
-    return cacheQuery(world, terms);
+    return terms;
   }, [world, generation, termKey]);
 
   const relevantIds = useMemo(() => {
     const set = new Set<EntityId>();
-    const meta = query.meta;
 
-    for (let i = 0; i < meta.include.length; i++) {
-      set.add(meta.include[i]!);
-    }
+    for (let i = 0; i < stableTerms.length; i++) {
+      const term = stableTerms[i]!;
 
-    for (let i = 0; i < meta.exclude.length; i++) {
-      set.add(meta.exclude[i]!);
+      set.add(typeof term === "number" ? term : term.componentId);
     }
 
     return set;
-  }, [query]);
+  }, [stableTerms]);
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -126,7 +123,7 @@ export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
 
     dirtyRef.current = false;
 
-    const fresh = collectEntities(world, query) as Result[];
+    const fresh = collectEntities(world, stableTerms) as Result[];
     const cached = cachedRef.current;
 
     if (fresh.length === cached.length) {
@@ -147,7 +144,7 @@ export function useQueryEntities<T extends (EntityId | NotModifier)[]>(
     cachedRef.current = fresh;
 
     return fresh;
-  }, [world, query, generation]);
+  }, [world, stableTerms, generation]);
 
   return useSyncExternalStore(subscribe, getSnapshot);
 }

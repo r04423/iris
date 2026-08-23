@@ -1,4 +1,12 @@
-import { cacheQuery, createEntity, createWorld, type EntityId, not, type World } from "iris-ecs";
+import {
+  createEntity,
+  createWorld,
+  type EntityId,
+  not,
+  type QueryModifier,
+  queryFirstEntity,
+  type World,
+} from "iris-ecs";
 import type { PresetFactory, PresetName } from "../../types.js";
 import {
   addEntityTypes,
@@ -63,7 +71,7 @@ function activateQueries(world: World, count: number, seed: number): void {
     // 1-3 terms drawn from the template's own types
     const maxTerms = Math.min(3, types.length);
     const termCount = 1 + Math.floor(rng() * maxTerms);
-    const terms: EntityId[] = [];
+    const terms: (EntityId | QueryModifier)[] = [];
     const used = new Set<number>();
 
     for (let j = 0; j < termCount; j++) {
@@ -79,14 +87,13 @@ function activateQueries(world: World, count: number, seed: number): void {
     if (rng() < 0.2) {
       const modifier = MODIFIER_POOL[Math.floor(rng() * MODIFIER_POOL.length)]!;
       if (rng() < 0.5) {
-        terms.push(not(modifier) as unknown as EntityId);
+        terms.push(not(modifier));
       } else {
         terms.push(modifier);
       }
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: benchmark infrastructure
-    cacheQuery(world, terms as any);
+    queryFirstEntity(world, terms);
   }
 }
 

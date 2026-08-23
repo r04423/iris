@@ -1,13 +1,5 @@
 import type { World } from "iris-ecs";
-import {
-  addResource,
-  cacheQuery,
-  collectEntities,
-  defineSystem,
-  getResourceValue,
-  readEvents,
-  removed,
-} from "iris-ecs";
+import { addResource, collectEntities, defineSystem, getResourceValue, readEvents, removed } from "iris-ecs";
 import { movementActions, transformActions } from "../shared/actions.js";
 import { Movement, Time, Transform } from "../shared/components.js";
 import { SpatialHashMap } from "../utils/spatial-hash.js";
@@ -31,8 +23,6 @@ export function initPhysics(world: World): void {
 // Clamping before force addition lets external forces (like push) temporarily
 // exceed max speed, which feels more responsive than hard-capping after.
 export const updateMovement = defineSystem("updateMovement", (world) => {
-  const movers = cacheQuery(world, [Transform, Movement]);
-
   const { getPosition, setPosition } = transformActions(world);
   const { getVelocity, setVelocity, getForce, setForce, getMaxSpeed } = movementActions(world);
 
@@ -41,7 +31,7 @@ export const updateMovement = defineSystem("updateMovement", (world) => {
     const forceDamping = getResourceValue(world, PhysicsConfig, "forceDamping") ?? 0.95;
     const forceThreshold = getResourceValue(world, PhysicsConfig, "forceThreshold") ?? 0.01;
 
-    for (const entity of collectEntities(world, movers)) {
+    for (const entity of collectEntities(world, [Transform, Movement])) {
       let [vx, vy] = getVelocity(entity);
       const [fx, fy] = getForce(entity);
       const maxSpeed = getMaxSpeed(entity);
@@ -72,14 +62,12 @@ export const updateMovement = defineSystem("updateMovement", (world) => {
 });
 
 export const updateSpatialHashing = defineSystem("updateSpatialHashing", (world) => {
-  const transforms = cacheQuery(world, [Transform]);
-
   const { getPosition } = transformActions(world);
 
   return () => {
     const map = getResourceValue(world, SpatialHash, "map")!;
 
-    for (const entity of collectEntities(world, transforms)) {
+    for (const entity of collectEntities(world, [Transform])) {
       const [x, y] = getPosition(entity);
 
       map.setEntity(entity, x, y);

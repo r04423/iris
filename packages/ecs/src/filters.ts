@@ -12,8 +12,8 @@ import type { World } from "./world.js";
  * Inclusion and exclusion constraints for matching entities by component set.
  *
  * An entity matches when it has every `include` component and none of the
- * `exclude` components. Queries built with `cacheQuery` expand their terms
- * into filters of this shape.
+ * `exclude` components. Query operations expand their terms into filters of
+ * this shape.
  *
  * @example
  * ```typescript

@@ -37,7 +37,7 @@ Core ECS library for Iris.
 
 **Relations** -- Directed entity pairs encoded as `pair(relation, target)`. Wildcard queries match across targets or relations. Exclusive relations auto-remove the previous pair when a new target is set. `onDeleteTarget: "delete"` cascades subject destruction when the target is destroyed. Relations can carry typed data like components.
 
-**Queries** -- Built on filters that cache matching archetypes. Observer callbacks (`archetypeCreated`/`archetypeDestroyed`) keep filter caches current without polling. Per-system `lastRevision` cursors power change detection (`added()`, `changed()` modifiers). Change detection and event reads ONLY work inside system execution context.
+**Queries** -- Exact term sequences resolve through a world-owned trie. Reordered equivalents share semantic metadata and change cursors, while resolved queries retain requested component order for column callbacks. Filters cache matching archetypes and stay current through `archetypeCreated`/`archetypeDestroyed` observers. Change detection and event reads ONLY work inside system execution context.
 
 **Resources** -- World-level singletons using the component-on-self pattern: a component is added to its own entity ID.
 

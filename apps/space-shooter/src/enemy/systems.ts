@@ -1,7 +1,6 @@
 import type { Entity, World } from "iris-ecs";
 import {
   addResource,
-  cacheQuery,
   collectEntities,
   defineSystem,
   getRelationTargets,
@@ -84,13 +83,11 @@ export const spawnEnemies = defineSystem("spawnEnemies", (world) => {
 // Simple steering: dampen current velocity then accelerate toward the target.
 // The combination of damping + directional thrust produces smooth pursuit curves.
 export const followPlayer = defineSystem("followPlayer", (world) => {
-  const enemies = cacheQuery(world, [IsEnemy, Transform, Movement]);
-
   const { getPosition } = transformActions(world);
   const { getVelocity, setVelocity, getThrust, getDamping } = movementActions(world);
 
   return () => {
-    for (const entity of collectEntities(world, enemies)) {
+    for (const entity of collectEntities(world, [IsEnemy, Transform, Movement])) {
       const targets = getRelationTargets(world, entity, Targeting);
       const target = targets[0];
       if (target === undefined) {
@@ -127,8 +124,6 @@ export const followPlayer = defineSystem("followPlayer", (world) => {
 // Flocking separation: each entity steers away from the average position of
 // its nearby neighbors. Prevents enemies from stacking on top of each other.
 export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
-  const avoiders = cacheQuery(world, [Avoidance, Transform, Movement]);
-
   const { getPosition } = transformActions(world);
   const { getVelocity, setVelocity } = movementActions(world);
   const { getAvoidanceRange } = enemyActions(world);
@@ -137,7 +132,7 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
     const map = getResourceValue(world, SpatialHash, "map")!;
     const nearby = getResourceValue(world, ScratchEntities, "entities")!;
 
-    for (const entity of collectEntities(world, avoiders)) {
+    for (const entity of collectEntities(world, [Avoidance, Transform, Movement])) {
       const range = getAvoidanceRange(entity);
       const [x, y] = getPosition(entity);
 
@@ -192,15 +187,13 @@ export const updateAvoidance = defineSystem("updateAvoidance", (world) => {
 });
 
 export const updateAutoRotate = defineSystem("updateAutoRotate", (world) => {
-  const rotators = cacheQuery(world, [Transform, AutoRotate]);
-
   const { getRotation, setRotation } = transformActions(world);
   const { getAutoRotateSpeed } = enemyActions(world);
 
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, rotators)) {
+    for (const entity of collectEntities(world, [Transform, AutoRotate])) {
       const speed = getAutoRotateSpeed(entity);
       const rotation = getRotation(entity);
 
@@ -220,14 +213,12 @@ export const handleEnemyKilled = defineSystem("handleEnemyKilled", (world) => {
 });
 
 export const tickExplosion = defineSystem("tickExplosion", (world) => {
-  const explosions = cacheQuery(world, [IsExplosion, Explosion]);
-
   const { getExplosionProgress, setExplosionCurrent, despawnExplosion } = enemyActions(world);
 
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, explosions)) {
+    for (const entity of collectEntities(world, [IsExplosion, Explosion])) {
       const [duration, prevCurrent] = getExplosionProgress(entity);
       const current = prevCurrent + delta * 1000;
 

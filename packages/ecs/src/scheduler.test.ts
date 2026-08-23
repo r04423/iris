@@ -1,11 +1,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
-import { addComponent, getComponentValue } from "./component.js";
 import { defineCondition } from "./conditions.js";
-import { createEntity } from "./entity.js";
 import { IrisDuplicate, IrisInvalidArgument, IrisInvalidState, IrisLimitExceeded, IrisNotFound } from "./error.js";
 import { registerObserverCallback } from "./observer.js";
-import { ensureQuery, queryEntities } from "./query.js";
 import { defineComponent } from "./registry.js";
 import { addResource, getResourceValue } from "./resource.js";
 import type { FrameDriver, ScheduleLabel } from "./scheduler.js";
@@ -1785,30 +1782,6 @@ describe("Scheduler", () => {
       await runOnce(world);
 
       assert.strictEqual(captured, 16);
-    });
-
-    it("query caching in init works with tick iteration", async () => {
-      const world = createWorld();
-      const Position = defineComponent("Position", { x: Type.f32() });
-      const found: number[] = [];
-
-      const factory = defineSystem("testSystem", (w) => {
-        const q = ensureQuery(w, [Position]);
-        return () => {
-          queryEntities(w, q, (entity) => {
-            found.push(getComponentValue(w, entity, Position, "x")!);
-          });
-        };
-      });
-
-      addSystem(world, factory);
-
-      const e = createEntity(world);
-      addComponent(world, e, Position, { x: 42 });
-
-      await runOnce(world);
-
-      assert.deepStrictEqual(found, [42]);
     });
 
     it("schedule option works", async () => {

@@ -470,7 +470,7 @@ export class IrisInvalidQuery extends IrisInvalidArgument {
  * @example
  * ```typescript
  * // or() groups multiply into filter branches
- * cacheQuery(world, tooManyOrGroups); // throws IrisQueryLimitExceeded
+ * collectEntities(world, tooManyOrGroups); // throws IrisQueryLimitExceeded
  * ```
  */
 export class IrisQueryLimitExceeded extends IrisLimitExceeded {

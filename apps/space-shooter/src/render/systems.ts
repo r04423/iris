@@ -1,5 +1,5 @@
 import type { World } from "iris-ecs";
-import { addResource, cacheQuery, collectEntities, defineSystem, getResourceValue } from "iris-ecs";
+import { addResource, collectEntities, defineSystem, getResourceValue } from "iris-ecs";
 import { combatActions } from "../combat/actions.js";
 import { Bullet, CombatConfig, IsBullet } from "../combat/components.js";
 import { enemyActions } from "../enemy/actions.js";
@@ -28,11 +28,6 @@ export function initRenderer(world: World): void {
 // Thin bridge: queries ECS for entity data, passes plain values to GameRenderer.
 // Draw order matters -- enemies first, then bullets, explosions, player on top.
 export const render = defineSystem("render", (world) => {
-  const enemyQuery = cacheQuery(world, [IsEnemy, Transform, Visual]);
-  const bulletQuery = cacheQuery(world, [IsBullet, Bullet, Transform]);
-  const explosionQuery = cacheQuery(world, [IsExplosion, Transform, Explosion]);
-  const playerQuery = cacheQuery(world, [IsPlayer, Transform, Movement]);
-
   const { getPosition, getRotation } = transformActions(world);
   const { getVelocity } = movementActions(world);
   const { getVisual } = visualActions(world);
@@ -46,7 +41,7 @@ export const render = defineSystem("render", (world) => {
     renderer.beginFrame();
 
     // Enemies
-    for (const entity of collectEntities(world, enemyQuery)) {
+    for (const entity of collectEntities(world, [IsEnemy, Transform, Visual])) {
       const [x, y] = getPosition(entity);
       const rotation = getRotation(entity);
       const [hue, scale] = getVisual(entity);
@@ -55,7 +50,7 @@ export const render = defineSystem("render", (world) => {
     }
 
     // Bullets
-    for (const entity of collectEntities(world, bulletQuery)) {
+    for (const entity of collectEntities(world, [IsBullet, Bullet, Transform])) {
       const [x, y] = getPosition(entity);
       const [dx, dy] = getBulletDirection(entity);
 
@@ -63,7 +58,7 @@ export const render = defineSystem("render", (world) => {
     }
 
     // Explosions
-    for (const entity of collectEntities(world, explosionQuery)) {
+    for (const entity of collectEntities(world, [IsExplosion, Transform, Explosion])) {
       const [x, y] = getPosition(entity);
       const [duration, current] = getExplosionProgress(entity);
       const rotationOffset = getExplosionRotationOffset(entity);
@@ -75,7 +70,7 @@ export const render = defineSystem("render", (world) => {
     }
 
     // Player
-    for (const entity of collectEntities(world, playerQuery)) {
+    for (const entity of collectEntities(world, [IsPlayer, Transform, Movement])) {
       const [x, y] = getPosition(entity);
       const rotation = getRotation(entity);
       const [vx, vy] = getVelocity(entity);

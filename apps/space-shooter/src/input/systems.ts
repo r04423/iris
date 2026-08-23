@@ -1,6 +1,5 @@
 import {
   addResource,
-  cacheQuery,
   collectEntities,
   defineSystem,
   emitEvent,
@@ -74,14 +73,12 @@ export const readInput = defineSystem("readInput", (world) => {
 // Maps InputState -> per-entity Input component so downstream systems
 // can read simple scalar fields instead of querying raw key state.
 export const writeInput = defineSystem("writeInput", (world) => {
-  const players = cacheQuery(world, [IsPlayer, Input]);
-
   const { setInput } = inputActions(world);
 
   return () => {
     const state = getResourceValue(world, InputState, "state")!;
 
-    for (const entity of collectEntities(world, players)) {
+    for (const entity of collectEntities(world, [IsPlayer, Input])) {
       const thrust =
         (state.keys.has("w") || state.keys.has("arrowup") ? 1 : 0) -
         (state.keys.has("s") || state.keys.has("arrowdown") ? 1 : 0);
@@ -100,8 +97,6 @@ export const writeInput = defineSystem("writeInput", (world) => {
 // ============================================================================
 
 export const applyInput = defineSystem("applyInput", (world) => {
-  const players = cacheQuery(world, [IsPlayer, Input, Movement, Transform]);
-
   const { getRotation, setRotation } = transformActions(world);
   const { getVelocity, setVelocity, getRotationSpeed, getThrust, getMaxSpeed } = movementActions(world);
   const { getInputThrust, getInputTurn } = inputActions(world);
@@ -109,7 +104,7 @@ export const applyInput = defineSystem("applyInput", (world) => {
   return () => {
     const delta = getResourceValue(world, Time, "delta") ?? 0;
 
-    for (const entity of collectEntities(world, players)) {
+    for (const entity of collectEntities(world, [IsPlayer, Input, Movement, Transform])) {
       const thrustInput = getInputThrust(entity);
       const turnInput = getInputTurn(entity);
 
@@ -144,13 +139,11 @@ export const applyInput = defineSystem("applyInput", (world) => {
 });
 
 export const dampPlayerMovement = defineSystem("dampPlayerMovement", (world) => {
-  const entities = cacheQuery(world, [Movement, Input]);
-
   const { getVelocity, setVelocity, getDamping } = movementActions(world);
   const { getInputThrust } = inputActions(world);
 
   return () => {
-    for (const entity of collectEntities(world, entities)) {
+    for (const entity of collectEntities(world, [Movement, Input])) {
       const thrustInput = getInputThrust(entity);
 
       if (thrustInput === 0) {

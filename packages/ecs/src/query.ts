@@ -19,29 +19,13 @@ const MAX_QUERY_BRANCHES = 32;
 const OR_GROUP_END = Symbol("orGroupEnd");
 
 // ============================================================================
-// Query Metadata
+// Query Resolution
 // ============================================================================
 
 /**
- * Phantom brand for carrying guaranteed-present component types on Query.
+ * Query matching state shared by semantically equivalent term sequences.
  */
-declare const QUERY_COMPONENTS_BRAND: unique symbol;
-
-/**
- * Phantom brand for carrying original query terms tuple on Query (covariant).
- */
-declare const QUERY_TERMS_BRAND: unique symbol;
-
-/**
- * Query matching state stored by a world and shared by queries with the same terms.
- *
- * @example
- * ```typescript
- * const query = cacheQuery(world, [Position, Velocity]);
- * const meta = query.meta;
- * ```
- */
-export type QueryMeta = {
+type QueryMeta = {
   /** Required component IDs. */
   include: EntityId[];
   /** Excluded components. */
@@ -57,35 +41,22 @@ export type QueryMeta = {
 };
 
 /**
- * Cached query handle preserving the caller's component order.
- *
- * Created by {@link cacheQuery} and accepted anywhere terms are: matching
- * entities carry type narrowing for the components the query guarantees.
- *
- * @example
- * ```typescript
- * const movers = cacheQuery(world, [Position, Velocity]);
- * const entities = collectEntities(world, movers);
- * ```
+ * Resolved query preserving the caller's component order.
  */
-export type Query<C extends EntityId = never, T extends unknown[] = (EntityId | QueryModifier)[]> = {
+type ResolvedQuery = {
   /** Shared query matching state. */
   meta: QueryMeta;
   /** Included component IDs in the order supplied by the caller. */
   requested: EntityId[];
-  /** Phantom field carrying guaranteed-present component types via contravariance. */
-  readonly [QUERY_COMPONENTS_BRAND]: (c: C) => void;
-  /** Phantom field carrying original query terms tuple (covariant). */
-  readonly [QUERY_TERMS_BRAND]?: T;
 };
 
 /**
- * Trie node for term and parametric query caching.
+ * Trie node for term query caching.
  *
  * @internal
  */
 export type QueryTrieNode = {
-  query?: Query;
+  query?: ResolvedQuery;
   children?: Map<EntityId | ModifierType | typeof OR_GROUP_END, QueryTrieNode>;
 };
 
@@ -94,16 +65,14 @@ export type QueryTrieNode = {
 // ============================================================================
 
 /**
- * Query registry: ordered term queries, metadata by hash, and parametric getters.
+ * Query registry: ordered term queries and metadata by hash.
  * @internal
  */
 export type QueryState = {
-  /** Query handles keyed by their exact term sequence. */
+  /** Resolved queries keyed by their exact term sequence. */
   byTerms: QueryTrieNode;
   /** Query metadata lookup (query hash -> metadata). */
   byId: Map<string, QueryMeta>;
-  /** Parametric query caches keyed by builder function identity. */
-  byBuilder: Map<(...args: EntityId[]) => (EntityId | QueryModifier)[], QueryTrieNode>;
 };
 
 /**
@@ -114,7 +83,6 @@ export function createQueryState(): QueryState {
   return {
     byTerms: {},
     byId: new Map(),
-    byBuilder: new Map(),
   };
 }
 
@@ -125,7 +93,6 @@ export function createQueryState(): QueryState {
 export function resetQueryState(world: World): void {
   world.queries.byTerms = {};
   world.queries.byId.clear();
-  world.queries.byBuilder.clear();
 }
 
 // ============================================================================
@@ -344,10 +311,7 @@ export function hashQuery(
  * Gets or creates a query for the exact term sequence.
  * @internal
  */
-export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
-  world: World,
-  terms: [...T]
-): Query<ExtractIncluded<T>, T> {
+export function ensureQuery(world: World, terms: (EntityId | QueryModifier)[]): ResolvedQuery {
   let node = world.queries.byTerms;
 
   for (let i = 0; i < terms.length; i++) {
@@ -375,7 +339,7 @@ export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
     node.query = createQuery(world, terms);
   }
 
-  return node.query as Query<ExtractIncluded<T>, T>;
+  return node.query;
 }
 
 /**
@@ -402,10 +366,7 @@ function ensureQueryTrieChild(node: QueryTrieNode, key: EntityId | ModifierType 
 /**
  * Resolves an uncached term sequence while sharing order-independent metadata.
  */
-function createQuery<T extends (EntityId | QueryModifier)[]>(
-  world: World,
-  terms: [...T]
-): Query<ExtractIncluded<T>, T> {
+function createQuery(world: World, terms: (EntityId | QueryModifier)[]): ResolvedQuery {
   const include: EntityId[] = [];
   const exclude: EntityId[] = [];
   const added: EntityId[] = [];
@@ -459,7 +420,7 @@ function createQuery<T extends (EntityId | QueryModifier)[]>(
     world.queries.byId.set(queryId, queryMeta);
   }
 
-  return { meta: queryMeta, requested: include } as Query<ExtractIncluded<T>, T>;
+  return { meta: queryMeta, requested: include };
 }
 
 /**
@@ -521,103 +482,6 @@ function buildQueryFilters(
   }
 
   return filters;
-}
-
-/**
- * Creates a parametric query getter caching one Query per argument tuple in a
- * trie keyed by builder identity.
- * @internal
- */
-export function ensureQueryGetter(
-  world: World,
-  builder: (...args: EntityId[]) => (EntityId | QueryModifier)[]
-): (...args: EntityId[]) => Query {
-  return (...args: EntityId[]): Query => {
-    let node: QueryTrieNode;
-
-    // Root node per builder function
-    const root = world.queries.byBuilder.get(builder);
-
-    if (!root) {
-      node = {};
-      world.queries.byBuilder.set(builder, node);
-    } else {
-      node = root;
-    }
-
-    // Walk one trie level per argument, creating nodes on first visit
-    for (let i = 0; i < args.length; i++) {
-      let children = node.children;
-
-      if (!children) {
-        children = new Map();
-        node.children = children;
-      }
-
-      let next: QueryTrieNode | undefined = children.get(args[i]!);
-
-      if (!next) {
-        next = {};
-        children.set(args[i]!, next);
-      }
-
-      node = next;
-    }
-
-    // Leaf holds the query; the builder runs only on the first lookup
-    let query = node.query;
-
-    if (!query) {
-      query = ensureQuery(world, builder(...args));
-      node.query = query;
-    }
-
-    return query;
-  };
-}
-
-/**
- * Caches a query from terms, or creates a cached parametric query getter from
- * a builder function.
- *
- * Builders must be pure -- same arguments, same terms -- and their terms are
- * validated on the getter's first call per argument tuple. Create getters
- * once and reuse them: the cache is keyed by builder identity. A query holds
- * its pair targets weakly: destroying a target does not evict the query, it
- * simply matches nothing until the pair is re-established. Change detection
- * windows are tracked independently per system and per argument tuple.
- * Consume the result with {@link collectEntities}.
- *
- * @throws {IrisInvalidQuery} If no term guarantees a component's presence
- * @throws {IrisQueryLimitExceeded} If or() groups expand past 32 combinations
- *
- * @example
- * ```typescript
- * const movers = cacheQuery(world, [Position, Velocity, not(Dead)]);
- *
- * const childrenOf = cacheQuery(world, (parent: EntityId) => [pair(ChildOf, parent)]);
- * const children = collectEntities(world, childrenOf(parent));
- * ```
- */
-export function cacheQuery<A extends EntityId[], const T extends (EntityId | QueryModifier)[]>(
-  world: World,
-  builder: (...args: [...A]) => T
-): (...args: [...A]) => Query<ExtractIncluded<T>, T>;
-
-export function cacheQuery<T extends (EntityId | QueryModifier)[]>(
-  world: World,
-  terms: [...T]
-): Query<ExtractIncluded<T>, T>;
-
-export function cacheQuery(
-  world: World,
-  termsOrBuilder: (EntityId | QueryModifier)[] | ((...args: EntityId[]) => (EntityId | QueryModifier)[])
-): Query<never> | ((...args: EntityId[]) => Query<never>) {
-  if (typeof termsOrBuilder === "function") {
-    return ensureQueryGetter(world, termsOrBuilder);
-  }
-
-  return ensureQuery(world, termsOrBuilder);
 }
 
 // ============================================================================
@@ -729,17 +593,6 @@ function queryEntitiesWithMeta(world: World, queryMeta: QueryMeta, callback: (en
   }
 }
 
-/**
- * Resolves a terms-or-query argument to a Query.
- */
-function resolveQuery(world: World, termsOrQuery: (EntityId | QueryModifier)[] | Query): Query {
-  if (!Array.isArray(termsOrQuery)) {
-    return termsOrQuery;
-  }
-
-  return ensureQuery(world, termsOrQuery);
-}
-
 // ============================================================================
 // Query Iteration
 // ============================================================================
@@ -771,19 +624,13 @@ export function queryEntities<T extends (EntityId | QueryModifier)[]>(
   callback: (entity: EntityWith<ExtractIncluded<T>>) => unknown
 ): void;
 
-export function queryEntities<C extends EntityId>(
-  world: World,
-  query: Query<C>,
-  callback: (entity: EntityWith<C>) => unknown
-): void;
-
 export function queryEntities(
   world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | Query,
+  terms: (EntityId | QueryModifier)[],
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entity: any) => unknown
 ): void {
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, callback);
+  queryEntitiesWithMeta(world, ensureQuery(world, terms).meta, callback);
 }
 
 /**
@@ -808,15 +655,10 @@ export function queryFirstEntity<T extends (EntityId | QueryModifier)[]>(
   terms: [...T]
 ): EntityWith<ExtractIncluded<T>> | undefined;
 
-export function queryFirstEntity<C extends EntityId>(world: World, query: Query<C>): EntityWith<C> | undefined;
-
-export function queryFirstEntity(
-  world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | Query
-): EntityId | undefined {
+export function queryFirstEntity(world: World, terms: (EntityId | QueryModifier)[]): EntityId | undefined {
   let result: EntityId | undefined;
 
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, (entity) => {
+  queryEntitiesWithMeta(world, ensureQuery(world, terms).meta, (entity) => {
     result = entity;
     return false;
   });
@@ -848,12 +690,10 @@ export function collectEntities<T extends (EntityId | QueryModifier)[]>(
   terms: [...T]
 ): EntityWith<ExtractIncluded<T>>[];
 
-export function collectEntities<C extends EntityId>(world: World, query: Query<C>): EntityWith<C>[];
-
-export function collectEntities(world: World, termsOrQuery: (EntityId | QueryModifier)[] | Query): EntityId[] {
+export function collectEntities(world: World, terms: (EntityId | QueryModifier)[]): EntityId[] {
   const result: EntityId[] = [];
 
-  queryEntitiesWithMeta(world, resolveQuery(world, termsOrQuery).meta, (entity) => {
+  queryEntitiesWithMeta(world, ensureQuery(world, terms).meta, (entity) => {
     result.push(entity);
   });
 
@@ -895,19 +735,13 @@ export function queryColumns<T extends (EntityId | NotModifier | OrModifier)[]>(
   callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
 ): void;
 
-export function queryColumns<C extends EntityId, T extends unknown[]>(
-  world: World,
-  query: Query<C, T>,
-  callback: (entities: EntityId[], columns: ColumnsTuple<T>) => unknown
-): void;
-
 export function queryColumns(
   world: World,
-  termsOrQuery: (EntityId | QueryModifier)[] | Query,
+  terms: (EntityId | QueryModifier)[],
   // biome-ignore lint/suspicious/noExplicitAny: implementation overload must be wider than public overloads
   callback: (entities: any, columns: any) => unknown
 ): void {
-  const query = resolveQuery(world, termsOrQuery);
+  const query = ensureQuery(world, terms);
   const queryMeta = query.meta;
 
   if (queryMeta.added.length > 0 || queryMeta.changed.length > 0) {
