@@ -12,6 +12,12 @@ import type { World } from "./world.js";
  */
 const MAX_QUERY_BRANCHES = 32;
 
+/**
+ * Terminates an or() group in the term trie so its alternatives cannot alias
+ * following query terms.
+ */
+const OR_GROUP_END = Symbol("orGroupEnd");
+
 // ============================================================================
 // Query Metadata
 // ============================================================================
@@ -74,13 +80,13 @@ export type Query<C extends EntityId = never, T extends unknown[] = (EntityId | 
 };
 
 /**
- * Trie node for parametric query caching.
+ * Trie node for term and parametric query caching.
  *
  * @internal
  */
 export type QueryTrieNode = {
   query?: Query;
-  children?: Map<EntityId, QueryTrieNode>;
+  children?: Map<EntityId | ModifierType | typeof OR_GROUP_END, QueryTrieNode>;
 };
 
 // ============================================================================
@@ -88,10 +94,12 @@ export type QueryTrieNode = {
 // ============================================================================
 
 /**
- * Query registry: metadata by hash plus parametric getter caches.
+ * Query registry: ordered term queries, metadata by hash, and parametric getters.
  * @internal
  */
 export type QueryState = {
+  /** Query handles keyed by their exact term sequence. */
+  byTerms: QueryTrieNode;
   /** Query metadata lookup (query hash -> metadata). */
   byId: Map<string, QueryMeta>;
   /** Parametric query caches keyed by builder function identity. */
@@ -104,6 +112,7 @@ export type QueryState = {
  */
 export function createQueryState(): QueryState {
   return {
+    byTerms: {},
     byId: new Map(),
     byBuilder: new Map(),
   };
@@ -114,6 +123,7 @@ export function createQueryState(): QueryState {
  * @internal
  */
 export function resetQueryState(world: World): void {
+  world.queries.byTerms = {};
   world.queries.byId.clear();
   world.queries.byBuilder.clear();
 }
@@ -331,12 +341,68 @@ export function hashQuery(
 // ============================================================================
 
 /**
- * Gets or creates cached query metadata for the given terms, returning a
- * fresh Query handle that preserves the caller's term order (queryColumns
- * relies on that order for column alignment).
+ * Gets or creates a query for the exact term sequence.
  * @internal
  */
 export function ensureQuery<T extends (EntityId | QueryModifier)[]>(
+  world: World,
+  terms: [...T]
+): Query<ExtractIncluded<T>, T> {
+  let node = world.queries.byTerms;
+
+  for (let i = 0; i < terms.length; i++) {
+    const term = terms[i]!;
+
+    if (!isModifier(term)) {
+      node = ensureQueryTrieChild(node, term);
+      continue;
+    }
+
+    node = ensureQueryTrieChild(node, term.type);
+
+    if (term.type === "or") {
+      for (let a = 0; a < term.componentIds.length; a++) {
+        node = ensureQueryTrieChild(node, term.componentIds[a]!);
+      }
+
+      node = ensureQueryTrieChild(node, OR_GROUP_END);
+    } else {
+      node = ensureQueryTrieChild(node, term.componentId);
+    }
+  }
+
+  if (!node.query) {
+    node.query = createQuery(world, terms);
+  }
+
+  return node.query as Query<ExtractIncluded<T>, T>;
+}
+
+/**
+ * Gets or creates a child node for one encoded query value.
+ */
+function ensureQueryTrieChild(node: QueryTrieNode, key: EntityId | ModifierType | typeof OR_GROUP_END): QueryTrieNode {
+  let children = node.children;
+
+  if (!children) {
+    children = new Map();
+    node.children = children;
+  }
+
+  let child = children.get(key);
+
+  if (!child) {
+    child = {};
+    children.set(key, child);
+  }
+
+  return child;
+}
+
+/**
+ * Resolves an uncached term sequence while sharing order-independent metadata.
+ */
+function createQuery<T extends (EntityId | QueryModifier)[]>(
   world: World,
   terms: [...T]
 ): Query<ExtractIncluded<T>, T> {
@@ -481,7 +547,7 @@ export function ensureQueryGetter(
 
     // Walk one trie level per argument, creating nodes on first visit
     for (let i = 0; i < args.length; i++) {
-      let children: Map<EntityId, QueryTrieNode> | undefined = node.children;
+      let children = node.children;
 
       if (!children) {
         children = new Map();

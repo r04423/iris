@@ -426,15 +426,46 @@ describe("Query", () => {
       assert.strictEqual(query.meta.filters.length, 1);
     });
 
-    it("reuses cached query metadata on subsequent calls", () => {
+    it("reuses the query for the same terms", () => {
       const world = createWorld();
       const Position = createEntity(world);
 
       const query1 = ensureQuery(world, [Position]);
       const query2 = ensureQuery(world, [Position]);
 
-      assert.strictEqual(query1.meta, query2.meta);
+      assert.strictEqual(query1, query2);
       assert.strictEqual(world.queries.byId.size, 1);
+    });
+
+    it("reuses the query across recreated modifiers", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Velocity = createEntity(world);
+      const Health = createEntity(world);
+      const Dead = createEntity(world);
+      const Player = createEntity(world);
+      const Enemy = createEntity(world);
+
+      const query1 = ensureQuery(world, [Position, not(Dead), added(Health), changed(Velocity), or(Player, Enemy)]);
+      const query2 = ensureQuery(world, [Position, not(Dead), added(Health), changed(Velocity), or(Player, Enemy)]);
+
+      assert.strictEqual(query1, query2);
+    });
+
+    it("distinguishes modifier kinds", () => {
+      const world = createWorld();
+      const Position = createEntity(world);
+      const Status = createEntity(world);
+
+      const queries = [
+        ensureQuery(world, [Position, Status]),
+        ensureQuery(world, [Position, not(Status)]),
+        ensureQuery(world, [Position, added(Status)]),
+        ensureQuery(world, [Position, changed(Status)]),
+        ensureQuery(world, [Position, or(Status)]),
+      ];
+
+      assert.strictEqual(new Set(queries).size, queries.length);
     });
 
     it("shares metadata across differently ordered queries", () => {
@@ -447,6 +478,7 @@ describe("Query", () => {
 
       assert.deepStrictEqual(positionFirst.requested, [Position, Velocity]);
       assert.deepStrictEqual(velocityFirst.requested, [Velocity, Position]);
+      assert.notStrictEqual(positionFirst, velocityFirst);
       assert.strictEqual(positionFirst.meta, velocityFirst.meta);
       assert.strictEqual(world.queries.byId.size, 1);
     });
@@ -462,6 +494,8 @@ describe("Query", () => {
       const afterPositionFirst = ensureQuery(world, [Position, Velocity]);
       const afterVelocityFirst = ensureQuery(world, [Velocity, Position]);
 
+      assert.strictEqual(afterPositionFirst, ensureQuery(world, [Position, Velocity]));
+      assert.notStrictEqual(afterPositionFirst, beforePositionFirst);
       assert.strictEqual(afterPositionFirst.meta, afterVelocityFirst.meta);
       assert.notStrictEqual(afterPositionFirst.meta, beforePositionFirst.meta);
       assert.strictEqual(world.queries.byId.size, 1);
@@ -475,15 +509,21 @@ describe("Query", () => {
       const queryA = ensureQuery(world, [Position]);
       const queryB = ensureQuery(world, [Position, Velocity]);
 
+      assert.notStrictEqual(queryA, queryB);
       assert.notStrictEqual(queryA.meta, queryB.meta);
       assert.strictEqual(world.queries.byId.size, 2);
       assert.strictEqual(world.filters.byId.size, 2);
     });
 
-    it("throws when query has no components", () => {
+    it("does not cache invalid queries", () => {
       const world = createWorld();
+      const Position = createEntity(world);
+      const Dead = createEntity(world);
 
       assert.throws(() => ensureQuery(world, []), IrisInvalidArgument);
+      assert.throws(() => ensureQuery(world, [not(Dead)]), IrisInvalidArgument);
+      assert.throws(() => ensureQuery(world, [not(Dead)]), IrisInvalidArgument);
+      assert.deepStrictEqual(ensureQuery(world, [not(Dead), Position]).meta.include, [Position]);
     });
   });
 
@@ -851,8 +891,27 @@ describe("Query", () => {
       const queryA = ensureQuery(world, [or(Velocity, Acceleration)]);
       const queryB = ensureQuery(world, [or(Acceleration, Velocity)]);
 
+      assert.notStrictEqual(queryA, queryB);
       assert.strictEqual(queryA.meta, queryB.meta);
       assert.strictEqual(world.queries.byId.size, 1);
+    });
+
+    it("distinguishes or() boundaries from following terms", () => {
+      const world = createWorld();
+      const A = createEntity(world);
+      const B = createEntity(world);
+      const aOnly = createEntity(world);
+      const both = createEntity(world);
+      addComponent(world, aOnly, A);
+      addComponent(world, both, A);
+      addComponent(world, both, B);
+
+      const grouped = ensureQuery(world, [or(A, B)]);
+      const followed = ensureQuery(world, [or(A), B]);
+
+      assert.notStrictEqual(grouped, followed);
+      assert.deepStrictEqual(new Set(collectEntities(world, grouped)), new Set([aOnly, both]));
+      assert.deepStrictEqual(collectEntities(world, followed), [both]);
     });
 
     it("matches archetypes created after query is cached", () => {
@@ -1449,7 +1508,7 @@ describe("Query", () => {
         const query1 = ensureQuery(world, [pair(ChildOf, parent)]);
         const query2 = ensureQuery(world, [pair(ChildOf, parent)]);
 
-        assert.strictEqual(query1.meta, query2.meta);
+        assert.strictEqual(query1, query2);
         assert.strictEqual(world.queries.byId.size, 1);
       });
 
@@ -2111,7 +2170,7 @@ describe("Query", () => {
   });
 
   describe("Change Detection - Query Revision Isolation", () => {
-    it("shares a cursor across differently ordered queries", async () => {
+    it("shares a cursor across operations and differently ordered queries", async () => {
       const world = createWorld();
       const Position = defineComponent("OrderedViewTickPosition", { x: Type.f32() });
       const Velocity = defineComponent("OrderedViewTickVelocity", { vx: Type.f32() });
@@ -2120,22 +2179,18 @@ describe("Query", () => {
       addComponent(world, entity, Position, { x: 1 });
       addComponent(world, entity, Velocity, { vx: 2 });
       addComponent(world, entity, Health, { value: 3 });
-      let positionFirstCount = 0;
-      let velocityFirstCount = 0;
+      let positionFirst: EntityId | undefined;
+      let velocityFirst: EntityId[] = [];
 
       addSystem(world, function orderedViewTickReader() {
-        queryEntities(world, [Position, Velocity, added(Health)], () => {
-          positionFirstCount++;
-        });
-        queryEntities(world, [Velocity, Position, added(Health)], () => {
-          velocityFirstCount++;
-        });
+        positionFirst = queryFirstEntity(world, [Position, Velocity, added(Health)]);
+        velocityFirst = collectEntities(world, [Velocity, Position, added(Health)]);
       });
 
       await runOnce(world);
 
-      assert.strictEqual(positionFirstCount, 1);
-      assert.strictEqual(velocityFirstCount, 0);
+      assert.strictEqual(positionFirst, entity);
+      assert.deepStrictEqual(velocityFirst, []);
     });
 
     it("different queries maintain independent cursors in systems", async () => {
@@ -2738,7 +2793,7 @@ describe("Query", () => {
         assert.strictEqual(called, true);
       });
 
-      it("preserves the requested column order for equivalent cached queries", () => {
+      it("preserves the requested column order for equivalent term queries", () => {
         const world = createWorld();
         const Position = defineComponent("qc_cache_order_Position", { x: Type.f32() });
         const Velocity = defineComponent("qc_cache_order_Velocity", { vx: Type.f32() });
@@ -2747,10 +2802,12 @@ describe("Query", () => {
         addComponent(world, entity, Position, { x: 10 });
         addComponent(world, entity, Velocity, { vx: 20 });
 
-        cacheQuery(world, [Position, Velocity]);
-        const velocityFirst = cacheQuery(world, [Velocity, Position]);
+        queryColumns(world, [Position, Velocity], (_entities, [position, velocity]) => {
+          assert.strictEqual(position.x[0], 10);
+          assert.strictEqual(velocity.vx[0], 20);
+        });
 
-        queryColumns(world, velocityFirst, (_entities, [velocity, position]) => {
+        queryColumns(world, [Velocity, Position], (_entities, [velocity, position]) => {
           assert.strictEqual(velocity.vx[0], 20);
           assert.strictEqual(position.x[0], 10);
         });
