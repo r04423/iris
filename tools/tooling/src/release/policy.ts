@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import semver from "semver";
 import {
   type Bump,
@@ -258,6 +259,38 @@ export function canPromote(
 // Channel Publication
 // ============================================================================
 
+/** Delays between visibility checks, totaling one minute of backoff. */
+const visibilityDelays = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
+
+/**
+ * Waits for a successful upload to become readable through npm's registry.
+ *
+ * Registry reads can lag behind a completed publish. Retry only missing metadata;
+ * conflicts and other registry errors still fail immediately. Never repeat the
+ * upload itself, because npm versions are immutable once publication succeeds.
+ */
+async function waitForPublished(pkg: PublishedManifest, registry: Registry): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    const existing = await registry.get(pkg.name, pkg.version);
+
+    if (existing) {
+      verifyPublished(existing, pkg);
+      return;
+    }
+
+    const wait = visibilityDelays[attempt];
+
+    if (wait === undefined) {
+      throw new Error(
+        `Published package still not visible after ${attempt + 1} checks: ${pkg.name}@${pkg.version}; rerun the workflow`
+      );
+    }
+
+    console.info(`Waiting ${wait / 1_000}s for npm to expose ${pkg.name}@${pkg.version}`);
+    await delay(wait);
+  }
+}
+
 /**
  * Publishes missing packages after checking every candidate for conflicts.
  *
@@ -289,12 +322,6 @@ export async function publishChannel(packages: PublishedManifest[], registry: Re
   for (const { pkg, tag } of pending) {
     await registry.publish(pkg, tag);
 
-    const existing = await registry.get(pkg.name, pkg.version);
-
-    if (!existing) {
-      throw new Error(`Published package not visible yet: ${pkg.name}; rerun the workflow`);
-    }
-
-    verifyPublished(existing, pkg);
+    await waitForPublished(pkg, registry);
   }
 }
