@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Iris aperture</title>
+  <desc id="description">A seven-bladed iris with luminous spectral colors on neutral, near-black charcoal.</desc>
+  <defs>
+    <!-- Neutral charcoal keeps the spectral colors entirely in the emblem. -->
+    <linearGradient id="base" x1="0" y1="0" x2=".8" y2="1">
+      <stop stop-color="#151719"/>
+      <stop offset=".55" stop-color="#0c0e10"/>
+      <stop offset="1" stop-color="#060708"/>
+    </linearGradient>
+    <!-- One blade with tangent-matched rounded joins, repeated at equal angles.
+         Its inner and outer edges are concentric circular arcs, not masked cuts. -->
+    <path id="petal" d="M 239.598738,176.626456
+      C 235.439784,133.386205 270.390605,87.098051 325.000274,91.841456
+      C 332.236456,92.469993 336.039240,93.496223 342.421255,96.964260
+      A 181 181 0 0 1 397.612737,143.275412
+      C 399.777198,145.994564 398.621585,150.740128 395.264873,151.640775
+      C 355.734252,162.247333 303.070984,167.646539 284.089561,184.201574
+      C 281.472856,186.483786 278.878475,186.590843 275.532955,185.661791
+      A 73 73 0 0 0 246.446325,183.627856
+      C 242.562690,184.140525 239.973785,180.525788 239.598738,176.626456
+      Z"/>
+    <!-- Overlapping spectral hues keep the rainbow soft rather than banded. -->
+    <linearGradient id="spectrum-0" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffdcba"/>
+      <stop offset=".48" stop-color="#ed9b7d"/>
+      <stop offset="1" stop-color="#c96994"/>
+    </linearGradient>
+    <linearGradient id="spectrum-1" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffe4a6"/>
+      <stop offset=".48" stop-color="#dfbd70"/>
+      <stop offset="1" stop-color="#aeaa72"/>
+    </linearGradient>
+    <linearGradient id="spectrum-2" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#d5eab0"/>
+      <stop offset=".48" stop-color="#8ec6a4"/>
+      <stop offset="1" stop-color="#54a9a7"/>
+    </linearGradient>
+    <linearGradient id="spectrum-3" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#b9eee0"/>
+      <stop offset=".48" stop-color="#71c1cf"/>
+      <stop offset="1" stop-color="#608fc1"/>
+    </linearGradient>
+    <linearGradient id="spectrum-4" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#cddfff"/>
+      <stop offset=".48" stop-color="#90a6df"/>
+      <stop offset="1" stop-color="#7f7ccc"/>
+    </linearGradient>
+    <linearGradient id="spectrum-5" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#e4d0ff"/>
+      <stop offset=".48" stop-color="#b391d6"/>
+      <stop offset="1" stop-color="#ac74ad"/>
+    </linearGradient>
+    <linearGradient id="spectrum-6" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffd0e2"/>
+      <stop offset=".48" stop-color="#dc8fac"/>
+      <stop offset="1" stop-color="#d78b7c"/>
+    </linearGradient>
+    <linearGradient id="spectrum-ring" x1=".06" y1="0" x2=".94" y2="1">
+      <stop stop-color="#ed9b7d"/>
+      <stop offset=".28" stop-color="#dfbd70"/>
+      <stop offset=".53" stop-color="#71c1cf"/>
+      <stop offset=".77" stop-color="#90a6df"/>
+      <stop offset="1" stop-color="#dc8fac"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed square background; all foreground geometry is safe for a circular crop. -->
+  <rect width="512" height="512" fill="url(#base)"/>
+
+  <!-- An offset silhouette adds a restrained shadow while keeping the SVG filter-free. -->
+  <g transform="translate(0 3)" opacity=".18" fill="#000000">
+    <g>
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)"/>
+    </g>
+    <circle cx="256" cy="256" r="199" fill="none" stroke="#000000" stroke-width="11"/>
+  </g>
+  <g>
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)" fill="url(#spectrum-0)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)" fill="url(#spectrum-1)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)" fill="url(#spectrum-2)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)" fill="url(#spectrum-3)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)" fill="url(#spectrum-4)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)" fill="url(#spectrum-5)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)" fill="url(#spectrum-6)"/>
+  </g>
+  <circle cx="256" cy="256" r="199" fill="none" stroke="url(#spectrum-ring)" stroke-width="11"/>
+</svg>

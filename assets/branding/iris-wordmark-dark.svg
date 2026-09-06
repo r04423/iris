@@ -2,11 +2,6 @@
   <title id="title">Iris</title>
   <desc id="description">The Iris aperture emblem beside the Iris wordmark, on a transparent background.</desc>
   <defs>
-    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#fff5ff"/>
-      <stop offset=".5" stop-color="#e9d5ff"/>
-      <stop offset="1" stop-color="#b8a0ee"/>
-    </linearGradient>
     <path id="petal" d="M 239.598738,176.626456
       C 235.439784,133.386205 270.390605,87.098051 325.000274,91.841456
       C 332.236456,92.469993 336.039240,93.496223 342.421255,96.964260
@@ -17,19 +12,62 @@
       A 73 73 0 0 0 246.446325,183.627856
       C 242.562690,184.140525 239.973785,180.525788 239.598738,176.626456
       Z"/>
+    <!-- Overlapping spectral hues keep the rainbow soft rather than banded. -->
+    <linearGradient id="spectrum-0" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffe6d0"/>
+      <stop offset=".48" stop-color="#efb09c"/>
+      <stop offset="1" stop-color="#d47cab"/>
+    </linearGradient>
+    <linearGradient id="spectrum-1" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffecc9"/>
+      <stop offset=".48" stop-color="#e9cf91"/>
+      <stop offset="1" stop-color="#c5b383"/>
+    </linearGradient>
+    <linearGradient id="spectrum-2" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#e4f2c8"/>
+      <stop offset=".48" stop-color="#add7b3"/>
+      <stop offset="1" stop-color="#75bdb7"/>
+    </linearGradient>
+    <linearGradient id="spectrum-3" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#d0f3ed"/>
+      <stop offset=".48" stop-color="#94cdd9"/>
+      <stop offset="1" stop-color="#7da6d0"/>
+    </linearGradient>
+    <linearGradient id="spectrum-4" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#dce9ff"/>
+      <stop offset=".48" stop-color="#a9b9e6"/>
+      <stop offset="1" stop-color="#9692d4"/>
+    </linearGradient>
+    <linearGradient id="spectrum-5" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#eadfff"/>
+      <stop offset=".48" stop-color="#c3a5df"/>
+      <stop offset="1" stop-color="#bb8dbd"/>
+    </linearGradient>
+    <linearGradient id="spectrum-6" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#ffe0eb"/>
+      <stop offset=".48" stop-color="#e6a4bd"/>
+      <stop offset="1" stop-color="#e4a08f"/>
+    </linearGradient>
+    <linearGradient id="spectrum-ring" x1=".06" y1="0" x2=".94" y2="1">
+      <stop stop-color="#efb09c"/>
+      <stop offset=".28" stop-color="#e9cf91"/>
+      <stop offset=".53" stop-color="#94cdd9"/>
+      <stop offset=".77" stop-color="#a9b9e6"/>
+      <stop offset="1" stop-color="#e6a4bd"/>
+    </linearGradient>
   </defs>
   <!-- Reuse the avatar geometry without its square background or shadow. -->
   <g transform="translate(24.278711 10.56) scale(.24)">
-    <g fill="url(#mark)">
-      <use xlink:href="#petal" transform="rotate(0.000000 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(51.428571 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(102.857143 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(154.285714 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(205.714286 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(257.142857 256 256)"/>
-      <use xlink:href="#petal" transform="rotate(308.571429 256 256)"/>
+    <g>
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)" fill="url(#spectrum-0)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)" fill="url(#spectrum-1)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)" fill="url(#spectrum-2)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)" fill="url(#spectrum-3)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)" fill="url(#spectrum-4)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)" fill="url(#spectrum-5)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)" fill="url(#spectrum-6)"/>
     </g>
-    <circle cx="256" cy="256" r="199" fill="none" stroke="url(#mark)" stroke-width="11"/>
+    <circle cx="256" cy="256" r="199" fill="none" stroke="url(#spectrum-ring)" stroke-width="11"/>
   </g>
   <text x="158.718711" y="103" fill="#f2eafa" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" letter-spacing="-3">Iris</text>
 </svg>
