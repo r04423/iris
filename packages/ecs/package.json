@@ -10,8 +10,8 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
@@ -24,7 +24,7 @@
     "build": "pnpm --filter @iris/tooling build:prune iris-ecs",
     "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "compile": "pnpm --filter @iris/tooling build:clean iris-ecs && tsc -p tsconfig.build.json && pnpm --filter @iris/tooling build:record iris-ecs"
+    "compile": "pnpm --filter @iris/tooling build:clean iris-ecs && tsdown && pnpm --filter @iris/tooling build:record iris-ecs"
   },
   "keywords": [
     "ecs",
@@ -46,8 +46,11 @@
     "access": "public"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "0.18.5",
     "@types/node": "^24.0.0",
     "c8": "^12.0.0",
+    "publint": "0.3.24",
+    "tsdown": "0.23.0",
     "tsx": "^4.19.4",
     "typescript": "^5.9.0-beta"
   }
