@@ -1,0 +1,87 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": [
+    "tsconfig.json",
+    "pnpm-lock.yaml",
+    "tools/tooling/src/build/**",
+    "tools/tooling/src/commands/build.ts",
+    "tools/tooling/src/runtime.ts",
+    "tools/tooling/package.json",
+    "tools/tooling/tsconfig.json"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true,
+      "interruptible": true
+    },
+    "bench": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "bench:iris": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "bench:compare": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "bench:memory": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "compile": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".build-files.json"
+      ]
+    },
+    "iris-ecs#build": {
+      "dependsOn": [
+        "compile"
+      ],
+      "cache": false,
+      "outputs": []
+    },
+    "iris-react#build": {
+      "dependsOn": [
+        "compile"
+      ],
+      "cache": false,
+      "outputs": []
+    }
+  }
+}

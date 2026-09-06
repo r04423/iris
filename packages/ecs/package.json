@@ -19,11 +19,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "test": "tsx --test 'src/**/*.test.ts'",
     "test:coverage": "c8 tsx --test 'src/**/*.test.ts'",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\"",
+    "build": "pnpm --filter @iris/tooling build:prune iris-ecs",
+    "test": "tsx --test 'src/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "prepack": "node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\""
+    "compile": "pnpm --filter @iris/tooling build:clean iris-ecs && tsc -p tsconfig.build.json && pnpm --filter @iris/tooling build:record iris-ecs"
   },
   "keywords": [
     "ecs",

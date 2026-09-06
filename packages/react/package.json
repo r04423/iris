@@ -31,10 +31,11 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "test": "tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
     "test:coverage": "c8 tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
-    "typecheck": "tsc --noEmit"
+    "build": "pnpm --filter @iris/tooling build:prune iris-react",
+    "test": "tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
+    "typecheck": "tsc --noEmit",
+    "compile": "pnpm --filter @iris/tooling build:clean iris-react && tsc -p tsconfig.build.json && pnpm --filter @iris/tooling build:record iris-react"
   },
   "sideEffects": false,
   "engines": {

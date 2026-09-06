@@ -64,17 +64,17 @@ From repo root:
 
 ```sh
 pnpm bench                                # all suites, throughput mode
-pnpm --filter iris-benchmark bench Entity  # single suite
-pnpm --filter iris-benchmark bench:memory  # all suites, memory mode
+pnpm bench -- Entity  # single suite
+pnpm exec turbo run bench:memory --filter=iris-benchmark  # all suites, memory mode
 ```
 
 From `apps/benchmark`:
 
 ```sh
-pnpm bench                   # all suites, throughput mode
-pnpm bench Entity            # single suite
-pnpm bench:memory            # all suites, memory mode
-pnpm typecheck               # typecheck benchmark code
+pnpm exec turbo run bench                   # all suites, throughput mode
+pnpm exec turbo run bench -- Entity         # single suite
+pnpm exec turbo run bench:memory            # all suites, memory mode
+pnpm exec turbo run typecheck               # typecheck benchmark code
 ```
 
 ## Adding a Suite
@@ -109,7 +109,7 @@ export const iris: LibraryAdapter = {
 };
 ```
 
-3. Verify: `pnpm typecheck && pnpm bench`
+3. Verify: `pnpm exec turbo run typecheck && pnpm exec turbo run bench`
 
 ## Results
 
