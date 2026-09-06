@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="320" height="144" viewBox="0 0 320 144" role="img" aria-labelledby="title description">
+  <title id="title">Iris</title>
+  <desc id="description">The Iris aperture emblem beside the Iris wordmark, on a transparent background.</desc>
+  <defs>
+    <path id="petal" d="M 239.598738,176.626456
+      C 235.439784,133.386205 270.390605,87.098051 325.000274,91.841456
+      C 332.236456,92.469993 336.039240,93.496223 342.421255,96.964260
+      A 181 181 0 0 1 397.612737,143.275412
+      C 399.777198,145.994564 398.621585,150.740128 395.264873,151.640775
+      C 355.734252,162.247333 303.070984,167.646539 284.089561,184.201574
+      C 281.472856,186.483786 278.878475,186.590843 275.532955,185.661791
+      A 73 73 0 0 0 246.446325,183.627856
+      C 242.562690,184.140525 239.973785,180.525788 239.598738,176.626456
+      Z"/>
+    <!-- Overlapping spectral hues keep the rainbow soft rather than banded. -->
+    <linearGradient id="spectrum-0" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#c27545"/>
+      <stop offset=".48" stop-color="#c56c64"/>
+      <stop offset="1" stop-color="#ab528b"/>
+    </linearGradient>
+    <linearGradient id="spectrum-1" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#b18a37"/>
+      <stop offset=".48" stop-color="#a48a3c"/>
+      <stop offset="1" stop-color="#8e8541"/>
+    </linearGradient>
+    <linearGradient id="spectrum-2" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#719547"/>
+      <stop offset=".48" stop-color="#4a9379"/>
+      <stop offset="1" stop-color="#398a87"/>
+    </linearGradient>
+    <linearGradient id="spectrum-3" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#399897"/>
+      <stop offset=".48" stop-color="#3c86a5"/>
+      <stop offset="1" stop-color="#5576ac"/>
+    </linearGradient>
+    <linearGradient id="spectrum-4" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#647dbf"/>
+      <stop offset=".48" stop-color="#7568b2"/>
+      <stop offset="1" stop-color="#845ba6"/>
+    </linearGradient>
+    <linearGradient id="spectrum-5" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#a36bb8"/>
+      <stop offset=".48" stop-color="#ad61a3"/>
+      <stop offset="1" stop-color="#b46b8f"/>
+    </linearGradient>
+    <linearGradient id="spectrum-6" gradientUnits="userSpaceOnUse" x1="260" y1="86" x2="318" y2="199">
+      <stop stop-color="#c06d91"/>
+      <stop offset=".48" stop-color="#c96e82"/>
+      <stop offset="1" stop-color="#c07a56"/>
+    </linearGradient>
+    <linearGradient id="spectrum-ring" x1=".06" y1="0" x2=".94" y2="1">
+      <stop stop-color="#c56c64"/>
+      <stop offset=".28" stop-color="#a48a3c"/>
+      <stop offset=".53" stop-color="#3c86a5"/>
+      <stop offset=".77" stop-color="#7568b2"/>
+      <stop offset="1" stop-color="#c96e82"/>
+    </linearGradient>
+  </defs>
+  <!-- Reuse the avatar geometry without its square background or shadow. -->
+  <g transform="translate(24.278711 10.56) scale(.24)">
+    <g>
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)" fill="url(#spectrum-0)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)" fill="url(#spectrum-1)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)" fill="url(#spectrum-2)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)" fill="url(#spectrum-3)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)" fill="url(#spectrum-4)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)" fill="url(#spectrum-5)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)" fill="url(#spectrum-6)"/>
+    </g>
+    <circle cx="256" cy="256" r="199" fill="none" stroke="url(#spectrum-ring)" stroke-width="11"/>
+  </g>
+  <text x="158.718711" y="103" fill="#21162f" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" letter-spacing="-3">Iris</text>
+</svg>
