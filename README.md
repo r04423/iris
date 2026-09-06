@@ -1,4 +1,9 @@
-<h1 align="center">Iris</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/r04423/iris/main/assets/branding/iris-wordmark-dark.svg">
+    <img src="https://raw.githubusercontent.com/r04423/iris/main/assets/branding/iris-wordmark-light.svg" alt="Iris" width="320" height="144">
+  </picture>
+</h1>
 
 <p align="center">An Entity Component System for TypeScript.</p>
 

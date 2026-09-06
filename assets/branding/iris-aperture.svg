@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Iris aperture</title>
+  <desc id="description">Seven rounded, clockwise-sweeping aperture petals surround a circular opening inside a bold ring, over a near-black background with faint purple and indigo glows.</desc>
+  <defs>
+    <!-- Layered light gives the background depth without reducing small-size contrast. -->
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#07060b"/>
+      <stop offset=".47" stop-color="#100b1a"/>
+      <stop offset="1" stop-color="#030407"/>
+    </linearGradient>
+    <radialGradient id="orchid" cx=".19" cy=".13" r=".83">
+      <stop stop-color="#582675" stop-opacity=".34"/>
+      <stop offset=".45" stop-color="#382050" stop-opacity=".20"/>
+      <stop offset="1" stop-color="#7749dc" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="indigo" cx=".93" cy=".78" r=".7">
+      <stop stop-color="#252149" stop-opacity=".20"/>
+      <stop offset=".52" stop-color="#18132b" stop-opacity=".23"/>
+      <stop offset="1" stop-color="#302378" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="depth" cx=".53" cy=".55" r=".5">
+      <stop stop-color="#100c27" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#100c27" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="porcelain" x1=".13" y1="0" x2=".8" y2="1">
+      <stop stop-color="#fffaff"/>
+      <stop offset=".5" stop-color="#f3eaff"/>
+      <stop offset="1" stop-color="#c9bbff"/>
+    </linearGradient>
+    <linearGradient id="ringLight" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff3ff"/>
+      <stop offset=".45" stop-color="#e3cbff"/>
+      <stop offset="1" stop-color="#ac9ce9"/>
+    </linearGradient>
+    <!-- One blade with tangent-matched rounded joins, repeated at equal angles.
+         Its inner and outer edges are concentric circular arcs, not masked cuts. -->
+    <path id="petal" d="M 239.598738,176.626456
+      C 235.439784,133.386205 270.390605,87.098051 325.000274,91.841456
+      C 332.236456,92.469993 336.039240,93.496223 342.421255,96.964260
+      A 181 181 0 0 1 397.612737,143.275412
+      C 399.777198,145.994564 398.621585,150.740128 395.264873,151.640775
+      C 355.734252,162.247333 303.070984,167.646539 284.089561,184.201574
+      C 281.472856,186.483786 278.878475,186.590843 275.532955,185.661791
+      A 73 73 0 0 0 246.446325,183.627856
+      C 242.562690,184.140525 239.973785,180.525788 239.598738,176.626456
+      Z"/>
+  </defs>
+
+  <!-- Full-bleed square background; all foreground geometry is safe for a circular crop. -->
+  <rect width="512" height="512" fill="url(#base)"/>
+  <rect width="512" height="512" fill="url(#orchid)"/>
+  <rect width="512" height="512" fill="url(#indigo)"/>
+  <rect width="512" height="512" fill="url(#depth)"/>
+
+  <!-- An offset silhouette adds a restrained shadow while keeping the SVG filter-free. -->
+  <g transform="translate(0 3)" opacity=".18" fill="#130922">
+    <g>
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)"/>
+    </g>
+    <circle cx="256" cy="256" r="199" fill="none" stroke="#130922" stroke-width="11"/>
+  </g>
+  <g fill="url(#porcelain)">
+      <use xlink:href="#petal" transform="rotate(0.000000 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(51.428571 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(102.857143 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(154.285714 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(205.714286 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(257.142857 256 256)"/>
+      <use xlink:href="#petal" transform="rotate(308.571429 256 256)"/>
+  </g>
+  <circle cx="256" cy="256" r="199" fill="none" stroke="url(#ringLight)" stroke-width="11"/>
+</svg>
