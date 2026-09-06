@@ -22,7 +22,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "tsx --test 'src/**/*.test.ts'",
     "test:coverage": "c8 tsx --test 'src/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../../README.md', 'README.md')\""
   },
   "keywords": [
     "ecs",
