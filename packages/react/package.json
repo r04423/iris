@@ -23,19 +23,19 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "test": "tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
     "test:coverage": "c8 tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
-    "typecheck": "tsc --noEmit"
+    "build": "pnpm --filter @iris/tooling build:prune iris-react",
+    "test": "tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
+    "typecheck": "tsc --noEmit",
+    "compile": "pnpm --filter @iris/tooling build:clean iris-react && tsdown && pnpm --filter @iris/tooling build:record iris-react"
   },
   "sideEffects": false,
   "engines": {
@@ -49,6 +49,7 @@
     "react": ">=18"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "0.18.5",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
@@ -57,8 +58,10 @@
     "global-jsdom": "^26.0.0",
     "iris-ecs": "workspace:*",
     "jsdom": "^26.0.0",
+    "publint": "0.3.24",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tsdown": "0.23.0",
     "tsx": "^4.19.4",
     "typescript": "^5.9.0-beta"
   }

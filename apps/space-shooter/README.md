@@ -8,7 +8,7 @@ destroy enemies, collisions activate a shield. All game state lives in ECS compo
 ## Running
 
 ```bash
-pnpm --filter iris-space-shooter dev
+pnpm dev  # from the repository root
 ```
 
 ## Module Overview

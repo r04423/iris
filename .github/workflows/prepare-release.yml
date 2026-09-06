@@ -1,0 +1,64 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version increment for both packages
+        required: true
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app.outputs.token }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare release changes
+        id: prepare
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          RELEASE_BUMP: ${{ inputs.bump }}
+        run: pnpm --filter @iris/tooling release:prepare
+      - name: Create or refresh the release PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.app.outputs.token }}
+          branch: codex/release-next
+          base: main
+          title: Release v${{ steps.prepare.outputs.version }}
+          commit-message: Release v${{ steps.prepare.outputs.version }}
+          body-path: ${{ steps.prepare.outputs.body-path }}
+          labels: release
+          add-paths: |
+            packages/ecs/package.json
+            packages/react/package.json
+            pnpm-lock.yaml
+            CHANGELOG.md
+            .github/release-record.json

@@ -6,8 +6,13 @@ on:
     paths:
       - "apps/space-shooter/**"
       - "packages/ecs/**"
-      - "packages/inspect/**"
       - "README.md"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.json"
+      - "tools/tooling/**"
       - ".github/workflows/deploy-space-shooter.yml"
 
 permissions:
@@ -40,7 +45,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm --filter iris-ecs build && pnpm --filter iris-inspect build && pnpm --filter iris-space-shooter build
+        run: pnpm exec turbo run build --filter=iris-space-shooter
 
       - name: Prepare Pages directory
         run: |

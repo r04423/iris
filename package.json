@@ -2,21 +2,23 @@
   "name": "iris",
   "private": true,
   "scripts": {
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "typecheck": "pnpm -r run typecheck",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "lint": "biome lint .",
     "format": "biome format .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "validate": "pnpm run typecheck && pnpm run check",
-    "bench": "pnpm --filter iris-benchmark bench"
+    "validate": "pnpm run build && pnpm run typecheck && pnpm run check && pnpm test",
+    "bench": "turbo run bench --filter=iris-benchmark",
+    "dev": "turbo watch dev --filter=iris-space-shooter"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0-beta",
-    "tsx": "^4.19.4"
+    "tsx": "^4.19.4",
+    "turbo": "2.10.10",
+    "typescript": "^5.9.0-beta"
   },
   "packageManager": "pnpm@10.0.0",
   "engines": {

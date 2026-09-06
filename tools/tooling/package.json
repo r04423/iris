@@ -1,0 +1,31 @@
+{
+  "name": "@iris/tooling",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:clean": "tsx src/commands/build.ts clean",
+    "build:record": "tsx src/commands/build.ts record",
+    "build:prune": "tsx src/commands/build.ts prune",
+    "release:prepare": "tsx src/commands/prepare.ts",
+    "release:check": "tsx src/commands/check.ts",
+    "release:publish": "tsx src/commands/publish.ts",
+    "repository:configure": "tsx src/commands/configure.ts"
+  },
+  "dependencies": {
+    "execa": "10.0.1",
+    "octokit": "5.0.5",
+    "semver": "7.8.5",
+    "tar": "7.5.22",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/semver": "7.8.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.0-beta"
+  }
+}

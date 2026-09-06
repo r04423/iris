@@ -2,38 +2,44 @@ name: Publish
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+  queue: max
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    # Enable only after npm trusted publishers and branch protection are configured.
+    if: vars.RELEASE_PUBLISH_ENABLED == 'true'
+    needs: validate
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
-      id-token: write # For npm provenance
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: "pnpm"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm run build
-
-      - name: Validate
-        run: pnpm run validate
-
-      - name: Test
-        run: pnpm run test
-
-      - name: Publish iris-ecs
-        run: pnpm publish -F iris-ecs --provenance --no-git-checks
-
-      - name: Publish iris-react
-        run: pnpm publish -F iris-react --provenance --no-git-checks
+          cache: pnpm
+      - run: npm install --global npm@11.19.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish validated commit using npm trusted publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @iris/tooling release:publish

@@ -27,3 +27,12 @@ coverage/
 
 # Worktrees
 .worktrees/
+
+# Generated npm package introduction
+/packages/ecs/README.md
+
+# Task cache and release artifacts
+.turbo/
+.pnpm-store/
+.release-artifacts/
+.build-files.json
