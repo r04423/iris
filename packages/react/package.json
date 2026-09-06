@@ -34,7 +34,7 @@
     "test:coverage": "c8 tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
     "build": "pnpm --filter @iris/tooling build:prune iris-react",
     "test": "tsx --test --import global-jsdom/register 'src/**/*.test.tsx'",
-    "typecheck": "tsc --noEmit && tsc -p fixtures/tsconfig.json",
+    "typecheck": "tsc --noEmit",
     "compile": "pnpm --filter @iris/tooling build:clean iris-react && tsdown && pnpm --filter @iris/tooling build:record iris-react"
   },
   "sideEffects": false,

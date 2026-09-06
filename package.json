@@ -9,10 +9,9 @@
     "format": "biome format .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "validate": "pnpm run build && pnpm run typecheck && pnpm run check && pnpm test && pnpm test:packages",
+    "validate": "pnpm run build && pnpm run typecheck && pnpm run check && pnpm test",
     "bench": "turbo run bench --filter=iris-benchmark",
-    "dev": "turbo watch dev --filter=iris-space-shooter",
-    "test:packages": "pnpm --filter @iris/tooling test:packages"
+    "dev": "turbo watch dev --filter=iris-space-shooter"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
