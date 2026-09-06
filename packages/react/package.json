@@ -1,6 +1,10 @@
 {
   "name": "iris-react",
-  "version": "0.0.13",
+  "version": "0.0.14",
+  "peerDependencies": {
+    "iris-ecs": "workspace:*",
+    "react": ">=18"
+  },
   "type": "module",
   "description": "React bindings for Iris ECS",
   "author": "Yury Tomilin (https://github.com/r04423)",
@@ -43,10 +47,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "peerDependencies": {
-    "iris-ecs": "workspace:*",
-    "react": ">=18"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "0.18.5",
