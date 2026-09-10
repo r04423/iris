@@ -159,35 +159,35 @@ dies, and this one only cleans up.
 
 ### Checking if an entity is alive
 
-Imagine the player clicks an asteroid and a tractor beam holds it in place
-until they click somewhere else. We remember the clicked asteroid in a
-variable, but a few frames later a bullet may destroy it, and then our variable
-holds a stale ID.
+Imagine a bullet hits two asteroids in the same frame. A collision system
+emits one `Collision` event per hit, and a later system destroys both parties.
+Handling the first event destroys the bullet, so when the second one comes up
+the bullet's ID is stale.
 
 `isEntityAlive` tells us whether an ID still points at a living entity:
 
 ```typescript
-import { defineSystem, isEntityAlive, setComponentValue } from "iris-ecs";
-import type { Entity } from "iris-ecs";
+import { defineEvent, defineSystem, destroyEntity, isEntityAlive, readEvents, Type } from "iris-ecs";
+import type { EntityId } from "iris-ecs";
 
-let held: Entity | undefined;
-
-canvas.addEventListener("click", (event) => {
-  held = pickAsteroidAt(world, event.offsetX, event.offsetY);
+const Collision = defineEvent("Collision", {
+  schema: { bullet: Type.u32<EntityId>(), asteroid: Type.u32<EntityId>() },
 });
 
-const holdAsteroid = defineSystem("holdAsteroid", (world) => {
-  if (held === undefined || !isEntityAlive(world, held)) {
-    held = undefined;
-    return;
-  }
+const destroyOnHit = defineSystem("destroyOnHit", (world) => {
+  readEvents(world, Collision, ({ bullet, asteroid }) => {
+    if (isEntityAlive(world, bullet)) {
+      destroyEntity(world, bullet);
+    }
 
-  setComponentValue(world, held, Velocity, "value", [0, 0]);
+    if (isEntityAlive(world, asteroid)) {
+      destroyEntity(world, asteroid);
+    }
+  });
 });
 ```
 
-While the asteroid lives, the beam zeroes its velocity every frame. Once it is
-gone we drop the stale ID and move on.
+Whichever party is already gone gets skipped.
 
 Iris reuses the numbers of destroyed entities, so a new entity can end up with
 the same number as one that is gone. To keep the two apart, every entity ID
@@ -810,17 +810,13 @@ import { defineEvent, Type } from "iris-ecs";
 
 const FireRequested = defineEvent("FireRequested");
 
-const Collision = defineEvent("Collision", {
-  schema: { a: Type.u32<EntityId>(), b: Type.u32<EntityId>() },
-});
-
 const AsteroidDestroyed = defineEvent("AsteroidDestroyed", {
   schema: { position: Type.f32(2) },
 });
 ```
 
-`Collision` stores the two entities involved as `u32` fields, which is how we
-put an entity reference into an event or a component.
+An entity reference goes into an event as a `u32` field, as it does in
+`Collision`.
 
 ### Emitting events
 
