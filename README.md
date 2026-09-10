@@ -921,21 +921,31 @@ since we last looked, only the last size is worth acting on. `readLastEvent`
 returns the newest unread event and marks the rest read:
 
 ```typescript
-import { defineEvent, defineSystem, readLastEvent, Type } from "iris-ecs";
+import { defineComponent, defineEvent, defineSystem, emitEvent, readLastEvent, setResource, Type } from "iris-ecs";
 
 const ViewportResized = defineEvent("ViewportResized", {
   schema: { width: Type.f32(), height: Type.f32() },
 });
 
-const resizeCanvas = defineSystem("resizeCanvas", (world) => {
+const Viewport = defineComponent("Viewport", {
+  schema: { width: Type.f32(), height: Type.f32() },
+});
+
+window.addEventListener("resize", () => {
+  emitEvent(world, ViewportResized, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+});
+
+const updateViewport = defineSystem("updateViewport", (world) => {
   const latest = readLastEvent(world, ViewportResized);
 
   if (latest === undefined) {
     return;
   }
 
-  canvas.width = latest.width;
-  canvas.height = latest.height;
+  setResource(world, Viewport, { width: latest.width, height: latest.height });
 });
 ```
 
@@ -971,67 +981,69 @@ events**. For that case a component that the system polls is the better tool.
 ## Change detection
 
 Sometimes a system only cares about what changed since it last ran, e.g. a
-physics engine that needs to know about new bodies, or a renderer that needs to
-know which sprites moved. Iris tracks this per system, the same way it tracks
+visual effect that should start when a component appears, or a renderer that
+only redraws what moved. Iris tracks this per system, the same way it tracks
 events, so like events it only works inside a running system.
 
 ### Added components
 
 `added` is a query term that matches entities which gained a component since
-this system last ran:
+this system last ran. When a ship picks up a shield, we tint its sprite blue:
 
 ```typescript
 import { added, collectEntities, defineSystem } from "iris-ecs";
 
-const initColliders = defineSystem("initColliders", (world) => {
-  for (const entity of collectEntities(world, [added(Position)])) {
-    physics.addBody(entity);
+const tintShielded = defineSystem("tintShielded", (world) => {
+  for (const entity of collectEntities(world, [Sprite, added(Shield)])) {
+    setComponentValue(world, entity, Sprite, "tint", [80, 160, 255, 255]);
   }
 });
 ```
 
-Here, every new entity with `Position` gets a physics body.
+The tint is written once, when the shield appears, and not again on every
+frame the shield is present.
 
 ### Changed components
 
 `changed` matches entities where a component was added or written since this
-system last ran:
+system last ran. When health changes, we flash the sprite red:
 
 ```typescript
 import { changed, collectEntities, defineSystem } from "iris-ecs";
 
-const syncSprites = defineSystem("syncSprites", (world) => {
-  for (const entity of collectEntities(world, [Sprite, changed(Position)])) {
-    const [x, y] = getComponentValue(world, entity, Position, "value");
-
-    renderer.move(entity, x, y);
+const flashOnDamage = defineSystem("flashOnDamage", (world) => {
+  for (const entity of collectEntities(world, [Sprite, changed(Health)])) {
+    setComponentValue(world, entity, Sprite, "tint", [255, 80, 80, 255]);
   }
 });
 ```
 
 A write through `setComponentValue` counts as a change. A write through a view
-counts once we call `markComponentChanged`. Entities that did not move are
-skipped entirely.
+counts once we call `markComponentChanged`. Entities whose health did not
+change are skipped entirely.
 
 ### Removed components
 
 Removal works differently, because when a component is removed the entity moves
 to a different group and the old data is gone, so there is nothing left to
-query. Instead, `removed` gives us an event, and we read it like any other:
+query. Instead, `removed` gives us an event, and we read it like any other.
+When a shield runs out and is removed, we put the tint back:
 
 ```typescript
-import { defineSystem, readEvents, removed } from "iris-ecs";
+import { defineSystem, hasComponent, isEntityAlive, readEvents, removed } from "iris-ecs";
 
-const cleanupColliders = defineSystem("cleanupColliders", (world) => {
-  readEvents(world, removed(Position), ({ entity }) => {
-    physics.removeBody(entity);
+const untintUnshielded = defineSystem("untintUnshielded", (world) => {
+  readEvents(world, removed(Shield), ({ entity }) => {
+    if (isEntityAlive(world, entity) && hasComponent(world, entity, Sprite)) {
+      setComponentValue(world, entity, Sprite, "tint", [255, 255, 255, 255]);
+    }
   });
 });
 ```
 
-The payload carries the entity ID, but the entity itself may already be
-destroyed by the time we read it, so we treat the ID as a key rather than as
-something to read from.
+The payload carries only the entity ID. The entity may have lost the shield
+because it was destroyed, so we check that it is still alive before touching
+it.
 
 ## Relations
 
@@ -1261,14 +1273,14 @@ addSystems(world, [initResources, spawnShip, spawnAsteroids], { schedule: Startu
 addSystem(world, tickTime, { schedule: First });
 addSystems(world, [handleFire, moveEntities, expireLifetimes]);
 addSystems(world, [applyHits, markDead, despawnDead], { schedule: PostUpdate });
-addSystem(world, syncSprites, { schedule: Last });
+addSystems(world, [tintShielded, flashOnDamage], { schedule: Last });
 addSystem(world, saveHighScore, { schedule: Shutdown });
 ```
 
 `addSystems` registers a list with the same options. The clock ticks in
 `First`, gameplay runs in `Update`, consequences resolve in `PostUpdate`, and
-rendering reads the result in `Last`. Most ordering questions answer themselves
-once systems are in the right phase.
+visuals catch up in `Last`. Most ordering questions answer themselves once
+systems are in the right phase.
 
 ### Ordering within a schedule
 
@@ -1307,7 +1319,7 @@ addSystemSet(world, Cleanup, { schedule: PostUpdate, after: [Simulation] });
 
 addSystem(world, applyHits, { set: Simulation });
 addSystem(world, markDead, { set: Simulation, after: [applyHits] });
-addSystems(world, [despawnDead, cleanupColliders], { set: Cleanup });
+addSystems(world, [despawnDead, untintUnshielded], { set: Cleanup });
 ```
 
 Every system in `Cleanup` now runs after every system in `Simulation`. Systems
