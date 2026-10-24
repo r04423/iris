@@ -1,6 +1,6 @@
 {
   "name": "iris-react",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "peerDependencies": {
     "iris-ecs": "workspace:*",
     "react": ">=18"
