@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0
+
+<!-- Release notes generated using configuration in .github/release.yml at ba5b849c85eab1d1d8a9b6212d0bc8ac3988868e -->
+
+## What's Changed
+### Changes
+* Add Iris logo by @r04423 in https://github.com/r04423/iris/pull/4
+* Expand on Iris API in README.md by @r04423 in https://github.com/r04423/iris/pull/5
+* Agent documentation by @r04423 in https://github.com/r04423/iris/pull/6
+
+
+**Full Changelog**: https://github.com/r04423/iris/compare/v0.0.14...v0.1.0
+
 ## 0.0.14
 
 <!-- Release notes generated using configuration in .github/release.yml at 1223174674df1301fcc98dc852883b01a283f028 -->

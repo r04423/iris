@@ -1,7 +1,7 @@
 {
-  "previousVersion": "0.0.13",
-  "previousTag": "v0.0.13",
-  "version": "0.0.14",
-  "bump": "patch",
-  "baseSha": "1223174674df1301fcc98dc852883b01a283f028"
+  "previousVersion": "0.0.14",
+  "previousTag": "v0.0.14",
+  "version": "0.1.0",
+  "bump": "minor",
+  "baseSha": "ba5b849c85eab1d1d8a9b6212d0bc8ac3988868e"
 }

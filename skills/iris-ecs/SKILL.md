@@ -24,7 +24,7 @@ detection, events), but its API and rules are its own. Do not carry over code or
 habits from those libraries or from bitECS, Koota, miniplex, or others. Where
 this skill and your memory of another ECS disagree, this skill is right.
 
-This skill is written for iris-ecs `0.0.14`. Check the installed version in
+This skill is written for iris-ecs `0.1.0`. Check the installed version in
 `node_modules/iris-ecs/package.json`. The installed types in
 `node_modules/iris-ecs/dist/index.d.ts` are the ground truth: every export has
 JSDoc with an example. Read the signature there before using an API you have
