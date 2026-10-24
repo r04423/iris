@@ -1,0 +1,9 @@
+{
+  "name": "iris-ecs",
+  "description": "Teaches coding agents to design, build, and test applications with iris-ecs",
+  "author": { "name": "Yury Tomilin", "url": "https://github.com/r04423" },
+  "homepage": "https://github.com/r04423/iris#readme",
+  "repository": "https://github.com/r04423/iris",
+  "license": "MIT",
+  "keywords": ["ecs", "entity-component-system", "typescript", "game"]
+}

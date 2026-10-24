@@ -14,6 +14,9 @@ export const releaseBranch = "codex/release-next";
 /** Reviewed record connecting a version change to its preparation base. */
 export const recordPath = ".github/release-record.json";
 
+/** Agent skill that names the package version it documents. */
+export const skillPath = "skills/iris-ecs/SKILL.md";
+
 // ============================================================================
 // Version and Source Identity
 // ============================================================================

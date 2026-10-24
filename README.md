@@ -44,6 +44,21 @@ with unique logic. Plain objects serve those better.
 npm install iris-ecs
 ```
 
+### Agent skill
+
+Iris comes with a skill that teaches coding agents its API and how to build an
+ECS application with it, from choosing a domain and modeling the data to
+writing systems, ordering the frame, and testing. Agents install it through
+their own plugin systems.
+
+| Agent | Install |
+|-------|---------|
+| Claude Code | `/plugin marketplace add r04423/iris`, then `/plugin install iris-ecs@iris` |
+| Claude apps | Customize, Plugins, Add marketplace, then enter `r04423/iris` |
+| Codex | `codex plugin marketplace add r04423/iris`, then `codex plugin add iris-ecs@iris` |
+| GitHub Copilot CLI | `copilot plugin marketplace add r04423/iris`, then `copilot plugin install iris-ecs@iris` |
+| Others | Copy [`skills/iris-ecs`](https://github.com/r04423/iris/tree/main/skills/iris-ecs) into the agent's skills folder |
+
 ## A first program
 
 The smallest useful program defines some components, creates an entity that has
