@@ -160,6 +160,35 @@ export function releasePackages(
 }
 
 // ============================================================================
+// Agent Skill
+// ============================================================================
+
+const skillVersionPattern = /written for iris-ecs `([^`]+)`/g;
+
+/**
+ * Returns the iris-ecs version the agent skill says it documents.
+ * Requires exactly one statement, so stamping can neither miss nor duplicate it.
+ */
+export function skillVersion(skill: string): string {
+  const matches = [...skill.matchAll(skillVersionPattern)];
+
+  if (matches.length !== 1) {
+    throw new Error("Agent skill must state its iris-ecs version exactly once");
+  }
+
+  return matches[0]![1]!;
+}
+
+/**
+ * Rewrites the agent skill's version statement to a release version.
+ */
+export function stampSkillVersion(skill: string, version: string): string {
+  skillVersion(skill);
+
+  return skill.replace(skillVersionPattern, `written for iris-ecs \`${version}\``);
+}
+
+// ============================================================================
 // Release Notes and Pull Requests
 // ============================================================================
 

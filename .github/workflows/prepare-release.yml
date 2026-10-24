@@ -60,5 +60,6 @@ jobs:
             packages/ecs/package.json
             packages/react/package.json
             pnpm-lock.yaml
+            skills/iris-ecs/SKILL.md
             CHANGELOG.md
             .github/release-record.json

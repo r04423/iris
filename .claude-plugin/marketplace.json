@@ -1,0 +1,12 @@
+{
+  "name": "iris",
+  "owner": { "name": "Yury Tomilin" },
+  "metadata": { "description": "Agent skills for Iris, an Entity Component System for TypeScript" },
+  "plugins": [
+    {
+      "name": "iris-ecs",
+      "source": "./",
+      "description": "Teaches coding agents to design, build, and test applications with iris-ecs"
+    }
+  ]
+}

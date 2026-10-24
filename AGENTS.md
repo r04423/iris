@@ -34,6 +34,9 @@ public API is shrunk more often than it grows.
   It uses the engine without React.
 - `apps/benchmark` measures throughput and allocations on worlds up to 100k
   entities. `pnpm bench` and `pnpm --filter iris-benchmark bench:memory`.
+- `skills/iris-ecs` is the agent skill for Iris users, installed as a plugin
+  through `.claude-plugin/`. It teaches the API and how to structure an
+  application.
 - `tools/tooling` holds the build and release scripts. Editing its build files
   invalidates every Turbo cache.
 
@@ -161,6 +164,9 @@ everyday words, no internals.
   Wrong documentation is worse than none.
 - Update the README in the same change whenever public behavior changes. Match
   its voice, and take examples from the space shooter.
+- Update `skills/iris-ecs` in the same change too. Its examples must compile
+  against the current API. Never edit the version it names: Prepare release
+  stamps it, and the release-policy check rejects a mismatch.
 
 ## Testing
 

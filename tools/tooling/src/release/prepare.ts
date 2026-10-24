@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { git, isAncestor, readJSON, requireActions, rootPath, run, writeJSON } from "../runtime.js";
 import { github } from "./github.js";
-import { bumpVersion, selectReleasePR, sharedVersion } from "./policy.js";
-import { bumpSchema, manifestSchema, packagePaths, recordPath } from "./schema.js";
+import { bumpVersion, selectReleasePR, sharedVersion, stampSkillVersion } from "./policy.js";
+import { bumpSchema, manifestSchema, packagePaths, recordPath, skillPath } from "./schema.js";
 
 // ============================================================================
 // Release Preparation
@@ -63,6 +63,9 @@ export async function prepareRelease(): Promise<void> {
 
   run("pnpm", ["install", "--lockfile-only", "--ignore-scripts", "--no-frozen-lockfile"], { stdio: "inherit" });
 
+  const skill = readFileSync(rootPath(skillPath), "utf8");
+
+  writeFileSync(rootPath(skillPath), stampSkillVersion(skill, version));
   writeJSON(recordPath, { previousVersion, previousTag, version, bump, baseSha });
 
   // Preserve released history and prepend the new editable section.
